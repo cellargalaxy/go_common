@@ -63,9 +63,3 @@ func Validate(c *gin.Context, validateHandler func(c *gin.Context) (string, jwt.
 	}
 	c.Set(ClaimsKey, jwtToken.Claims)
 }
-
-func StaticCache(c *gin.Context) {
-	if strings.HasPrefix(c.Request.RequestURI, "/static") {
-		c.Header("Cache-Control", "max-age=86400")
-	}
-}
