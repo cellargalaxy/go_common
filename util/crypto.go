@@ -12,7 +12,7 @@ import (
 )
 
 func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, error) {
-	secretByte, err := EnHash256(ctx, []byte(secret))
+	secretByte, err := EnSha256(ctx, []byte(secret))
 	if err != nil {
 		return "", err
 	}
@@ -26,7 +26,7 @@ func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, erro
 	return token, nil
 }
 func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.Token, error) {
-	secretByte, err := EnHash256(ctx, []byte(secret))
+	secretByte, err := EnSha256(ctx, []byte(secret))
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func EnAesCbcString(ctx context.Context, text, secret string) (string, error) {
 }
 
 func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
-	secret, err := EnHash256(ctx, secret)
+	secret, err := EnSha256(ctx, secret)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	return de, nil
 }
 func EnAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
-	secret, err := EnHash256(ctx, secret)
+	secret, err := EnSha256(ctx, secret)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func DeBase64(ctx context.Context, text string) ([]byte, error) {
 }
 
 //256
-func EnHash256(ctx context.Context, data []byte) ([]byte, error) {
+func EnSha256(ctx context.Context, data []byte) ([]byte, error) {
 	hash := sha256.New()
 	hash.Write(data)
 	return hash.Sum(nil), nil

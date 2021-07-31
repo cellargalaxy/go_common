@@ -30,6 +30,16 @@ func TestParseBeijingTime(t *testing.T) {
 	t.Logf("object: %+v\n", object.Unix())
 }
 
+func TestEnSHa256(t *testing.T) {
+	ctx := context.Background()
+	data, err := util.EnSha256(ctx, []byte("aa"))
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	t.Logf("data: %+v\n", data)
+}
+
 type MyClaims struct {
 	Username string `json:"username"`
 	jwt.StandardClaims
@@ -47,7 +57,7 @@ func TestGenJWT(t *testing.T) {
 	var claims MyClaims
 	claims.Username = "我是Username"
 	claims.ExpiresAt = time.Now().Unix() + 100
-	token, err := util.GenJWT(ctx, "Secret", &claims)
+	token, err := util.GenJWT(ctx, "aa", &claims)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -58,7 +68,7 @@ func TestGenJWT(t *testing.T) {
 func TestParseJWT(t *testing.T) {
 	ctx := context.Background()
 	var claims MyClaims
-	token, err := util.ParseJWT(ctx, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6IuaIkeaYr1VzZXJuYW1lIiwiZXhwIjoxNjI3NzE1ODkyfQ.5S5EmU7eaGu1Se3omBqLyctUjn_nZQSC8LNch47HgqM", "Secret", &claims)
+	token, err := util.ParseJWT(ctx, "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE2Mjc3MjQ2MTIsImV4cCI6MTYyNzcyNDY0Mn0.FEu96aZAtw7LzqqOKlGvfYE4V133vNjSIC1SC92oPxE", "aa", &claims)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
