@@ -2,6 +2,7 @@ package util
 
 import (
 	"github.com/sirupsen/logrus"
+	"strconv"
 	"time"
 )
 
@@ -25,4 +26,14 @@ func Parse2BeijingTimestamp(layout, value string) (int64, error) {
 		return 0, err
 	}
 	return date.Unix(), err
+}
+
+func String2Int64(text string) int64 {
+	data, _ := strconv.ParseInt(text, 10, 64)
+	return data
+}
+
+func String2Int(text string) int {
+	data, _ := strconv.Atoi(text)
+	return data
 }

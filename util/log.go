@@ -75,11 +75,7 @@ func SetLogId(ctx context.Context) context.Context {
 	return ctx
 }
 func CreateLogId() int64 {
-	now := time.Now()
-	str := now.Format(DateLayout_060102150405_0000000)
-	str = str[:12] + str[13:]
-	logId, _ := strconv.ParseInt(str, 10, 64)
-	return logId
+	return CreateId()
 }
 
 func GinLogId(c *gin.Context) {
