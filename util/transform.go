@@ -28,6 +28,11 @@ func Parse2BeijingTimestamp(layout, value string) (int64, error) {
 	return date.Unix(), err
 }
 
+func String2Float32(text string) float64 {
+	data, _ := strconv.ParseFloat(text, 64)
+	return data
+}
+
 func String2Int64(text string) int64 {
 	data, _ := strconv.ParseInt(text, 10, 64)
 	return data
