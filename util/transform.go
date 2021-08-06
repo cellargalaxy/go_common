@@ -28,7 +28,7 @@ func Parse2BeijingTimestamp(layout, value string) (int64, error) {
 	return date.Unix(), err
 }
 
-func String2Float32(text string) float64 {
+func String2Float64(text string) float64 {
 	data, _ := strconv.ParseFloat(text, 64)
 	return data
 }
