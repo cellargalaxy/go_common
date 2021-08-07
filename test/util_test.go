@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"github.com/cellargalaxy/go_common/util"
 	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
@@ -95,4 +96,13 @@ func TestDeAesCbcString(t *testing.T) {
 		return
 	}
 	t.Logf("text: %+v\n", text)
+}
+func TestGenGoLabel(t *testing.T) {
+	ctx := context.Background()
+	code, err := util.ReadFileOrCreateIfNotExist(ctx, "test.txt", "")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	fmt.Println(util.GenGoLabel(ctx, code, "gorm", "form"))
 }

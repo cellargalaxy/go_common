@@ -7,7 +7,9 @@ import (
 )
 
 const DateLayout_2006年01月02日 = "2006年01月02日"
+const DateLayout_2006年01月02日15点04分05秒 = "2006年01月02日 15点04分05秒"
 const DateLayout_2006_01_02 = "2006-01-02"
+const DateLayout_2006_01_02_15_04_05 = "2006-01-02 15:04:05"
 const DateLayout_060102150405_0000000 = "060102150405.000000"
 
 var beijingLoc = time.FixedZone("GMT", 8*3600)

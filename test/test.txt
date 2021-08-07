@@ -1,0 +1,15 @@
+
+type Kline struct {
+	Interval       KlineInterval `gorm:"interval" json:"interval"`                 //时间间隔
+	OpenTime       time.Time     `gorm:"open_time" json:"open_time"`               // 开盘时间
+	CloseTime      time.Time     `gorm:"close_time" json:"close_time"`             // 收盘时间
+	Open           float64       `gorm:"open" json:"open"`                         // 开盘价
+	Close          float64       `gorm:"close" json:"close"`                       // 收盘价
+	High           float64       `gorm:"high" json:"high"`                         // 最高价
+	Low            float64       `gorm:"low" json:"low"`                           // 最低价
+	Volume         float64       `gorm:"volume" json:"volume"`                     // 成交量
+	Amount         float64       `gorm:"amount" json:"amount"`                     // 成交额
+	TradeCount     int64         `gorm:"trade_count" json:"trade_count"`           // 成交笔数
+	TakerBuyVolume float64       `gorm:"taker_buy_volume" json:"taker_buy_volume"` // 主动买入成交量
+	TakerBuyAmount float64       `gorm:"taker_buy_amount" json:"taker_buy_amount"` // 主动买入成交额
+}
