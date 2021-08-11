@@ -31,6 +31,16 @@ func TestParseBeijingTime(t *testing.T) {
 	t.Logf("object: %+v\n", object.Unix())
 }
 
+func TestTime2MsTs(t *testing.T) {
+	ts := util.Time2MsTs(time.Now())
+	t.Logf("ts: %+v\n", ts)
+}
+
+func TestMsTs2Time(t *testing.T) {
+	date := util.MsTs2Time(1605091056123)
+	t.Logf("ts: %+v\n", util.Time2MsTs(date))
+}
+
 func TestEnSHa256(t *testing.T) {
 	ctx := context.Background()
 	data, err := util.EnSha256(ctx, []byte("aa"))
