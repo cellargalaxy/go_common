@@ -106,3 +106,12 @@ func TestGenGoLabel(t *testing.T) {
 	}
 	fmt.Println(util.GenGoLabel(ctx, code, "gorm", "form"))
 }
+func TestGenModel2Sql(t *testing.T) {
+	ctx := context.Background()
+	code, err := util.ReadFileOrCreateIfNotExist(ctx, "test.txt", "")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	fmt.Println(util.GenModel2Sql(ctx, code))
+}
