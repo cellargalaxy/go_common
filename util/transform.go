@@ -22,12 +22,20 @@ func Parse2BeijingTime(layout, value string) (time.Time, error) {
 	return date, err
 }
 
-func Parse2BeijingTimestamp(layout, value string) (int64, error) {
+func Parse2BeijingTs(layout, value string) (int64, error) {
 	date, err := Parse2BeijingTime(layout, value)
 	if err != nil {
 		return 0, err
 	}
 	return date.Unix(), err
+}
+
+func Time2MsTs(date time.Time) int64 {
+	return date.UnixNano() / 1e6
+}
+
+func MsTs2Time(ts int64) time.Time {
+	return time.Unix(0, ts*1e6)
 }
 
 func String2Float64(text string) float64 {
