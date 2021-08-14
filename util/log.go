@@ -19,7 +19,7 @@ import (
 
 const LogIdKey = "logid"
 
-func InitLog(logPath string) {
+func InitLog(logPath string, showCaller bool) {
 	if logPath == "" {
 		logPath = "log.log"
 	}
@@ -37,6 +37,7 @@ func InitLog(logPath string) {
 		NoFieldsColors:  true,  //仅将颜色应用于级别，默认为级别 + 字段
 		TrimMessages:    true,  //修剪消息上的空格
 		NoColors:        false, //禁用颜色
+		CallerFirst:     showCaller,
 		TimestampFormat: time.RFC3339,
 		FieldsOrder:     []string{LogIdKey}, //字段排序，默认：字段按字母顺序排序
 	})
