@@ -22,7 +22,7 @@ import (
 const LogIdKey = "logid"
 const CallerKey = "caller"
 
-func InitLog(logPath string, showCaller bool) {
+func InitLog(logPath string, showLongCaller bool) {
 	if logPath == "" {
 		logPath = "log.log"
 	}
@@ -44,9 +44,7 @@ func InitLog(logPath string, showCaller bool) {
 		FieldsOrder:     []string{LogIdKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
 	logrus.AddHook(LogIdHook{})
-	if showCaller {
-		logrus.AddHook(CallerHook{})
-	}
+	logrus.AddHook(CallerHook{showLongCaller: showLongCaller})
 }
 
 type LogIdHook struct {
@@ -65,6 +63,7 @@ func (this LogIdHook) Levels() []logrus.Level {
 }
 
 type CallerHook struct {
+	showLongCaller bool
 }
 
 func (this CallerHook) Fire(entry *logrus.Entry) error {
@@ -83,6 +82,10 @@ func (this CallerHook) Fire(entry *logrus.Entry) error {
 			continue
 		}
 		break
+	}
+	if !this.showLongCaller {
+		files := strings.Split(file, "/")
+		file = files[len(file)-1]
 	}
 	entry.Data[CallerKey] = fmt.Sprintf(`"%s:%d"`, file, line)
 	return nil
