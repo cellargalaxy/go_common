@@ -78,7 +78,10 @@ func SetLogId(ctx context.Context) context.Context {
 func CreateLogId() int64 {
 	return CreateId()
 }
-
+func CreateLogCtx() context.Context {
+	ctx := context.Background()
+	return SetLogId(ctx)
+}
 func GinLogId(c *gin.Context) {
 	logId := GetLogId(c)
 	if logId <= 0 {
