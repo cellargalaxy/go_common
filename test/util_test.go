@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+func TestInitLog(t *testing.T) {
+	util.InitLog("", true)
+	ctx := util.CreateLogCtx()
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"TestInitLog": "TestInitLog"}).Info("TestInitLog")
+}
+
 func TestContainNum(t *testing.T) {
 	object := util.ContainNum("0.39亿元（截止至：2020年12月31日）")
 	t.Logf("object: %+v\n", object)

@@ -13,11 +13,14 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
 const LogIdKey = "logid"
+const CallerKey = "caller"
 
 func InitLog(logPath string, showCaller bool) {
 	if logPath == "" {
@@ -37,13 +40,13 @@ func InitLog(logPath string, showCaller bool) {
 		NoFieldsColors:  true,  //仅将颜色应用于级别，默认为级别 + 字段
 		TrimMessages:    true,  //修剪消息上的空格
 		NoColors:        false, //禁用颜色
-		CallerFirst:     showCaller,
 		TimestampFormat: time.RFC3339,
-		FieldsOrder:     []string{LogIdKey}, //字段排序，默认：字段按字母顺序排序
+		FieldsOrder:     []string{LogIdKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
 	logrus.AddHook(LogIdHook{})
-	//logrus.SetFormatter(&logrus.JSONFormatter{})
-	//logrus.SetReportCaller(true)
+	if showCaller {
+		logrus.AddHook(CallerHook{})
+	}
 }
 
 type LogIdHook struct {
@@ -58,6 +61,33 @@ func (this LogIdHook) Fire(entry *logrus.Entry) error {
 	return nil
 }
 func (this LogIdHook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+type CallerHook struct {
+}
+
+func (this CallerHook) Fire(entry *logrus.Entry) error {
+	skip := 6
+	var file string
+	var line int
+	ok := true
+	for ok {
+		_, file, line, ok = runtime.Caller(skip)
+		//fmt.Println(skip, file, line)
+		skip++
+		if !ok {
+			break
+		}
+		if strings.Contains(file, "github.com/sirupsen/logrus") {
+			continue
+		}
+		break
+	}
+	entry.Data[CallerKey] = fmt.Sprintf(`"%s:%d"`, file, line)
+	return nil
+}
+func (this CallerHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
