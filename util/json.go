@@ -36,8 +36,9 @@ func UnmarshalJson(data []byte, v interface{}) error {
 	err := json.Unmarshal(data, v)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Error("反序列化json异常")
+		return fmt.Errorf("反序列化json异常: %+v", err)
 	}
-	return fmt.Errorf("反序列化json异常: %+v", err)
+	return nil
 }
 
 func UnmarshalJsonString(data string, v interface{}) error {
