@@ -8,7 +8,7 @@ import (
 var rateLimitMap sync.Map
 var rateTsMap sync.Map
 
-func AddRateLimit(key string, limit int64) {
+func AddRateLimit(key string, limit time.Duration) {
 	rateLimitMap.Store(key, limit)
 }
 
@@ -23,9 +23,10 @@ func RateLimit(key string) bool {
 		rateTsMap.Store(key, now)
 		return false
 	}
-	limit := limitP.(int64)
+	limit := limitP.(time.Duration)
 	ts := tsP.(int64)
-	if now < ts+limit {
+	before := time.Unix(ts, 0)
+	if now < before.Add(limit).Unix() {
 		return true
 	}
 	rateTsMap.Store(key, now)
