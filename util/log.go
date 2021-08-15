@@ -85,7 +85,7 @@ func (this CallerHook) Fire(entry *logrus.Entry) error {
 	}
 	if !this.showLongCaller {
 		files := strings.Split(file, "/")
-		file = files[len(file)-1]
+		file = files[len(files)-1]
 	}
 	entry.Data[CallerKey] = fmt.Sprintf(`"%s:%d"`, file, line)
 	return nil
