@@ -6,6 +6,7 @@ import (
 	"github.com/cellargalaxy/go_common/util"
 	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -115,4 +116,10 @@ func TestGenGoLabel(t *testing.T) {
 		return
 	}
 	fmt.Println(util.GenGoLabel(ctx, code, "gorm", "form"))
+}
+
+func TestWareDuration(t *testing.T) {
+	rand.Seed(time.Now().Unix())
+	object := util.WareDuration(time.Duration(0))
+	t.Logf("object: %d\n", object)
 }
