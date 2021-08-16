@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+func TestInitLog(t *testing.T) {
+	util.InitLog("", true)
+	ctx := util.CreateLogCtx()
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"TestInitLog": "TestInitLog"}).Info("TestInitLog")
+}
+
 func TestContainNum(t *testing.T) {
 	object := util.ContainNum("0.39亿元（截止至：2020年12月31日）")
 	t.Logf("object: %+v\n", object)
@@ -116,6 +122,15 @@ func TestGenGoLabel(t *testing.T) {
 		return
 	}
 	fmt.Println(util.GenGoLabel(ctx, code, "gorm", "form"))
+}
+func TestGenModel2Sql(t *testing.T) {
+	ctx := context.Background()
+	code, err := util.ReadFileOrCreateIfNotExist(ctx, "test.txt", "")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	fmt.Println(util.GenModel2Sql(ctx, code))
 }
 
 func TestWareDuration(t *testing.T) {
