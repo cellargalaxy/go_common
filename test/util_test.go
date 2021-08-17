@@ -135,6 +135,24 @@ func TestGenModel2Sql(t *testing.T) {
 
 func TestWareDuration(t *testing.T) {
 	rand.Seed(time.Now().Unix())
-	object := util.WareDuration(time.Duration(0))
+	ns := 2
+	var object time.Duration
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
 	t.Logf("object: %d\n", object)
 }
