@@ -6,6 +6,7 @@ import (
 	"github.com/cellargalaxy/go_common/util"
 	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -130,4 +131,28 @@ func TestGenModel2Sql(t *testing.T) {
 		return
 	}
 	fmt.Println(util.GenModel2Sql(ctx, code))
+}
+
+func TestWareDuration(t *testing.T) {
+	rand.Seed(time.Now().Unix())
+	ns := 2
+	var object time.Duration
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
+	object = util.WareDuration(time.Duration(ns))
+	t.Logf("object: %d\n", object)
 }
