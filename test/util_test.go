@@ -12,7 +12,7 @@ import (
 )
 
 func TestInitLog(t *testing.T) {
-	util.InitLog("", true)
+	util.InitLog("")
 	ctx := util.CreateLogCtx()
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"TestInitLog": "TestInitLog"}).Info("TestInitLog")
 }
@@ -155,4 +155,14 @@ func TestWareDuration(t *testing.T) {
 	t.Logf("object: %d\n", object)
 	object = util.WareDuration(time.Duration(ns))
 	t.Logf("object: %d\n", object)
+}
+
+func TestParseCurl(t *testing.T) {
+	ctx := context.Background()
+	object, err := util.ParseCurl(ctx, ``)
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	t.Logf("object: %+v\n", util.ToJsonIndentString(object))
 }

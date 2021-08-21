@@ -1,7 +1,9 @@
 package util
 
 import (
+	"context"
 	"github.com/cellargalaxy/go_common/consd"
+	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
@@ -62,4 +64,68 @@ func Validate(c *gin.Context, validateHandler func(c *gin.Context) (string, jwt.
 		return
 	}
 	c.Set(ClaimsKey, jwtToken.Claims)
+}
+
+func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error) {
+	var param model.HttpRequestParam
+	param.Header = make(map[string]string)
+	lines := strings.Split(curl, "\n")
+	for i := range lines {
+		line := lines[i]
+		line = strings.ReplaceAll(line, " ", "")
+		line = strings.ReplaceAll(line, "\t", "")
+		if strings.HasSuffix(line, "\\") {
+			line = line[:len(line)-1]
+		}
+		if strings.HasPrefix(line, "curl") {
+			line = line[4:]
+			line = strings.ReplaceAll(line, " ", "")
+			line = strings.ReplaceAll(line, "\t", "")
+			if strings.HasPrefix(line, "'") || strings.HasPrefix(line, "\"") {
+				line = line[1:]
+			}
+			if strings.HasSuffix(line, "'") || strings.HasSuffix(line, "\"") {
+				line = line[:len(line)-1]
+			}
+			param.Url = line
+			continue
+		}
+		if strings.HasPrefix(line, "-H") {
+			line = line[2:]
+			line = strings.ReplaceAll(line, " ", "")
+			line = strings.ReplaceAll(line, "\t", "")
+			if strings.HasPrefix(line, "'") || strings.HasPrefix(line, "\"") {
+				line = line[1:]
+			}
+			if strings.HasSuffix(line, "'") || strings.HasSuffix(line, "\"") {
+				line = line[:len(line)-1]
+			}
+			ss := strings.Split(line, ":")
+			if len(ss) < 2 {
+				continue
+			}
+			key := ss[0]
+			key = strings.ReplaceAll(key, " ", "")
+			key = strings.ReplaceAll(key, "\t", "")
+			value := ss[1]
+			value = strings.ReplaceAll(value, " ", "")
+			value = strings.ReplaceAll(value, "\t", "")
+			param.Header[key] = value
+			continue
+		}
+		if strings.HasPrefix(line, "--data-raw") {
+			line = line[10:]
+			line = strings.ReplaceAll(line, " ", "")
+			line = strings.ReplaceAll(line, "\t", "")
+			if strings.HasPrefix(line, "'") || strings.HasPrefix(line, "\"") {
+				line = line[1:]
+			}
+			if strings.HasSuffix(line, "'") || strings.HasSuffix(line, "\"") {
+				line = line[:len(line)-1]
+			}
+			param.Body = line
+			continue
+		}
+	}
+	return &param, nil
 }
