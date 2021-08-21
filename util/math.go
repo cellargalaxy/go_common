@@ -30,8 +30,6 @@ func LeastSquare(points [][]float64) (float64, float64) {
 	length := float64(len(points))
 	k := (yi*xi - xy*length) / (xi*xi - x2*length) //斜率
 	a := (yi*x2 - xy*xi) / (x2*length - xi*xi)     //截距
-	k = ResetNanInf(k)
-	a = ResetNanInf(a)
 	return k, a
 }
 
@@ -97,4 +95,33 @@ func Abs(value float64) float64 {
 		return value
 	}
 	return -value
+}
+
+func Avg(data []float64) float64 {
+	if len(data) <= 0 {
+		return 0
+	}
+	var avg float64
+	for i := range data {
+		avg += data[i]
+	}
+	return avg / float64(len(data))
+}
+
+func AvgAndSVar(data []float64) (float64, float64) {
+	avg, variance := AvgAndVar(data)
+	return avg, math.Pow(variance, 0.5)
+}
+
+func AvgAndVar(data []float64) (float64, float64) {
+	if len(data) <= 0 {
+		return 0, 0
+	}
+	avg := Avg(data)
+	var variance float64
+	for i := range data {
+		variance += math.Pow(data[i]-avg, 2)
+	}
+	variance /= float64(len(data))
+	return avg, variance
 }
