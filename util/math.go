@@ -16,7 +16,7 @@ func IsNanInf(value float64) bool {
 }
 
 //斜率,截距
-func LeastSquares(points [][]float64) (float64, float64) {
+func LeastSquare(points [][]float64) (float64, float64) {
 	if len(points) <= 1 {
 		return 0, 0
 	}

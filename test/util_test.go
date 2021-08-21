@@ -121,7 +121,7 @@ func TestGenGoLabel(t *testing.T) {
 		t.Errorf("err: %+v\n", err)
 		return
 	}
-	fmt.Println(util.GenGoLabel(ctx, code, "gorm", "form"))
+	fmt.Println(util.GenGoLabel(ctx, code, "gorm"))
 }
 func TestGenModel2Sql(t *testing.T) {
 	ctx := context.Background()
