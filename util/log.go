@@ -28,8 +28,8 @@ func InitLog(logPath string) {
 	}
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   logPath, //日志文件的位置
-		MaxSize:    1,       //在进行切割之前，日志文件的最大大小（以MB为单位）
-		MaxBackups: 10,      //保留旧文件的最大个数
+		MaxSize:    10,      //在进行切割之前，日志文件的最大大小（以MB为单位）
+		MaxBackups: 100,     //保留旧文件的最大个数
 		MaxAge:     30,      //保留旧文件的最大天数
 		Compress:   false,   //是否压缩/归档旧文件
 	}
