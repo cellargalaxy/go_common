@@ -19,15 +19,14 @@ import (
 	"time"
 )
 
+const LogPath = "log/log.log"
+
 const LogIdKey = "logid"
 const CallerKey = "caller"
 
-func InitLog(logPath string) {
-	if logPath == "" {
-		logPath = "log.log"
-	}
+func InitLog() {
 	lumberJackLogger := &lumberjack.Logger{
-		Filename:   logPath, //日志文件的位置
+		Filename:   LogPath, //日志文件的位置
 		MaxSize:    10,      //在进行切割之前，日志文件的最大大小（以MB为单位）
 		MaxBackups: 100,     //保留旧文件的最大个数
 		MaxAge:     30,      //保留旧文件的最大天数
