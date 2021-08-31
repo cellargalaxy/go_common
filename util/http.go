@@ -72,15 +72,13 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 	lines := strings.Split(curl, "\n")
 	for i := range lines {
 		line := lines[i]
-		line = strings.Trim(line, " ")
-		line = strings.Trim(line, "\t")
+		line = strings.TrimSpace(line)
 		if strings.HasSuffix(line, "\\") {
 			line = line[:len(line)-1]
 		}
 		if strings.HasPrefix(line, "curl") {
 			line = line[4:]
-			line = strings.Trim(line, " ")
-			line = strings.Trim(line, "\t")
+			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "'") || strings.HasPrefix(line, "\"") {
 				line = line[1:]
 			}
@@ -92,8 +90,7 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 		}
 		if strings.HasPrefix(line, "-H") {
 			line = line[2:]
-			line = strings.Trim(line, " ")
-			line = strings.Trim(line, "\t")
+			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "'") || strings.HasPrefix(line, "\"") {
 				line = line[1:]
 			}
@@ -105,18 +102,15 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 				continue
 			}
 			key := ss[0]
-			key = strings.Trim(key, " ")
-			key = strings.Trim(key, "\t")
+			key = strings.TrimSpace(key)
 			value := ss[1]
-			value = strings.Trim(value, " ")
-			value = strings.Trim(value, "\t")
+			value = strings.TrimSpace(value)
 			param.Header[key] = value
 			continue
 		}
 		if strings.HasPrefix(line, "--data-raw") {
 			line = line[10:]
-			line = strings.Trim(line, " ")
-			line = strings.Trim(line, "\t")
+			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "'") || strings.HasPrefix(line, "\"") {
 				line = line[1:]
 			}

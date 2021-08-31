@@ -102,7 +102,7 @@ func SetLogId(ctx context.Context) context.Context {
 	return ctx
 }
 func CreateLogId() int64 {
-	return CreateId()
+	return GenId()
 }
 func CreateLogCtx() context.Context {
 	ctx := context.Background()

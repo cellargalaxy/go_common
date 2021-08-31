@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func CreateId() int64 {
+func GenId() int64 {
 	now := time.Now()
 	str := now.Format(DateLayout_060102150405_0000000)
 	str = str[:12] + str[13:]
@@ -31,8 +31,7 @@ func GenGoLabel(ctx context.Context, code string, labels ...string) string {
 	lines := strings.Split(code, "\n")
 	for i := range lines {
 		line := lines[i]
-		line = strings.Trim(line, " ")
-		line = strings.Trim(line, "\t")
+		line = strings.TrimSpace(line)
 		if line == "" || strings.Contains(line, "{") || strings.Contains(line, "}") {
 			continue
 		}
@@ -49,8 +48,7 @@ func GenGoLabel(ctx context.Context, code string, labels ...string) string {
 		}
 		for j := range keys {
 			key := keys[j]
-			key = strings.Trim(key, " ")
-			key = strings.Trim(key, "\t")
+			key = strings.TrimSpace(key)
 			if key == "" {
 				continue
 			}
@@ -61,10 +59,8 @@ func GenGoLabel(ctx context.Context, code string, labels ...string) string {
 				break
 			}
 		}
-		param.Name = strings.Trim(param.Name, " ")
-		param.Name = strings.Trim(param.Name, "\t")
-		param.Type = strings.Trim(param.Type, " ")
-		param.Type = strings.Trim(param.Type, "\t")
+		param.Name = strings.TrimSpace(param.Name)
+		param.Type = strings.TrimSpace(param.Type)
 		underscoreName := Hump2Underscore(param.Name)
 		param.Label = fmt.Sprintf("`json:\"%s\"", underscoreName)
 		labelMap := make(map[string]bool)
@@ -95,8 +91,7 @@ func GenModel2Sql(ctx context.Context, code string) string {
 	var params []Param
 	for i := range lines {
 		line := lines[i]
-		line = strings.Trim(line, " ")
-		line = strings.Trim(line, "\t")
+		line = strings.TrimSpace(line)
 		if line == "" || strings.Contains(line, "}") {
 			continue
 		}
@@ -104,8 +99,7 @@ func GenModel2Sql(ctx context.Context, code string) string {
 			line = strings.ReplaceAll(line, "type", "")
 			line = strings.ReplaceAll(line, "struct", "")
 			line = strings.ReplaceAll(line, "{", "")
-			line = strings.Trim(line, " ")
-			line = strings.Trim(line, "\t")
+			line = strings.TrimSpace(line)
 			modelName = line
 			continue
 		}
@@ -122,8 +116,7 @@ func GenModel2Sql(ctx context.Context, code string) string {
 		}
 		for j := range keys {
 			key := keys[j]
-			key = strings.Trim(key, " ")
-			key = strings.Trim(key, "\t")
+			key = strings.TrimSpace(key)
 			if key == "" {
 				continue
 			}
@@ -134,10 +127,8 @@ func GenModel2Sql(ctx context.Context, code string) string {
 				break
 			}
 		}
-		param.Name = strings.Trim(param.Name, " ")
-		param.Name = strings.Trim(param.Name, "\t")
-		param.Type = strings.Trim(param.Type, " ")
-		param.Type = strings.Trim(param.Type, "\t")
+		param.Name = strings.TrimSpace(param.Name)
+		param.Type = strings.TrimSpace(param.Type)
 		params = append(params, param)
 	}
 	lines = make([]string, 0)
