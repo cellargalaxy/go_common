@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"github.com/pkg/errors"
+	"fmt"
 	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -28,85 +28,13 @@ func ExistAndIsFile(ctx context.Context, filePath string) (bool, os.FileInfo) {
 	return exist && !fileInfo.IsDir(), fileInfo
 }
 
-func WriteFileWithBytesOrCreateIfNotExist(ctx context.Context, filePath string, bytes []byte) error {
-	exist, _ := ExistPath(ctx, filePath)
-	if !exist {
-		return CreateFileWithBytes(ctx, filePath, bytes)
-	}
-	return writeFileWithBytes(ctx, filePath, bytes)
-}
-
-func WriteFileWithReaderOrCreateIfNotExist(ctx context.Context, filePath string, reader io.Reader) error {
-	exist, _ := ExistPath(ctx, filePath)
-	if !exist {
-		return CreateFileWithReader(ctx, filePath, reader)
-	}
-	return writeFileWithReader(ctx, filePath, reader)
-}
-
-func ReadFileOrCreateIfNotExist(ctx context.Context, filePath string, defaultText string) (string, error) {
-	exist, _ := ExistPath(ctx, filePath)
-	if !exist {
-		err := CreateFileWithBytes(ctx, filePath, []byte(defaultText))
-		return defaultText, err
-	}
-	bytes, err := readFile(ctx, filePath)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
-}
-
-func CreateFileWithBytes(ctx context.Context, filePath string, bytes []byte) error {
-	file, err := createFile(ctx, filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = file.Write(bytes)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("写入文件初始数据异常")
-		return errors.Errorf("写入文件初始数据异常: %+v", err)
-	}
-	return nil
-}
-
-func CreateFileWithReader(ctx context.Context, filePath string, reader io.Reader) error {
-	file, err := createFile(ctx, filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = io.Copy(file, reader)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("写入文件初始数据异常")
-		return errors.Errorf("写入文件初始数据异常: %+v", err)
-	}
-	return nil
-}
-
-func writeFileWithBytes(ctx context.Context, filePath string, bytes []byte) error {
-	err := ioutil.WriteFile(filePath, bytes, 0644)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("写入文件异常")
-		return errors.Errorf("写入文件异常: %+v", err)
-	}
-	return nil
-}
-
-func writeFileWithReader(ctx context.Context, filePath string, reader io.Reader) error {
+func openFile(ctx context.Context, filePath string) (*os.File, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("打开文件异常")
-		return errors.Errorf("打开文件异常: %+v", err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件打开异常")
+		return nil, fmt.Errorf("文件打开异常: %+v", err)
 	}
-	defer file.Close()
-	_, err = io.Copy(file, reader)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("写入文件数据异常")
-		return errors.Errorf("写入文件数据异常: %+v", err)
-	}
-	return nil
+	return file, nil
 }
 
 func createFile(ctx context.Context, filePath string) (*os.File, error) {
@@ -115,31 +43,106 @@ func createFile(ctx context.Context, filePath string) (*os.File, error) {
 	if folderPath != "" {
 		err := os.MkdirAll(folderPath, 0666)
 		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("创建父文件夹异常")
-			return nil, errors.Errorf("创建父文件夹异常: %+v", err)
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("父文件夹创建异常")
+			return nil, fmt.Errorf("父文件夹创建异常: %+v", err)
 		}
 	}
 	file, err := os.Create(filePath)
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("创建文件异常")
-		return nil, errors.Errorf("创建文件异常: %+v", err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件创建异常")
+		return nil, fmt.Errorf("文件创建异常: %+v", err)
 	}
 	return file, nil
 }
 
-func readFile(ctx context.Context, filePath string) ([]byte, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("打开文件异常")
-		return nil, errors.Errorf("打开文件异常: %+v", err)
+func GetFile(ctx context.Context, filePath string) (*os.File, error) {
+	exist, fileInfo := ExistPath(ctx, filePath)
+	if !exist {
+		return createFile(ctx, filePath)
 	}
-	defer file.Close()
-	bytes, err := ioutil.ReadAll(file)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("读取文件异常")
-		return nil, errors.Errorf("读取文件异常: %+v", err)
+	if fileInfo.IsDir() {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("该路径为文件夹，获取文件失败")
+		return nil, fmt.Errorf("该路径为文件夹，获取文件失败")
 	}
-	return bytes, nil
+	return openFile(ctx, filePath)
+}
+
+func WriteFileWithData(ctx context.Context, filePath string, bytes []byte) error {
+	file, err := GetFile(ctx, filePath)
+	if err != nil {
+		return err
+	}
+	defer func(filePath string, file *os.File) {
+		err := file.Close()
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件关闭异常")
+		}
+	}(filePath, file)
+	written, err := file.Write(bytes)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件写入异常")
+		return fmt.Errorf("文件写入异常: %+v", err)
+	} else {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Error("文件写入完成")
+	}
+	return nil
+}
+
+func WriteFileWithString(ctx context.Context, filePath string, text string) error {
+	return WriteFileWithData(ctx, filePath, []byte(text))
+}
+
+func WriteFileWithReader(ctx context.Context, filePath string, reader io.Reader) error {
+	file, err := GetFile(ctx, filePath)
+	if err != nil {
+		return err
+	}
+	defer func(filePath string, file *os.File) {
+		err := file.Close()
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件关闭异常")
+		}
+	}(filePath, file)
+	written, err := io.Copy(file, reader)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件写入异常")
+		return fmt.Errorf("文件写入异常: %+v", err)
+	} else {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Error("文件写入完成")
+	}
+	return nil
+}
+
+func ReadFileWithData(ctx context.Context, filePath string, defaultData []byte) ([]byte, error) {
+	file, err := GetFile(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer func(filePath string, file *os.File) {
+		err := file.Close()
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件关闭异常")
+		}
+	}(filePath, file)
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件读取异常")
+		return nil, fmt.Errorf("文件读取异常: %+v", err)
+	} else {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "len(data)": len(data)}).Error("文件读取完成")
+	}
+	if len(data) == 0 {
+		data = defaultData
+	}
+	return data, nil
+}
+
+func ReadFileWithString(ctx context.Context, filePath string, defaultText string) (string, error) {
+	data, err := ReadFileWithData(ctx, filePath, []byte(defaultText))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func ClearPath(ctx context.Context, fileOrFolderPath string) string {
@@ -148,17 +151,21 @@ func ClearPath(ctx context.Context, fileOrFolderPath string) string {
 }
 
 func GetFileMd5(ctx context.Context, filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	file, err := GetFile(ctx, filePath)
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("计算MD5打开文件异常")
-		return "", errors.Errorf("计算MD5打开文件异常: %+v", err)
+		return "", err
 	}
-	defer file.Close()
-	md5 := md5.New()
-	_, err = io.Copy(md5, file)
+	defer func(filePath string, file *os.File) {
+		err := file.Close()
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件关闭异常")
+		}
+	}(filePath, file)
+	hash := md5.New()
+	_, err = io.Copy(hash, file)
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("计算MD5读取文件异常")
-		return "", errors.Errorf("计算MD5读取文件异常: %+v", err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件计算MD5异常")
+		return "", fmt.Errorf("文件计算MD5异常: %+v", err)
 	}
-	return hex.EncodeToString(md5.Sum(nil)), nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }

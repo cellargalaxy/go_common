@@ -5,8 +5,8 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"github.com/golang-jwt/jwt"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/wumansgy/goEncrypt"
 )
@@ -20,7 +20,7 @@ func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, erro
 	token, err := jwtToken.SignedString(secretByte)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT加密异常")
-		return "", errors.Errorf("JWT加密异常: %+v", err)
+		return "", fmt.Errorf("JWT加密异常: %+v", err)
 	}
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"token": token}).Info("JWT加密")
 	return token, nil
@@ -44,7 +44,7 @@ func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jw
 
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT解密异常")
-		return nil, errors.Errorf("JWT解密异常: %+v", err)
+		return nil, fmt.Errorf("JWT解密异常: %+v", err)
 	}
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": claims}).Info("JWT解密")
 	return jwtToken, nil
@@ -85,7 +85,7 @@ func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	de, err := goEncrypt.AesCbcDecrypt(data, secret, ivAes)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("AesCbc解密异常")
-		return nil, errors.Errorf("AesCbc解密异常")
+		return nil, fmt.Errorf("AesCbc解密异常")
 	}
 	return de, nil
 }
@@ -101,7 +101,7 @@ func EnAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	en, err := goEncrypt.AesCbcEncrypt(data, secret, ivAes)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("AesCbc加密异常")
-		return nil, errors.Errorf("AesCbc加密异常")
+		return nil, fmt.Errorf("AesCbc加密异常")
 	}
 	return en, nil
 }
@@ -113,7 +113,7 @@ func DeBase64(ctx context.Context, text string) ([]byte, error) {
 	data, err := base64.StdEncoding.DecodeString(text)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("Base64解码异常")
-		return nil, errors.Errorf("Base64解码异常")
+		return nil, fmt.Errorf("Base64解码异常")
 	}
 	return data, nil
 }

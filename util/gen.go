@@ -184,12 +184,3 @@ func getBdDefaultValue(goType string) string {
 		return goType
 	}
 }
-func Hump2Underscore(text string) string {
-	for j := 'A'; j <= 'Z'; j++ {
-		text = strings.ReplaceAll(text, fmt.Sprintf("%c", j), fmt.Sprintf("_%c", j+32))
-	}
-	if text[0] == '_' {
-		text = text[1:]
-	}
-	return text
-}

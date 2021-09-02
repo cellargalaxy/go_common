@@ -29,7 +29,8 @@ func TestFindNum(t *testing.T) {
 }
 
 func TestParseBeijingTime(t *testing.T) {
-	object, err := util.Parse2BeijingTime(util.DateLayout_2006_01_02, "2021-03-21")
+	ctx := context.Background()
+	object, err := util.Parse2BeijingTime(ctx, util.DateLayout_2006_01_02, "2021-03-21")
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -116,7 +117,7 @@ func TestDeAesCbcString(t *testing.T) {
 }
 func TestGenGoLabel(t *testing.T) {
 	ctx := context.Background()
-	code, err := util.ReadFileOrCreateIfNotExist(ctx, "test.txt", "")
+	code, err := util.ReadFileWithString(ctx, "test.txt", "")
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -125,7 +126,7 @@ func TestGenGoLabel(t *testing.T) {
 }
 func TestGenModel2Sql(t *testing.T) {
 	ctx := context.Background()
-	code, err := util.ReadFileOrCreateIfNotExist(ctx, "test.txt", "")
+	code, err := util.ReadFileWithString(ctx, "test.txt", "")
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
