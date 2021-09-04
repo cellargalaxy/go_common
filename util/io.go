@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"github.com/gocarina/gocsv"
 	"github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -29,7 +30,7 @@ func ExistAndIsFile(ctx context.Context, filePath string) (bool, os.FileInfo) {
 }
 
 func openFile(ctx context.Context, filePath string) (*os.File, error) {
-	file, err := os.Open(filePath)
+	file, err := os.OpenFile(filePath, os.O_RDWR, 0666)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件打开异常")
 		return nil, fmt.Errorf("文件打开异常: %+v", err)
@@ -41,7 +42,7 @@ func createFile(ctx context.Context, filePath string) (*os.File, error) {
 	folderPath, _ := path.Split(filePath)
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Info("文件父文件夹")
 	if folderPath != "" {
-		err := os.MkdirAll(folderPath, 0666)
+		err := os.MkdirAll(folderPath, 0777)
 		if err != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("父文件夹创建异常")
 			return nil, fmt.Errorf("父文件夹创建异常: %+v", err)
@@ -60,7 +61,7 @@ func GetFile(ctx context.Context, filePath string) (*os.File, error) {
 	if !exist {
 		return createFile(ctx, filePath)
 	}
-	if fileInfo.IsDir() {
+	if fileInfo != nil && fileInfo.IsDir() {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("该路径为文件夹，获取文件失败")
 		return nil, fmt.Errorf("该路径为文件夹，获取文件失败")
 	}
@@ -168,4 +169,78 @@ func GetFileMd5(ctx context.Context, filePath string) (string, error) {
 		return "", fmt.Errorf("文件计算MD5异常: %+v", err)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func ReadCsvWithReader(ctx context.Context, reader io.Reader, list interface{}) error {
+	err := gocsv.Unmarshal(reader, list)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("解析CSV异常")
+		return fmt.Errorf("解析CSV异常: %+v", err)
+	}
+	return nil
+}
+
+func ReadCsvWithData(ctx context.Context, data []byte, list interface{}) error {
+	if len(data) == 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("序列化CSV，为空")
+		return nil
+	}
+	err := gocsv.UnmarshalBytes(data, list)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("解析CSV异常")
+		return fmt.Errorf("解析CSV异常: %+v", err)
+	}
+	return nil
+}
+
+func ReadCsvWithString(ctx context.Context, text string, list interface{}) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("序列化CSV，为空")
+		return nil
+	}
+	return ReadCsvWithData(ctx, []byte(text), list)
+}
+
+func ReadCsvWithFile(ctx context.Context, filePath string, list interface{}) error {
+	data, err := ReadFileWithData(ctx, filePath, []byte{})
+	if err != nil {
+		return err
+	}
+	return ReadCsvWithData(ctx, data, list)
+}
+
+func WriteCsvWithWriter(ctx context.Context, list interface{}, writer io.Writer) error {
+	err := gocsv.Marshal(list, writer)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
+		return fmt.Errorf("序列化CSV异常: %+v", err)
+	}
+	return nil
+}
+
+func WriteCsvWithData(ctx context.Context, list interface{}) ([]byte, error) {
+	data, err := gocsv.MarshalBytes(list)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
+		return nil, fmt.Errorf("序列化CSV异常: %+v", err)
+	}
+	return data, nil
+}
+
+func WriteCsvWithString(ctx context.Context, list interface{}) (string, error) {
+	text, err := gocsv.MarshalString(list)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
+		return "", fmt.Errorf("序列化CSV异常: %+v", err)
+	}
+	return text, nil
+}
+
+func WriteCsvWithFile(ctx context.Context, list interface{}, filePath string) error {
+	file, err := GetFile(ctx, filePath)
+	if err != nil {
+		return err
+	}
+	return WriteCsvWithWriter(ctx, list, file)
 }

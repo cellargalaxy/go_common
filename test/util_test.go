@@ -167,3 +167,37 @@ func TestParseCurl(t *testing.T) {
 	}
 	t.Logf("object: %+v\n", util.ToJsonIndentString(object))
 }
+
+type CsvStruct struct {
+	Int     int       `json:"int" csv:"client_age"`
+	Float64 float64   `json:"float_64" csv:"float_64"`
+	String  string    `json:"string" csv:"string"`
+	Bool    bool      `json:"bool" csv:"bool"`
+	Time    time.Time `json:"time" csv:"time"`
+}
+
+func TestWriteCsvWithFile(t *testing.T) {
+	ctx := context.Background()
+	var list []CsvStruct
+	list = append(list, CsvStruct{1, 1.1, "a", true, time.Now()})
+	list = append(list, CsvStruct{2, 2.2, "b", false, time.Now()})
+	err := util.WriteCsvWithFile(ctx, list, "tmp/test.csv")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+}
+
+func TestReadCsvWithFile(t *testing.T) {
+	ctx := context.Background()
+	var list []CsvStruct
+	err := util.ReadCsvWithFile(ctx, "tmp/test.csv", &list)
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	t.Logf("object\n")
+	for i := range list {
+		t.Logf("object: %+v\n", util.ToJsonString(list[i]))
+	}
+}
