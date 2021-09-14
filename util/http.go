@@ -5,7 +5,7 @@ import (
 	"github.com/cellargalaxy/go_common/consd"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
+	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
@@ -15,16 +15,35 @@ import (
 const TokenKey = "Authorization"
 const ClaimsKey = "claims"
 
+var httpLocalCache *cache.Cache
+
+func InitHttp() {
+	httpLocalCache = cache.New(1*time.Minute, 1*time.Minute)
+	if httpLocalCache == nil {
+		panic("创建本地缓存对象为空")
+	}
+}
+
+func existRequestId(requestId string, duration time.Duration) bool {
+	_, ok := httpLocalCache.Get(requestId)
+	httpLocalCache.Set(requestId, requestId, duration)
+	return ok
+}
+
 func CreateErrResponse(message string) map[string]interface{} {
-	return gin.H{"code": consd.HttpFailCode, "msg": message, "data": nil}
+	return createResponse(consd.HttpFailCode, message, nil)
 }
 
 func CreateResponse(data interface{}, err error) map[string]interface{} {
 	if err == nil {
-		return gin.H{"code": consd.HttpSuccessCode, "msg": nil, "data": data}
+		return createResponse(consd.HttpSuccessCode, "", data)
 	} else {
-		return gin.H{"code": consd.HttpFailCode, "msg": err.Error(), "data": data}
+		return createResponse(consd.HttpFailCode, err.Error(), data)
 	}
+}
+
+func createResponse(code int, msg string, data interface{}) map[string]interface{} {
+	return gin.H{"code": code, "msg": msg, "data": data}
 }
 
 func Ping(context *gin.Context) {
@@ -32,7 +51,7 @@ func Ping(context *gin.Context) {
 }
 
 //token检查
-func Validate(c *gin.Context, validateHandler func(c *gin.Context) (string, jwt.Claims, error)) {
+func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 	token := c.Request.Header.Get(TokenKey)
 	logrus.WithContext(c).WithFields(logrus.Fields{"token": token}).Info("解析token")
 	tokens := strings.SplitN(token, " ", 2)
@@ -41,12 +60,8 @@ func Validate(c *gin.Context, validateHandler func(c *gin.Context) (string, jwt.
 		c.JSON(http.StatusOK, CreateErrResponse("Authorization非法"))
 		return
 	}
-	secret, claims, err := validateHandler(c)
-	if err != nil {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse(err.Error()))
-		return
-	}
+	secret := validateHandler.GetSecret(c)
+	claims := validateHandler.CreateClaims(c)
 	jwtToken, err := ParseJWT(c, tokens[1], secret, claims)
 	if err != nil {
 		c.Abort()
@@ -62,6 +77,25 @@ func Validate(c *gin.Context, validateHandler func(c *gin.Context) (string, jwt.
 		c.Abort()
 		c.JSON(http.StatusOK, CreateErrResponse("JWT token非法"))
 		return
+	}
+	if !claims.AllowReRequest {
+		if claims.RequestId == "" {
+			c.Abort()
+			c.JSON(http.StatusOK, CreateErrResponse("JWT request_id为空"))
+			return
+		}
+		expiresAt := time.Unix(claims.ExpiresAt, 0)
+		duration := expiresAt.Sub(time.Now())
+		if duration.Nanoseconds() <= 0 {
+			c.Abort()
+			c.JSON(http.StatusOK, CreateErrResponse("JWT token过期"))
+			return
+		}
+		if existRequestId(claims.RequestId, duration) {
+			c.Abort()
+			c.JSON(http.StatusOK, createResponse(consd.HttpReRequestCode, "JWT 请求重放非法", nil))
+			return
+		}
 	}
 	c.Set(ClaimsKey, jwtToken.Claims)
 }

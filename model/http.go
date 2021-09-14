@@ -11,9 +11,9 @@ type Claims struct {
 	RequestId      string `json:"request_id,omitempty"`
 }
 
-type CoinInnerClientInter interface {
+type HttpValidateInter interface {
 	GetSecret(c *gin.Context) string
-	GetClaims(c *gin.Context) *Claims
+	CreateClaims(c *gin.Context) *Claims
 }
 
 type HttpRequestParam struct {
