@@ -201,3 +201,8 @@ func TestReadCsvWithFile(t *testing.T) {
 		t.Logf("object: %+v\n", util.ToJsonString(list[i]))
 	}
 }
+
+func TestGenId(t *testing.T) {
+	id := util.GenId()
+	fmt.Println(fmt.Sprint(id))
+}
