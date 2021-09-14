@@ -88,16 +88,16 @@ func (this CallerHook) Levels() []logrus.Level {
 }
 
 func GetLogId(ctx context.Context) int64 {
-	logIdP := ctx.Value(LogIdKey)
+	logIdP := GetCtxValue(ctx, LogIdKey)
 	logId, _ := logIdP.(int64)
 	return logId
 }
 func SetLogId(ctx context.Context) context.Context {
-	logIdP := ctx.Value(LogIdKey)
+	logIdP := GetCtxValue(ctx, LogIdKey)
 	logId, ok := logIdP.(int64)
 	if !ok {
 		logId = CreateLogId()
-		ctx = context.WithValue(ctx, LogIdKey, logId)
+		ctx = SetCtxValue(ctx, LogIdKey, logId)
 	}
 	return ctx
 }
