@@ -6,6 +6,20 @@ import (
 	"strings"
 )
 
+const serverNameEnvKey = "server_name"
+
+func GetServerNameWithPanic() string {
+	value := GetServerName()
+	if value == "" {
+		panic("server_name为空")
+	}
+	return value
+}
+
+func GetServerName() string {
+	return GetEnvString(serverNameEnvKey, "")
+}
+
 func GetEnvString(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
