@@ -15,5 +15,5 @@
 # vendor/
 
 .idea
+go_common
 *.log
-test/tmp
