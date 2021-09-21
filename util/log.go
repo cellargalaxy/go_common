@@ -23,7 +23,7 @@ const LogIdKey = "logid"
 const CallerKey = "caller"
 
 func InitLog(projectName string) {
-	filename := fmt.Sprintf("log/%s.log", projectName)
+	filename := fmt.Sprintf("log/%s/%s.log", projectName, projectName)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename, //日志文件的位置
 		MaxSize:    1,        //在进行切割之前，日志文件的最大大小（以MB为单位）
