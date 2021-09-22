@@ -46,7 +46,7 @@ func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jw
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT解密异常")
 		return nil, fmt.Errorf("JWT解密异常: %+v", err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": claims}).Info("JWT解密")
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": ToJsonString(claims)}).Info("JWT解密")
 	return jwtToken, nil
 }
 
