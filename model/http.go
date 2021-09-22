@@ -7,6 +7,7 @@ import (
 
 type Claims struct {
 	jwt.StandardClaims
+	Caller         string `json:"caller,omitempty"`
 	AllowReRequest bool   `json:"allow_re_request,omitempty"`
 	RequestId      string `json:"request_id,omitempty"`
 }
