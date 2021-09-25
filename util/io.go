@@ -40,8 +40,8 @@ func openFile(ctx context.Context, filePath string) (*os.File, error) {
 
 func createFile(ctx context.Context, filePath string) (*os.File, error) {
 	folderPath, _ := path.Split(filePath)
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Info("文件父文件夹")
 	if folderPath != "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Info("文件父文件夹")
 		err := os.MkdirAll(folderPath, 0777)
 		if err != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("父文件夹创建异常")
