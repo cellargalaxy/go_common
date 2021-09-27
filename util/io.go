@@ -1,8 +1,10 @@
 package util
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
+	"encoding/csv"
 	"encoding/hex"
 	"fmt"
 	"github.com/gocarina/gocsv"
@@ -171,7 +173,7 @@ func GetFileMd5(ctx context.Context, filePath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func ReadCsvWithReader(ctx context.Context, reader io.Reader, list interface{}) error {
+func ReadCsvWithReader2Struct(ctx context.Context, reader io.Reader, list interface{}) error {
 	err := gocsv.Unmarshal(reader, list)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("解析CSV异常")
@@ -180,7 +182,7 @@ func ReadCsvWithReader(ctx context.Context, reader io.Reader, list interface{}) 
 	return nil
 }
 
-func ReadCsvWithData(ctx context.Context, data []byte, list interface{}) error {
+func ReadCsvWithData2Struct(ctx context.Context, data []byte, list interface{}) error {
 	if len(data) == 0 {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("序列化CSV，为空")
 		return nil
@@ -193,24 +195,55 @@ func ReadCsvWithData(ctx context.Context, data []byte, list interface{}) error {
 	return nil
 }
 
-func ReadCsvWithString(ctx context.Context, text string, list interface{}) error {
+func ReadCsvWithString2Struct(ctx context.Context, text string, list interface{}) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("序列化CSV，为空")
 		return nil
 	}
-	return ReadCsvWithData(ctx, []byte(text), list)
+	return ReadCsvWithData2Struct(ctx, []byte(text), list)
 }
 
-func ReadCsvWithFile(ctx context.Context, filePath string, list interface{}) error {
+func ReadCsvWithFile2Struct(ctx context.Context, filePath string, list interface{}) error {
 	data, err := ReadFileWithData(ctx, filePath, []byte{})
 	if err != nil {
 		return err
 	}
-	return ReadCsvWithData(ctx, data, list)
+	return ReadCsvWithData2Struct(ctx, data, list)
 }
 
-func WriteCsvWithWriter(ctx context.Context, list interface{}, writer io.Writer) error {
+func ReadCsvWithData2String(ctx context.Context, data []byte) ([][]string, error) {
+	if len(data) == 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("序列化CSV，为空")
+		return nil, nil
+	}
+	reader := csv.NewReader(bytes.NewReader(data))
+	list, err := reader.ReadAll()
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("解析CSV异常")
+		return nil, fmt.Errorf("解析CSV异常: %+v", err)
+	}
+	return list, nil
+}
+
+func ReadCsvWithString2String(ctx context.Context, text string) ([][]string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("序列化CSV，为空")
+		return nil, nil
+	}
+	return ReadCsvWithData2String(ctx, []byte(text))
+}
+
+func ReadCsvWithFile2String(ctx context.Context, filePath string) ([][]string, error) {
+	data, err := ReadFileWithData(ctx, filePath, []byte{})
+	if err != nil {
+		return nil, err
+	}
+	return ReadCsvWithData2String(ctx, data)
+}
+
+func WriteCsv2WriterByStruct(ctx context.Context, list interface{}, writer io.Writer) error {
 	err := gocsv.Marshal(list, writer)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
@@ -219,7 +252,7 @@ func WriteCsvWithWriter(ctx context.Context, list interface{}, writer io.Writer)
 	return nil
 }
 
-func WriteCsvWithData(ctx context.Context, list interface{}) ([]byte, error) {
+func WriteCsv2DataByStruct(ctx context.Context, list interface{}) ([]byte, error) {
 	data, err := gocsv.MarshalBytes(list)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
@@ -228,7 +261,7 @@ func WriteCsvWithData(ctx context.Context, list interface{}) ([]byte, error) {
 	return data, nil
 }
 
-func WriteCsvWithString(ctx context.Context, list interface{}) (string, error) {
+func WriteCsv2StringByStruct(ctx context.Context, list interface{}) (string, error) {
 	text, err := gocsv.MarshalString(list)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
@@ -237,12 +270,50 @@ func WriteCsvWithString(ctx context.Context, list interface{}) (string, error) {
 	return text, nil
 }
 
-func WriteCsvWithFile(ctx context.Context, list interface{}, filePath string) error {
+func WriteCsv2FileByStruct(ctx context.Context, list interface{}, filePath string) error {
 	file, err := GetFile(ctx, filePath)
 	if err != nil {
 		return err
 	}
-	return WriteCsvWithWriter(ctx, list, file)
+	defer func(filePath string, file *os.File) {
+		err := file.Close()
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件关闭异常")
+		}
+	}(filePath, file)
+	return WriteCsv2WriterByStruct(ctx, list, file)
+}
+
+func WriteCsv2DataByString(ctx context.Context, lines [][]string) ([]byte, error) {
+	var buffer bytes.Buffer
+	_, err := buffer.WriteString("\xEF\xBB\xBF")
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
+		return nil, fmt.Errorf("序列化CSV异常: %+v", err)
+	}
+	writer := csv.NewWriter(&buffer)
+	writer.Comma = ','
+	writer.UseCRLF = true
+	err = writer.WriteAll(lines)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
+		return nil, fmt.Errorf("序列化CSV异常: %+v", err)
+	}
+	writer.Flush()
+	err = writer.Error()
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
+		return nil, fmt.Errorf("序列化CSV异常: %+v", err)
+	}
+	return buffer.Bytes(), nil
+}
+
+func WriteCsv2DataByFile(ctx context.Context, lines [][]string, filePath string) error {
+	data, err := WriteCsv2DataByString(ctx, lines)
+	if err != nil {
+		return err
+	}
+	return WriteFileWithData(ctx, filePath, data)
 }
 
 func RemoveFile(ctx context.Context, filePath string) error {
