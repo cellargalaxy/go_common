@@ -84,7 +84,7 @@ func WriteFileWithData(ctx context.Context, filePath string, bytes []byte) error
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件写入异常")
 		return fmt.Errorf("文件写入异常: %+v", err)
 	} else {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Error("文件写入完成")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Info("文件写入完成")
 	}
 	return nil
 }
@@ -109,7 +109,7 @@ func WriteFileWithReader(ctx context.Context, filePath string, reader io.Reader)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件写入异常")
 		return fmt.Errorf("文件写入异常: %+v", err)
 	} else {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Error("文件写入完成")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Info("文件写入完成")
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func ReadFileWithData(ctx context.Context, filePath string, defaultData []byte) 
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件读取异常")
 		return nil, fmt.Errorf("文件读取异常: %+v", err)
 	} else {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "len(data)": len(data)}).Error("文件读取完成")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "len(data)": len(data)}).Info("文件读取完成")
 	}
 	if len(data) == 0 {
 		data = defaultData
