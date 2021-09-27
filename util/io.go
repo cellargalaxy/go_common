@@ -32,7 +32,7 @@ func ExistAndIsFile(ctx context.Context, filePath string) (bool, os.FileInfo) {
 }
 
 func openFile(ctx context.Context, filePath string) (*os.File, error) {
-	file, err := os.OpenFile(filePath, os.O_RDWR, 0666)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_TRUNC, 0666)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件打开异常")
 		return nil, fmt.Errorf("文件打开异常: %+v", err)
@@ -42,8 +42,8 @@ func openFile(ctx context.Context, filePath string) (*os.File, error) {
 
 func createFile(ctx context.Context, filePath string) (*os.File, error) {
 	folderPath, _ := path.Split(filePath)
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Info("文件父文件夹")
 	if folderPath != "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Info("文件父文件夹")
 		err := os.MkdirAll(folderPath, 0777)
 		if err != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("父文件夹创建异常")
@@ -314,4 +314,29 @@ func WriteCsv2DataByFile(ctx context.Context, lines [][]string, filePath string)
 		return err
 	}
 	return WriteFileWithData(ctx, filePath, data)
+}
+
+func RemoveFile(ctx context.Context, filePath string) error {
+	exist, fileInfo := ExistPath(ctx, filePath)
+	if !exist {
+		logrus.WithFields(logrus.Fields{"filePath": filePath}).Warn("删除文件，文件不存在")
+		return nil
+	}
+	if fileInfo != nil && fileInfo.IsDir() {
+		files, err := ioutil.ReadDir(filePath)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("删除文件，读取文件夹异常")
+			return fmt.Errorf("删除文件，读取文件夹异常: %+v", err)
+		}
+		if len(files) > 0 {
+			logrus.WithFields(logrus.Fields{"filePath": filePath}).Error("删除文件，文件夹不为空")
+			return fmt.Errorf("删除文件，文件夹不为空")
+		}
+	}
+	err := os.Remove(filePath)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("删除文件，异常")
+		return fmt.Errorf("删除文件，异常: %+v", err)
+	}
+	return nil
 }
