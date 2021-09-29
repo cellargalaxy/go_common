@@ -286,7 +286,7 @@ func WriteCsv2FileByStruct(ctx context.Context, list interface{}, filePath strin
 
 func WriteCsv2DataByString(ctx context.Context, lines [][]string) ([]byte, error) {
 	var buffer bytes.Buffer
-	_, err := buffer.WriteString("")
+	_, err := buffer.WriteString("\xEF\xBB\xBF")
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
 		return nil, fmt.Errorf("序列化CSV异常: %+v", err)
