@@ -10,6 +10,7 @@ import (
 	"github.com/gocarina/gocsv"
 	"github.com/sirupsen/logrus"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path"
@@ -339,4 +340,22 @@ func RemoveFile(ctx context.Context, filePath string) error {
 		return fmt.Errorf("删除文件，异常: %+v", err)
 	}
 	return nil
+}
+
+func ListFile(ctx context.Context, folderPath string) ([]fs.FileInfo, error) {
+	exist, fileInfo := ExistPath(ctx, folderPath)
+	if !exist {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，文件夹不存在")
+		return nil, nil
+	}
+	if fileInfo != nil && !fileInfo.IsDir() {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，不是文件夹")
+		return nil, nil
+	}
+	files, err := ioutil.ReadDir(folderPath)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("罗列文件，读取文件夹异常")
+		return nil, fmt.Errorf("罗列文件，读取文件夹异常: %+v", err)
+	}
+	return files, nil
 }
