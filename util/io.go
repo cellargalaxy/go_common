@@ -56,6 +56,7 @@ func createFile(ctx context.Context, filePath string) (*os.File, error) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件创建异常")
 		return nil, fmt.Errorf("文件创建异常: %+v", err)
 	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Info("文件创建完成")
 	return file, nil
 }
 
