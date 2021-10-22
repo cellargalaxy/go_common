@@ -1,9 +1,12 @@
 package util
 
 import (
+	"context"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 const serverNameEnvKey = "server_name"
@@ -57,4 +60,19 @@ func GetEnvBool(key string, defaultValue bool) bool {
 	default:
 		return defaultValue
 	}
+}
+
+/**
+https://mojotv.cn/2019/01/17/golang-signal-restart-deamom
+https://bytedance.feishu.cn/wiki/wikcnaJLXgEn5xeJWF7VSUY0qNg#xbNNDs
+*/
+func ExitSignal(fun func(ctx context.Context, signal os.Signal)) {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGKILL)
+	go func() {
+		s := <-signalChan
+		ctx := CreateLogCtx()
+		fun(ctx, s)
+		os.Exit(0)
+	}()
 }
