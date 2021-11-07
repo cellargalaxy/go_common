@@ -198,6 +198,39 @@ func ReadFileWithString(ctx context.Context, filePath string, defaultText string
 	return string(data), nil
 }
 
+func ReadFileWithWriter(ctx context.Context, filePath string, writer io.Writer, defaultData []byte) error {
+	file, err := GetReadFile(ctx, filePath)
+	if err != nil {
+		return err
+	}
+	defer func(filePath string, file *os.File) {
+		err := file.Close()
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件关闭异常")
+		}
+	}(filePath, file)
+
+	written, err := io.Copy(writer, file)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件拷贝数据异常")
+		return fmt.Errorf("文件拷贝数据异常: %+v", err)
+	} else {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Info("文件拷贝数据完成")
+	}
+
+	if written == 0 {
+		written, err := writer.Write(defaultData)
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件拷贝数据异常")
+			return fmt.Errorf("文件拷贝数据异常: %+v", err)
+		} else {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Info("文件拷贝数据完成")
+		}
+	}
+
+	return nil
+}
+
 func ClearPath(ctx context.Context, fileOrFolderPath string) string {
 	fileOrFolderPath = strings.ReplaceAll(fileOrFolderPath, "\\", "/")
 	return path.Clean(fileOrFolderPath)
