@@ -181,7 +181,7 @@ func TestWriteCsvWithFile(t *testing.T) {
 	var list []CsvStruct
 	list = append(list, CsvStruct{1, 1.1, "a", true, time.Now()})
 	list = append(list, CsvStruct{2, 2.2, "b", false, time.Now()})
-	err := util.WriteCsvWithFile(ctx, list, "tmp/test.csv")
+	err := util.WriteCsv2FileByStruct(ctx, list, "tmp/test.csv")
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -191,7 +191,7 @@ func TestWriteCsvWithFile(t *testing.T) {
 func TestReadCsvWithFile(t *testing.T) {
 	ctx := context.Background()
 	var list []CsvStruct
-	err := util.ReadCsvWithFile(ctx, "tmp/test.csv", &list)
+	err := util.ReadCsvWithFile2Struct(ctx, "tmp/test.csv", &list)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -205,4 +205,13 @@ func TestReadCsvWithFile(t *testing.T) {
 func TestGenId(t *testing.T) {
 	id := util.GenId()
 	fmt.Println(fmt.Sprint(id))
+}
+
+func TestCreateFolderPath(t *testing.T) {
+	ctx := util.CreateLogCtx()
+	err := util.CreateFolderPath(ctx, "./tmp")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
 }

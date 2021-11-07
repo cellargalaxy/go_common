@@ -44,10 +44,9 @@ func createFile(ctx context.Context, filePath string) (*os.File, error) {
 	folderPath, _ := path.Split(filePath)
 	if folderPath != "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Info("文件父文件夹")
-		err := os.MkdirAll(folderPath, 0777)
+		err := CreateFolderPath(ctx, folderPath)
 		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("父文件夹创建异常")
-			return nil, fmt.Errorf("父文件夹创建异常: %+v", err)
+			return nil, err
 		}
 	}
 	file, err := os.Create(filePath)
@@ -56,6 +55,15 @@ func createFile(ctx context.Context, filePath string) (*os.File, error) {
 		return nil, fmt.Errorf("文件创建异常: %+v", err)
 	}
 	return file, nil
+}
+
+func CreateFolderPath(ctx context.Context, folderPath string) error {
+	err := os.MkdirAll(folderPath, 0777)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("创建文件夹异常")
+		return fmt.Errorf("创建文件夹异常: %+v", err)
+	}
+	return nil
 }
 
 func GetFile(ctx context.Context, filePath string) (*os.File, error) {
