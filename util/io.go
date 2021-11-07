@@ -19,16 +19,25 @@ import (
 
 func ExistPath(ctx context.Context, path string) (bool, os.FileInfo) {
 	fileInfo, err := os.Stat(path)
-	return err == nil || os.IsExist(err), fileInfo
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"path": path, "err": err}).Error("查询文件信息异常")
+	}
+	return (err == nil || os.IsExist(err)) && fileInfo != nil, fileInfo
 }
 
 func ExistAndIsFolder(ctx context.Context, folderPath string) (bool, os.FileInfo) {
 	exist, fileInfo := ExistPath(ctx, folderPath)
+	if !exist {
+		return exist, fileInfo
+	}
 	return exist && fileInfo.IsDir(), fileInfo
 }
 
 func ExistAndIsFile(ctx context.Context, filePath string) (bool, os.FileInfo) {
 	exist, fileInfo := ExistPath(ctx, filePath)
+	if !exist {
+		return exist, fileInfo
+	}
 	return exist && !fileInfo.IsDir(), fileInfo
 }
 
