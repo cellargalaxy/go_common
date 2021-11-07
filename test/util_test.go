@@ -207,6 +207,26 @@ func TestGenId(t *testing.T) {
 	fmt.Println(fmt.Sprint(id))
 }
 
+func TestGetReadFile(t *testing.T) {
+	ctx := context.Background()
+	file, err := util.GetReadFile(ctx, "test.go")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	t.Logf("object: %+v\n", file)
+}
+
+func TestGetWriteFile(t *testing.T) {
+	ctx := context.Background()
+	file, err := util.GetWriteFile(ctx, "test.go")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	t.Logf("object: %+v\n", file)
+}
+
 func TestCreateFolderPath(t *testing.T) {
 	ctx := util.CreateLogCtx()
 	err := util.CreateFolderPath(ctx, "./tmp")

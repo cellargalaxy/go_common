@@ -10,6 +10,7 @@ import (
 	"github.com/gocarina/gocsv"
 	"github.com/sirupsen/logrus"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path"
@@ -31,7 +32,16 @@ func ExistAndIsFile(ctx context.Context, filePath string) (bool, os.FileInfo) {
 	return exist && !fileInfo.IsDir(), fileInfo
 }
 
-func openFile(ctx context.Context, filePath string) (*os.File, error) {
+func openReadFile(ctx context.Context, filePath string) (*os.File, error) {
+	file, err := os.OpenFile(filePath, os.O_RDONLY, 0666)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件打开异常")
+		return nil, fmt.Errorf("文件打开异常: %+v", err)
+	}
+	return file, nil
+}
+
+func openWriteFile(ctx context.Context, filePath string) (*os.File, error) {
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_TRUNC, 0666)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件打开异常")
@@ -54,6 +64,7 @@ func createFile(ctx context.Context, filePath string) (*os.File, error) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件创建异常")
 		return nil, fmt.Errorf("文件创建异常: %+v", err)
 	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Info("文件创建完成")
 	return file, nil
 }
 
@@ -66,7 +77,7 @@ func CreateFolderPath(ctx context.Context, folderPath string) error {
 	return nil
 }
 
-func GetFile(ctx context.Context, filePath string) (*os.File, error) {
+func GetReadFile(ctx context.Context, filePath string) (*os.File, error) {
 	exist, fileInfo := ExistPath(ctx, filePath)
 	if !exist {
 		return createFile(ctx, filePath)
@@ -75,11 +86,23 @@ func GetFile(ctx context.Context, filePath string) (*os.File, error) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("该路径为文件夹，获取文件失败")
 		return nil, fmt.Errorf("该路径为文件夹，获取文件失败")
 	}
-	return openFile(ctx, filePath)
+	return openReadFile(ctx, filePath)
+}
+
+func GetWriteFile(ctx context.Context, filePath string) (*os.File, error) {
+	exist, fileInfo := ExistPath(ctx, filePath)
+	if !exist {
+		return createFile(ctx, filePath)
+	}
+	if fileInfo != nil && fileInfo.IsDir() {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("该路径为文件夹，获取文件失败")
+		return nil, fmt.Errorf("该路径为文件夹，获取文件失败")
+	}
+	return openWriteFile(ctx, filePath)
 }
 
 func WriteFileWithData(ctx context.Context, filePath string, bytes []byte) error {
-	file, err := GetFile(ctx, filePath)
+	file, err := GetWriteFile(ctx, filePath)
 	if err != nil {
 		return err
 	}
@@ -104,7 +127,7 @@ func WriteFileWithString(ctx context.Context, filePath string, text string) erro
 }
 
 func WriteFileWithReader(ctx context.Context, filePath string, reader io.Reader) error {
-	file, err := GetFile(ctx, filePath)
+	file, err := GetWriteFile(ctx, filePath)
 	if err != nil {
 		return err
 	}
@@ -125,7 +148,7 @@ func WriteFileWithReader(ctx context.Context, filePath string, reader io.Reader)
 }
 
 func ReadFileWithData(ctx context.Context, filePath string, defaultData []byte) ([]byte, error) {
-	file, err := GetFile(ctx, filePath)
+	file, err := GetReadFile(ctx, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +185,7 @@ func ClearPath(ctx context.Context, fileOrFolderPath string) string {
 }
 
 func GetFileMd5(ctx context.Context, filePath string) (string, error) {
-	file, err := GetFile(ctx, filePath)
+	file, err := GetReadFile(ctx, filePath)
 	if err != nil {
 		return "", err
 	}
@@ -279,7 +302,7 @@ func WriteCsv2StringByStruct(ctx context.Context, list interface{}) (string, err
 }
 
 func WriteCsv2FileByStruct(ctx context.Context, list interface{}, filePath string) error {
-	file, err := GetFile(ctx, filePath)
+	file, err := GetWriteFile(ctx, filePath)
 	if err != nil {
 		return err
 	}
@@ -347,4 +370,22 @@ func RemoveFile(ctx context.Context, filePath string) error {
 		return fmt.Errorf("删除文件，异常: %+v", err)
 	}
 	return nil
+}
+
+func ListFile(ctx context.Context, folderPath string) ([]fs.FileInfo, error) {
+	exist, fileInfo := ExistPath(ctx, folderPath)
+	if !exist {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，文件夹不存在")
+		return nil, nil
+	}
+	if fileInfo != nil && !fileInfo.IsDir() {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，不是文件夹")
+		return nil, nil
+	}
+	files, err := ioutil.ReadDir(folderPath)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("罗列文件，读取文件夹异常")
+		return nil, fmt.Errorf("罗列文件，读取文件夹异常: %+v", err)
+	}
+	return files, nil
 }
