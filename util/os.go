@@ -4,12 +4,22 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 )
 
 const serverNameEnvKey = "server_name"
+
+func Defer(callback func(err interface{}, stack string)) {
+	if err := recover(); err != nil {
+		var buf [1024 * 4]byte
+		n := runtime.Stack(buf[:], false)
+		stack := string(buf[:n])
+		callback(err, stack)
+	}
+}
 
 func GetServerNameWithPanic() string {
 	value := GetServerName()
