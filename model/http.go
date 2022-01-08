@@ -10,7 +10,7 @@ type Claims struct {
 	Caller         string `json:"caller,omitempty"`
 	AllowReRequest bool   `json:"allow_re_request,omitempty"`
 	RequestId      string `json:"request_id,omitempty"`
-	CreateTime     string `json:"create_time,omitempty"`
+	CreateTime     int64  `json:"create_time,omitempty"`
 }
 
 type HttpValidateInter interface {
