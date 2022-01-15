@@ -6,7 +6,7 @@ import (
 
 var numRegexp *regexp.Regexp
 
-func InitRegexp() {
+func initRegexp() {
 	var err error
 	numRegexp, err = regexp.Compile("\\d+([.]\\d+)?")
 	if err != nil {

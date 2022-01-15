@@ -23,7 +23,7 @@ const LogIdKey = "logid"
 const IpKey = "ip"
 const CallerKey = "caller"
 
-func InitLog(serverName string) {
+func initLog(serverName string) {
 	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename, //日志文件的位置

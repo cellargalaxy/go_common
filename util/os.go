@@ -33,8 +33,12 @@ func GetServerName() string {
 	return GetEnvString(serverNameEnvKey, "")
 }
 
+func GetEnv(key string) string {
+	return os.Getenv(key)
+}
+
 func GetEnvString(key, defaultValue string) string {
-	value := os.Getenv(key)
+	value := GetEnv(key)
 	if value == "" {
 		value = defaultValue
 	}
@@ -42,7 +46,7 @@ func GetEnvString(key, defaultValue string) string {
 }
 
 func GetEnvInt(key string, defaultValue int) int {
-	value := os.Getenv(key)
+	value := GetEnv(key)
 	data, err := strconv.Atoi(value)
 	if err != nil {
 		return defaultValue
@@ -51,7 +55,7 @@ func GetEnvInt(key string, defaultValue int) int {
 }
 
 func GetEnvFloat64(key string, defaultValue float64) float64 {
-	value := os.Getenv(key)
+	value := GetEnv(key)
 	data, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return defaultValue
@@ -60,7 +64,7 @@ func GetEnvFloat64(key string, defaultValue float64) float64 {
 }
 
 func GetEnvBool(key string, defaultValue bool) bool {
-	value := os.Getenv(key)
+	value := GetEnv(key)
 	value = strings.ToLower(value)
 	switch value {
 	case "true":

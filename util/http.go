@@ -2,11 +2,9 @@ package util
 
 import (
 	"context"
-	"crypto/tls"
 	"github.com/cellargalaxy/go_common/consd"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
-	"github.com/go-resty/resty/v2"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -18,16 +16,12 @@ const TokenKey = "Authorization"
 const ClaimsKey = "claims"
 
 var httpLocalCache *cache.Cache
-var httpClient *resty.Client
 
-func InitHttp() {
+func initHttp() {
 	httpLocalCache = cache.New(1*time.Minute, 1*time.Minute)
 	if httpLocalCache == nil {
 		panic("创建本地缓存对象为空")
 	}
-	httpClient = resty.New().
-		SetTimeout(5 * time.Second).
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 }
 
 func existRequestId(requestId string, duration time.Duration) bool {
