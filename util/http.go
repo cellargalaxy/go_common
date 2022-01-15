@@ -2,9 +2,11 @@ package util
 
 import (
 	"context"
+	"crypto/tls"
 	"github.com/cellargalaxy/go_common/consd"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -16,12 +18,16 @@ const TokenKey = "Authorization"
 const ClaimsKey = "claims"
 
 var httpLocalCache *cache.Cache
+var httpClient *resty.Client
 
 func InitHttp() {
 	httpLocalCache = cache.New(1*time.Minute, 1*time.Minute)
 	if httpLocalCache == nil {
 		panic("创建本地缓存对象为空")
 	}
+	httpClient = resty.New().
+		SetTimeout(5 * time.Second).
+		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 }
 
 func existRequestId(requestId string, duration time.Duration) bool {
@@ -156,4 +162,25 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 		}
 	}
 	return &param, nil
+}
+
+func HttpGet(ctx context.Context, url string) string {
+	response, err := httpClient.R().SetContext(ctx).Get(url)
+	if err != nil {
+		return ""
+	}
+	if response == nil {
+		return ""
+	}
+	statusCode := response.StatusCode()
+	body := response.String()
+	if statusCode != http.StatusOK {
+		return ""
+	}
+	return body
+}
+
+func HttpGetIp(ctx context.Context) string {
+	ip := HttpGet(ctx, "https://ifconfig.co/ip")
+	return ip
 }

@@ -17,6 +17,10 @@ func GenId() int64 {
 	return logId
 }
 
+func GenStringId() string {
+	return strconv.Itoa(int(GenId()))
+}
+
 func GenGoLabel(ctx context.Context, code string, labels ...string) string {
 	if code == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("空代码片段")

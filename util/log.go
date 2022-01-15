@@ -20,16 +20,18 @@ import (
 )
 
 const LogIdKey = "logid"
+const IpKey = "ip"
 const CallerKey = "caller"
 
-func InitLog(projectName string) {
-	filename := fmt.Sprintf("log/%s/%s.log", projectName, projectName)
+func InitLog(serverName string) {
+	ctx := CreateLogCtx()
+	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename, //日志文件的位置
 		MaxSize:    1,        //在进行切割之前，日志文件的最大大小（以MB为单位）
 		MaxBackups: 100,      //保留旧文件的最大个数
 		MaxAge:     30,       //保留旧文件的最大天数
-		Compress:   false,    //是否压缩/归档旧文件
+		Compress:   true,     //是否压缩/归档旧文件
 	}
 	multiWriter := io.MultiWriter(os.Stdout, lumberJackLogger)
 	logrus.SetOutput(multiWriter)
@@ -39,9 +41,10 @@ func InitLog(projectName string) {
 		TrimMessages:    true,  //修剪消息上的空格
 		NoColors:        false, //禁用颜色
 		TimestampFormat: time.RFC3339,
-		FieldsOrder:     []string{LogIdKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
+		FieldsOrder:     []string{LogIdKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
 	logrus.AddHook(LogIdHook{})
+	logrus.AddHook(IpHook{ip: HttpGetIp(ctx)})
 	logrus.AddHook(CallerHook{})
 }
 
@@ -84,6 +87,18 @@ func (this CallerHook) Fire(entry *logrus.Entry) error {
 	return nil
 }
 func (this CallerHook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+type IpHook struct {
+	ip string
+}
+
+func (this IpHook) Fire(entry *logrus.Entry) error {
+	entry.Data[IpKey] = this.ip
+	return nil
+}
+func (this IpHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
