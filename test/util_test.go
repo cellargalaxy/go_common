@@ -14,6 +14,7 @@ import (
 func TestInitLog(t *testing.T) {
 	util.InitLog("")
 	ctx := util.CreateLogCtx()
+	time.Sleep(3 * time.Second)
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"TestInitLog": "TestInitLog"}).Info("TestInitLog")
 }
 

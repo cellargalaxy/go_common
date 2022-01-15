@@ -164,8 +164,8 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 	return &param, nil
 }
 
-func HttpGet(ctx context.Context, url string) string {
-	response, err := httpClient.R().SetContext(ctx).Get(url)
+func HttpGet(url string) string {
+	response, err := httpClient.R().Get(url)
 	if err != nil {
 		return ""
 	}
@@ -180,7 +180,6 @@ func HttpGet(ctx context.Context, url string) string {
 	return body
 }
 
-func HttpGetIp(ctx context.Context) string {
-	ip := HttpGet(ctx, "https://ifconfig.co/ip")
-	return ip
+func HttpGetIp() string {
+	return HttpGet("https://ifconfig.co/ip")
 }

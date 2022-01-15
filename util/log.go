@@ -24,7 +24,6 @@ const IpKey = "ip"
 const CallerKey = "caller"
 
 func InitLog(serverName string) {
-	ctx := CreateLogCtx()
 	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename, //日志文件的位置
@@ -43,8 +42,10 @@ func InitLog(serverName string) {
 		TimestampFormat: time.RFC3339,
 		FieldsOrder:     []string{LogIdKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
+	var ipHook IpHook
+	ipHook.InitIpAsync()
 	logrus.AddHook(LogIdHook{})
-	logrus.AddHook(IpHook{ip: HttpGetIp(ctx)})
+	logrus.AddHook(&ipHook)
 	logrus.AddHook(CallerHook{})
 }
 
@@ -94,12 +95,21 @@ type IpHook struct {
 	ip string
 }
 
-func (this IpHook) Fire(entry *logrus.Entry) error {
+func (this *IpHook) Fire(entry *logrus.Entry) error {
 	entry.Data[IpKey] = this.ip
 	return nil
 }
-func (this IpHook) Levels() []logrus.Level {
+func (this *IpHook) Levels() []logrus.Level {
 	return logrus.AllLevels
+}
+func (this *IpHook) InitIpAsync() {
+	go func() {
+		defer Defer(func(ctx context.Context, err interface{}, stack string) {})
+		this.InitIp()
+	}()
+}
+func (this *IpHook) InitIp() {
+	this.ip = HttpGetIp()
 }
 
 func GetLogId(ctx context.Context) int64 {
