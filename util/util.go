@@ -13,7 +13,6 @@ func init() {
 		SetTimeout(5 * time.Second).
 		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 
-	initLog(GetServerNameWithPanic())
 	initRegexp()
 	initHttp()
 }

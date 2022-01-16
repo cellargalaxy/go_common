@@ -20,17 +20,26 @@ import (
 )
 
 const LogIdKey = "logid"
+const ServerNameKey = "sn"
 const IpKey = "ip"
 const CallerKey = "caller"
 
-func initLog(serverName string) {
+func InitDefaultLog(serverName string) {
+	InitLog(serverName, 1, 100, 30)
+}
+
+func CreateDefaultLog(serverName string) *logrus.Logger {
+	return CreateLog(serverName, 1, 100, 30)
+}
+
+func InitLog(serverName string, maxSize, maxBackups, maxAge int) {
 	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
-		Filename:   filename, //日志文件的位置
-		MaxSize:    1,        //在进行切割之前，日志文件的最大大小（以MB为单位）
-		MaxBackups: 100,      //保留旧文件的最大个数
-		MaxAge:     30,       //保留旧文件的最大天数
-		Compress:   true,     //是否压缩/归档旧文件
+		Filename:   filename,   //日志文件的位置
+		MaxSize:    maxSize,    //在进行切割之前，日志文件的最大大小（以MB为单位）
+		MaxBackups: maxBackups, //保留旧文件的最大个数
+		MaxAge:     maxAge,     //保留旧文件的最大天数
+		Compress:   true,       //是否压缩/归档旧文件
 	}
 	multiWriter := io.MultiWriter(os.Stdout, lumberJackLogger)
 	logrus.SetOutput(multiWriter)
@@ -40,41 +49,66 @@ func initLog(serverName string) {
 		TrimMessages:    true,  //修剪消息上的空格
 		NoColors:        false, //禁用颜色
 		TimestampFormat: time.RFC3339,
-		FieldsOrder:     []string{LogIdKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
+		FieldsOrder:     []string{LogIdKey, ServerNameKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
-	var ipHook IpHook
-	ipHook.InitIpAsync()
-	logrus.AddHook(LogIdHook{})
-	logrus.AddHook(&ipHook)
-	logrus.AddHook(CallerHook{})
+	var hook ParamHook
+	hook.serverName = serverName
+	hook.InitIpAsync()
+	logrus.AddHook(&hook)
 }
 
-type LogIdHook struct {
-}
-
-func (this LogIdHook) Fire(entry *logrus.Entry) error {
-	if entry.Context == nil {
-		return nil
+func CreateLog(serverName string, maxSize, maxBackups, maxAge int) *logrus.Logger {
+	log := logrus.New()
+	filename := fmt.Sprintf("log/%s/log.log", serverName)
+	lumberJackLogger := &lumberjack.Logger{
+		Filename:   filename,   //日志文件的位置
+		MaxSize:    maxSize,    //在进行切割之前，日志文件的最大大小（以MB为单位）
+		MaxBackups: maxBackups, //保留旧文件的最大个数
+		MaxAge:     maxAge,     //保留旧文件的最大天数
+		Compress:   true,       //是否压缩/归档旧文件
 	}
-	logId := GetLogId(entry.Context)
-	entry.Data[LogIdKey] = logId
+	multiWriter := io.MultiWriter(os.Stdout, lumberJackLogger)
+	log.SetOutput(multiWriter)
+	log.SetFormatter(&nested.Formatter{
+		HideKeys:        false, //显示 [fieldValue] 而不是 [fieldKey:fieldValue]
+		NoFieldsColors:  true,  //仅将颜色应用于级别，默认为级别 + 字段
+		TrimMessages:    true,  //修剪消息上的空格
+		NoColors:        false, //禁用颜色
+		TimestampFormat: time.RFC3339,
+		FieldsOrder:     []string{LogIdKey, ServerNameKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
+	})
+	var hook ParamHook
+	hook.serverName = serverName
+	hook.InitIpAsync()
+	log.AddHook(&hook)
+	return log
+}
+
+type ParamHook struct {
+	serverName string
+	ip         string
+}
+
+func (this *ParamHook) Fire(entry *logrus.Entry) error {
+	entry.Data[LogIdKey] = this.getLogId(entry)
+	entry.Data[ServerNameKey] = this.serverName
+	entry.Data[IpKey] = this.ip
+	entry.Data[LogIdKey] = this.getCaller(entry)
 	return nil
 }
-func (this LogIdHook) Levels() []logrus.Level {
-	return logrus.AllLevels
+func (this *ParamHook) getLogId(entry *logrus.Entry) int64 {
+	if entry.Context != nil {
+		return 0
+	}
+	return GetLogId(entry.Context)
 }
-
-type CallerHook struct {
-}
-
-func (this CallerHook) Fire(entry *logrus.Entry) error {
+func (this *ParamHook) getCaller(entry *logrus.Entry) string {
 	skip := 6
 	var file string
 	var line int
 	ok := true
 	for ok {
 		_, file, line, ok = runtime.Caller(skip)
-		//fmt.Println(skip, file, line)
 		skip++
 		if !ok {
 			break
@@ -84,32 +118,19 @@ func (this CallerHook) Fire(entry *logrus.Entry) error {
 		}
 		break
 	}
-	entry.Data[CallerKey] = fmt.Sprintf(`"%s:%d"`, file, line)
-	return nil
+	return fmt.Sprintf(`"%s:%d"`, file, line)
 }
-func (this CallerHook) Levels() []logrus.Level {
-	return logrus.AllLevels
-}
-
-type IpHook struct {
-	ip string
-}
-
-func (this *IpHook) Fire(entry *logrus.Entry) error {
-	entry.Data[IpKey] = this.ip
-	return nil
-}
-func (this *IpHook) Levels() []logrus.Level {
-	return logrus.AllLevels
-}
-func (this *IpHook) InitIpAsync() {
+func (this *ParamHook) InitIpAsync() {
 	go func() {
 		defer Defer(func(ctx context.Context, err interface{}, stack string) {})
 		this.InitIp()
 	}()
 }
-func (this *IpHook) InitIp() {
+func (this *ParamHook) InitIp() {
 	this.ip = HttpGetIp()
+}
+func (this *ParamHook) Levels() []logrus.Level {
+	return logrus.AllLevels
 }
 
 func GetLogId(ctx context.Context) int64 {

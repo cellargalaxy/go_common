@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+func init() {
+	util.InitDefaultLog("go_common")
+}
+
 func TestInitLog(t *testing.T) {
 	ctx := util.CreateLogCtx()
 	time.Sleep(3 * time.Second)
@@ -23,7 +27,6 @@ func TestContainNum(t *testing.T) {
 }
 
 func TestFindNum(t *testing.T) {
-	logrus.SetFormatter(&logrus.JSONFormatter{})
 	object := util.FindNum("0.39亿元（截止至：2020年12月31日）")
 	t.Logf("object: %+v\n", object)
 }
