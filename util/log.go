@@ -39,7 +39,7 @@ func InitLog(serverName string, maxSize, maxBackups, maxAge int) {
 		MaxSize:    maxSize,    //在进行切割之前，日志文件的最大大小（以MB为单位）
 		MaxBackups: maxBackups, //保留旧文件的最大个数
 		MaxAge:     maxAge,     //保留旧文件的最大天数
-		Compress:   true,       //是否压缩/归档旧文件
+		Compress:   false,      //是否压缩/归档旧文件
 	}
 	multiWriter := io.MultiWriter(os.Stdout, lumberJackLogger)
 	logrus.SetOutput(multiWriter)
@@ -65,7 +65,7 @@ func CreateLog(serverName string, maxSize, maxBackups, maxAge int) *logrus.Logge
 		MaxSize:    maxSize,    //在进行切割之前，日志文件的最大大小（以MB为单位）
 		MaxBackups: maxBackups, //保留旧文件的最大个数
 		MaxAge:     maxAge,     //保留旧文件的最大天数
-		Compress:   true,       //是否压缩/归档旧文件
+		Compress:   false,      //是否压缩/归档旧文件
 	}
 	multiWriter := io.MultiWriter(os.Stdout, lumberJackLogger)
 	log.SetOutput(multiWriter)
