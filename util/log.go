@@ -99,6 +99,7 @@ func (this *ParamHook) Fire(entry *logrus.Entry) error {
 	return nil
 }
 func (this *ParamHook) getLogId(entry *logrus.Entry) int64 {
+	fmt.Println("日志2，ctx", entry.Context)
 	if entry.Context != nil {
 		return 0
 	}
