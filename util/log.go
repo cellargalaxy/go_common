@@ -92,6 +92,7 @@ type ParamHook struct {
 func (this *ParamHook) Fire(entry *logrus.Entry) error {
 	fmt.Println("日志，ctx", entry.Context)
 	fmt.Println("日志，GetLogId", GetLogId(entry.Context))
+	fmt.Println("日志，getLogId", this.getLogId(entry))
 	entry.Data[LogIdKey] = this.getLogId(entry)
 	entry.Data[ServerNameKey] = this.serverName
 	entry.Data[IpKey] = this.ip
