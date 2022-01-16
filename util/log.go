@@ -93,7 +93,7 @@ func (this *ParamHook) Fire(entry *logrus.Entry) error {
 	entry.Data[LogIdKey] = this.getLogId(entry)
 	entry.Data[ServerNameKey] = this.serverName
 	entry.Data[IpKey] = this.ip
-	entry.Data[LogIdKey] = this.getCaller(entry)
+	entry.Data[CallerKey] = this.getCaller(entry)
 	return nil
 }
 func (this *ParamHook) getLogId(entry *logrus.Entry) int64 {
