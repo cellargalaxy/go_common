@@ -53,7 +53,7 @@ func InitLog(serverName string, maxSize, maxBackups, maxAge int) {
 	})
 	var hook ParamHook
 	hook.serverName = serverName
-	hook.InitIpAsync()
+	hook.FlushIpAsync()
 	logrus.AddHook(&hook)
 }
 
@@ -79,7 +79,7 @@ func CreateLog(serverName string, maxSize, maxBackups, maxAge int) *logrus.Logge
 	})
 	var hook ParamHook
 	hook.serverName = serverName
-	hook.InitIpAsync()
+	hook.FlushIpAsync()
 	log.AddHook(&hook)
 	return log
 }
@@ -120,14 +120,23 @@ func (this *ParamHook) getCaller(entry *logrus.Entry) string {
 	}
 	return fmt.Sprintf(`"%s:%d"`, file, line)
 }
-func (this *ParamHook) InitIpAsync() {
+func (this *ParamHook) FlushIpAsync() {
 	go func() {
-		defer Defer(func(ctx context.Context, err interface{}, stack string) {})
-		this.InitIp()
+		defer Defer(func(ctx context.Context, err interface{}, stack string) {
+			this.FlushIpAsync()
+		})
+
+		for {
+			this.FlushIp()
+			time.Sleep(time.Hour)
+		}
 	}()
 }
-func (this *ParamHook) InitIp() {
-	this.ip = HttpGetIp()
+func (this *ParamHook) FlushIp() {
+	ip := HttpGetIp()
+	if ip != "" {
+		this.ip = ip
+	}
 }
 func (this *ParamHook) Levels() []logrus.Level {
 	return logrus.AllLevels
