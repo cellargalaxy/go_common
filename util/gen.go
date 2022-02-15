@@ -21,6 +21,16 @@ func GenStringId() string {
 	return strconv.Itoa(int(GenId()))
 }
 
+func ParseId(ctx context.Context, id int64) (time.Time, error) {
+	str := strconv.Itoa(int(id))
+	return ParseStringId(ctx, str)
+}
+
+func ParseStringId(ctx context.Context, id string) (time.Time, error) {
+	id = id[:12] + "." + id[12:]
+	return Parse2BeijingTime(ctx, DateLayout_060102150405_0000000, id)
+}
+
 func GenGoLabel(ctx context.Context, code string, labels ...string) string {
 	if code == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("空代码片段")

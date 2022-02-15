@@ -210,6 +210,12 @@ func TestGenId(t *testing.T) {
 	fmt.Println(fmt.Sprint(id))
 }
 
+func TestParseId(t *testing.T) {
+	ctx := util.CreateLogCtx()
+	id := util.GenId()
+	fmt.Println(util.ParseId(ctx, id))
+}
+
 func TestGetReadFile(t *testing.T) {
 	ctx := context.Background()
 	file, err := util.GetReadFile(ctx, "test.go")
