@@ -24,15 +24,18 @@ const ServerNameKey = "sn"
 const IpKey = "ip"
 const CallerKey = "caller"
 
-func InitDefaultLog(serverName string) {
-	InitLog(serverName, 1, 100, 30)
+func InitDefaultLog() {
+	InitLog(GetServerName(), 1, 100, 30)
 }
 
-func CreateDefaultLog(serverName string) *logrus.Logger {
-	return CreateLog(serverName, 1, 100, 30)
+func CreateDefaultLog() *logrus.Logger {
+	return CreateLog(GetServerName(), 1, 100, 30)
 }
 
 func InitLog(serverName string, maxSize, maxBackups, maxAge int) {
+	if serverName == "" {
+		serverName = "log"
+	}
 	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename,   //日志文件的位置
@@ -58,6 +61,9 @@ func InitLog(serverName string, maxSize, maxBackups, maxAge int) {
 }
 
 func CreateLog(serverName string, maxSize, maxBackups, maxAge int) *logrus.Logger {
+	if serverName == "" {
+		serverName = "log"
+	}
 	log := logrus.New()
 	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
