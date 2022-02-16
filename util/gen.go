@@ -9,12 +9,15 @@ import (
 	"time"
 )
 
-func GenId() int64 {
-	now := time.Now()
-	str := now.Format(DateLayout_060102150405_0000000)
+func GenIdByTime(time time.Time) int64 {
+	str := time.Format(DateLayout_060102150405_0000000)
 	str = str[:12] + str[13:]
 	logId, _ := strconv.ParseInt(str, 10, 64)
 	return logId
+}
+
+func GenId() int64 {
+	return GenIdByTime(time.Now())
 }
 
 func GenStringId() string {
