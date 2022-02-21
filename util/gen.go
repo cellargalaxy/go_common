@@ -30,6 +30,10 @@ func ParseId(ctx context.Context, id int64) (time.Time, error) {
 }
 
 func ParseStringId(ctx context.Context, id string) (time.Time, error) {
+	if len(id) != 18 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("解析ID，非法长度ID")
+		return time.Time{}, fmt.Errorf("解析ID，非法长度ID")
+	}
 	id = id[:12] + "." + id[12:]
 	return Parse2BeijingTime(ctx, DateLayout_060102150405_0000000, id)
 }
