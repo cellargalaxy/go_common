@@ -139,9 +139,12 @@ func (this *ParamHook) FlushIpAsync() {
 	}()
 }
 func (this *ParamHook) FlushIp() {
-	ip := HttpGetIp()
-	if ip != "" {
-		this.ip = ip
+	for i := 0; i < 5; i++ {
+		ip := HttpGetIp()
+		if ip != "" {
+			this.ip = ip
+			return
+		}
 	}
 }
 func (this *ParamHook) Levels() []logrus.Level {
