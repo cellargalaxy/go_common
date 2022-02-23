@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 )
 
 func GetPathInfo(ctx context.Context, path string) os.FileInfo {
@@ -440,4 +441,100 @@ func ListFile(ctx context.Context, folderPath string) ([]fs.FileInfo, error) {
 		return nil, fmt.Errorf("罗列文件，读取文件夹异常: %+v", err)
 	}
 	return files, nil
+}
+
+func NewTimeoutWriter(writer io.Writer, timeout time.Duration) (io.Writer, error) {
+	var timeoutWriter timeoutWriter
+	timeoutWriter.Writer = writer
+	timeoutWriter.timeout = timeout
+	ch := make(chan bool)
+	timeoutWriter.ch = &ch
+
+	return &timeoutWriter, nil
+}
+
+type timeoutWriter struct {
+	io.Writer
+	timeout time.Duration
+
+	ch  *chan bool
+	n   int
+	err error
+}
+
+func (this *timeoutWriter) Write(p []byte) (int, error) {
+	n, err := this.write(p)
+	return n, err
+}
+
+func (this *timeoutWriter) write(p []byte) (int, error) {
+	this.writeAsync(p)
+	select {
+	case <-*this.ch:
+		return this.n, this.err
+	case <-time.After(this.timeout):
+		return 0, fmt.Errorf("timeoutWriter，超时")
+	}
+}
+
+func (this *timeoutWriter) writeAsync(p []byte) {
+	go func(p []byte) {
+		defer Defer(func(ctx context.Context, err interface{}, stack string) {
+			*this.ch <- true
+			if err != nil {
+				this.n = 0
+				this.err = fmt.Errorf("timeoutWriter，异常: %+v", err)
+			}
+		})
+
+		this.n, this.err = this.Writer.Write(p)
+	}(p)
+}
+
+func NewTimeoutReader(reader io.Reader, timeout time.Duration) (io.Reader, error) {
+	var timeoutReader timeoutReader
+	timeoutReader.Reader = reader
+	timeoutReader.timeout = timeout
+	ch := make(chan bool)
+	timeoutReader.ch = &ch
+
+	return &timeoutReader, nil
+}
+
+type timeoutReader struct {
+	io.Reader
+	timeout time.Duration
+
+	ch  *chan bool
+	n   int
+	err error
+}
+
+func (this *timeoutReader) Read(p []byte) (int, error) {
+	n, err := this.read(p)
+	return n, err
+}
+
+func (this *timeoutReader) read(p []byte) (int, error) {
+	this.readAsync(p)
+	select {
+	case <-*this.ch:
+		return this.n, this.err
+	case <-time.After(this.timeout):
+		return 0, fmt.Errorf("timeoutReader，超时")
+	}
+}
+
+func (this *timeoutReader) readAsync(p []byte) {
+	go func(p []byte) {
+		defer Defer(func(ctx context.Context, err interface{}, stack string) {
+			*this.ch <- true
+			if err != nil {
+				this.n = 0
+				this.err = fmt.Errorf("timeoutReader，异常: %+v", err)
+			}
+		})
+
+		this.n, this.err = this.Reader.Read(p)
+	}(p)
 }

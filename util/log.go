@@ -182,7 +182,7 @@ func GinLogId(c *gin.Context) {
 		logId = CreateLogId()
 	}
 	c.Set(LogIdKey, logId)
-	c.Header(LogIdKey, fmt.Sprint(logId))
+	c.Header(LogIdKey, strconv.Itoa(int(logId)))
 	c.Next()
 }
 func GinLog(c *gin.Context) {
