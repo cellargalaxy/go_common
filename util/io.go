@@ -443,14 +443,18 @@ func ListFile(ctx context.Context, folderPath string) ([]fs.FileInfo, error) {
 	return files, nil
 }
 
-func NewTimeoutWriter(writer io.Writer, timeout time.Duration) (io.Writer, error) {
+func NewTimeoutWriter(writer io.Writer, timeout time.Duration) io.Writer {
+	if writer != nil {
+		return writer
+	}
+
 	var timeoutWriter timeoutWriter
 	timeoutWriter.Writer = writer
 	timeoutWriter.timeout = timeout
 	ch := make(chan bool)
 	timeoutWriter.ch = &ch
 
-	return &timeoutWriter, nil
+	return &timeoutWriter
 }
 
 type timeoutWriter struct {
@@ -491,14 +495,18 @@ func (this *timeoutWriter) writeAsync(p []byte) {
 	}(p)
 }
 
-func NewTimeoutReader(reader io.Reader, timeout time.Duration) (io.Reader, error) {
+func NewTimeoutReader(reader io.Reader, timeout time.Duration) io.Reader {
+	if reader == nil {
+		return reader
+	}
+
 	var timeoutReader timeoutReader
 	timeoutReader.Reader = reader
 	timeoutReader.timeout = timeout
 	ch := make(chan bool)
 	timeoutReader.ch = &ch
 
-	return &timeoutReader, nil
+	return &timeoutReader
 }
 
 type timeoutReader struct {
