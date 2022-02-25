@@ -128,7 +128,8 @@ func (this *ParamHook) getCaller(entry *logrus.Entry) string {
 }
 func (this *ParamHook) FlushIpAsync() {
 	go func() {
-		defer Defer(func(ctx context.Context, err interface{}, stack string) {
+		ctx := CreateLogCtx()
+		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
 			this.FlushIpAsync()
 		})
 

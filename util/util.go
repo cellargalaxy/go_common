@@ -15,4 +15,9 @@ func init() {
 
 	initRegexp()
 	initHttp()
+	Init()
+}
+
+func Init() {
+
 }
