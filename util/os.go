@@ -12,8 +12,7 @@ import (
 
 const serverNameEnvKey = "server_name"
 
-func Defer(callback func(ctx context.Context, err interface{}, stack string)) {
-	ctx := CreateLogCtx()
+func Defer(ctx context.Context, callback func(ctx context.Context, err interface{}, stack string)) {
 	err := recover()
 	var buf [1024 * 4]byte
 	n := runtime.Stack(buf[:], false)
