@@ -25,17 +25,18 @@ const IpKey = "ip"
 const CallerKey = "caller"
 
 func InitDefaultLog() {
-	InitLog(GetServerName(), 1, 100, 30)
+	InitLog(GetServerName(), 1, 100, 30, logrus.InfoLevel)
 }
 
 func CreateDefaultLog() *logrus.Logger {
-	return CreateLog(GetServerName(), 1, 100, 30)
+	return CreateLog(GetServerName(), 1, 100, 30, logrus.InfoLevel)
 }
 
-func InitLog(serverName string, maxSize, maxBackups, maxAge int) {
+func InitLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Level) {
 	if serverName == "" {
 		serverName = "log"
 	}
+	logrus.SetLevel(level)
 	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename,   //日志文件的位置
@@ -60,11 +61,12 @@ func InitLog(serverName string, maxSize, maxBackups, maxAge int) {
 	logrus.AddHook(&hook)
 }
 
-func CreateLog(serverName string, maxSize, maxBackups, maxAge int) *logrus.Logger {
+func CreateLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Level) *logrus.Logger {
 	if serverName == "" {
 		serverName = "log"
 	}
 	log := logrus.New()
+	log.SetLevel(level)
 	filename := fmt.Sprintf("log/%s/log.log", serverName)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename,   //日志文件的位置
