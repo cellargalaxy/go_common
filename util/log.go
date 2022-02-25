@@ -55,9 +55,9 @@ func InitLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Le
 		TimestampFormat: time.RFC3339,
 		FieldsOrder:     []string{LogIdKey, ServerNameKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
-	var hook ParamHook
+	var hook paramHook
 	hook.serverName = serverName
-	hook.FlushIpAsync()
+	hook.flushIpAsync()
 	logrus.AddHook(&hook)
 }
 
@@ -85,32 +85,32 @@ func CreateLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.
 		TimestampFormat: time.RFC3339,
 		FieldsOrder:     []string{LogIdKey, ServerNameKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
-	var hook ParamHook
+	var hook paramHook
 	hook.serverName = serverName
-	hook.FlushIpAsync()
+	hook.flushIpAsync()
 	log.AddHook(&hook)
 	return log
 }
 
-type ParamHook struct {
+type paramHook struct {
 	serverName string
 	ip         string
 }
 
-func (this *ParamHook) Fire(entry *logrus.Entry) error {
+func (this *paramHook) Fire(entry *logrus.Entry) error {
 	entry.Data[LogIdKey] = this.getLogId(entry)
 	entry.Data[ServerNameKey] = this.serverName
 	entry.Data[IpKey] = this.ip
 	entry.Data[CallerKey] = this.getCaller(entry)
 	return nil
 }
-func (this *ParamHook) getLogId(entry *logrus.Entry) int64 {
+func (this *paramHook) getLogId(entry *logrus.Entry) int64 {
 	if entry.Context == nil {
 		return 0
 	}
 	return GetLogId(entry.Context)
 }
-func (this *ParamHook) getCaller(entry *logrus.Entry) string {
+func (this *paramHook) getCaller(entry *logrus.Entry) string {
 	skip := 6
 	var file string
 	var line int
@@ -128,11 +128,11 @@ func (this *ParamHook) getCaller(entry *logrus.Entry) string {
 	}
 	return fmt.Sprintf(`"%s:%d"`, file, line)
 }
-func (this *ParamHook) FlushIpAsync() {
+func (this *paramHook) flushIpAsync() {
 	go func() {
 		ctx := CreateLogCtx()
 		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
-			this.FlushIpAsync()
+			this.flushIpAsync()
 		})
 
 		for {
@@ -141,7 +141,7 @@ func (this *ParamHook) FlushIpAsync() {
 		}
 	}()
 }
-func (this *ParamHook) FlushIp() {
+func (this *paramHook) FlushIp() {
 	for i := 0; i < 5; i++ {
 		ip := HttpGetIp()
 		if ip != "" {
@@ -150,7 +150,7 @@ func (this *ParamHook) FlushIp() {
 		}
 	}
 }
-func (this *ParamHook) Levels() []logrus.Level {
+func (this *paramHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
