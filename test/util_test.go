@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	util.InitDefaultLog("go_common")
+	util.InitDefaultLog()
 }
 
 func TestInitLog(t *testing.T) {

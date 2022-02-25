@@ -20,14 +20,6 @@ func Defer(ctx context.Context, callback func(ctx context.Context, err interface
 	callback(ctx, err, stack)
 }
 
-func GetServerNameWithPanic() string {
-	value := GetServerName()
-	if value == "" {
-		panic("server_name为空")
-	}
-	return value
-}
-
 func GetServerName() string {
 	return GetEnvString(serverNameEnvKey, "")
 }
