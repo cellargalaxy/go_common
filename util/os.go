@@ -20,8 +20,8 @@ func Defer(ctx context.Context, callback func(ctx context.Context, err interface
 	callback(ctx, err, stack)
 }
 
-func GetServerName() string {
-	return GetEnvString(serverNameEnvKey, "")
+func GetServerName(defaultServerName string) string {
+	return GetEnvString(serverNameEnvKey, defaultServerName)
 }
 
 func GetEnv(key string) string {
