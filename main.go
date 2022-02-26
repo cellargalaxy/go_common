@@ -4,6 +4,7 @@ import (
 	"github.com/cellargalaxy/go_common/consd"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/cellargalaxy/go_common/util"
+	"time"
 )
 
 func init() {
@@ -13,5 +14,5 @@ func init() {
 }
 
 func main() {
-
+	time.Sleep(time.Hour)
 }

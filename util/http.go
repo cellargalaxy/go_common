@@ -18,7 +18,7 @@ const ClaimsKey = "claims"
 var httpLocalCache *cache.Cache
 
 func initHttp() {
-	httpLocalCache = cache.New(time.Nanosecond, time.Nanosecond)
+	httpLocalCache = cache.New(time.Second, time.Second)
 	if httpLocalCache == nil {
 		panic("创建本地缓存对象为空")
 	}
