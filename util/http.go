@@ -47,7 +47,7 @@ func createResponse(code int, msg string, data interface{}) map[string]interface
 }
 
 func Ping(context *gin.Context) {
-	context.JSON(http.StatusOK, gin.H{"code": consd.HttpSuccessCode, "msg": "pong", "data": map[string]interface{}{"ts": time.Now().Unix(), serverNameEnvKey: GetServerName()}})
+	context.JSON(http.StatusOK, gin.H{"code": consd.HttpSuccessCode, "msg": "pong", "data": map[string]interface{}{"ts": time.Now().Unix(), serverNameEnvKey: GetServerName("")}})
 }
 
 //token检查

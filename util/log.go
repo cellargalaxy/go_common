@@ -25,11 +25,11 @@ const IpKey = "ip"
 const CallerKey = "caller"
 
 func InitDefaultLog() {
-	InitLog(GetServerName(), 1, 100, 30, logrus.InfoLevel)
+	InitLog(GetServerName(""), 1, 100, 30, logrus.InfoLevel)
 }
 
 func CreateDefaultLog() *logrus.Logger {
-	return CreateLog(GetServerName(), 1, 100, 30, logrus.InfoLevel)
+	return CreateLog(GetServerName(""), 1, 100, 30, logrus.InfoLevel)
 }
 
 func InitLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Level) {
