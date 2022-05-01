@@ -61,3 +61,8 @@ func TestEnAesCbcBookmark(t *testing.T) {
 		panic(err)
 	}
 }
+
+func TestBookmarkCsv2Xml(t *testing.T) {
+	ctx := util.CreateLogCtx()
+	tool.BookmarkCsv2Xml(ctx, "bookmark_back.csv", "bookmark.html")
+}
