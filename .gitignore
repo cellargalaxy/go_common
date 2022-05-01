@@ -17,3 +17,6 @@
 .idea
 go_common
 *.log
+
+bookmark_back.csv
+bookmark_new.csv

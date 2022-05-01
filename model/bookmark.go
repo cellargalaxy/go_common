@@ -1,11 +1,10 @@
 package model
 
 type Bookmark struct {
-	Sort string `json:"sort"`
-	Name string `json:"name"`
-	Url  string `json:"url"`
-	Icon string `json:"-"`
-	Key  string `json:"-"`
+	Sort string `json:"sort" csv:"sort"`
+	Name string `json:"name" csv:"name"`
+	Url  string `json:"url" csv:"url"`
+	Key  string `json:"-" csv:"-"`
 }
 
 type Bookmarks []Bookmark

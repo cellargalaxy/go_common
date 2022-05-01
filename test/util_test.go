@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-func init() {
-	util.InitDefaultLog("go_common")
-}
-
 func TestInitLog(t *testing.T) {
 	ctx := util.CreateLogCtx()
 	time.Sleep(3 * time.Second)
