@@ -6,15 +6,20 @@ import (
 	"testing"
 )
 
-const BookmarkSecret = ""
-
 func TestDeAesCbcBookmark(t *testing.T) {
 	ctx := util.CreateLogCtx()
+	secret, err := util.ReadFileWithString(ctx, "bookmark_secret.txt", "")
+	if err != nil {
+		panic(err)
+	}
+	if secret == "" {
+		panic("secret为空")
+	}
 	en, err := util.ReadFileWithString(ctx, "bookmark_en.txt", "")
 	if err != nil {
 		panic(err)
 	}
-	text, err := util.DeAesCbcString(ctx, en, BookmarkSecret)
+	text, err := util.DeAesCbcString(ctx, en, secret)
 	if err != nil {
 		panic(err)
 	}
@@ -36,11 +41,18 @@ func TestBookmark(t *testing.T) {
 
 func TestEnAesCbcBookmark(t *testing.T) {
 	ctx := util.CreateLogCtx()
+	secret, err := util.ReadFileWithString(ctx, "bookmark_secret.txt", "")
+	if err != nil {
+		panic(err)
+	}
+	if secret == "" {
+		panic("secret为空")
+	}
 	text, err := util.ReadFileWithString(ctx, "bookmark_back.csv", "")
 	if err != nil {
 		panic(err)
 	}
-	en, err := util.EnAesCbcString(ctx, text, BookmarkSecret)
+	en, err := util.EnAesCbcString(ctx, text, secret)
 	if err != nil {
 		panic(err)
 	}
