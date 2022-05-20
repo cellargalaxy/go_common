@@ -1,8 +1,12 @@
 package util
 
 import (
+	"bufio"
 	"context"
+	"fmt"
+	"github.com/sirupsen/logrus"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
@@ -80,4 +84,57 @@ func ExitSignal(fun func(ctx context.Context, signal os.Signal)) {
 		fun(ctx, s)
 		os.Exit(0)
 	}()
+}
+
+func ExecCommand(ctx context.Context, commands []string) ([]string, []string, error) {
+	command := strings.Join(commands, " && ")
+
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
+	}
+	err = cmd.Start()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
+	}
+
+	stdoutReader := bufio.NewReader(stdout)
+	stderrReader := bufio.NewReader(stderr)
+	var stdoutLines, stderrLines []string
+	go func() {
+		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
+			if err != nil {
+				logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+				return
+			}
+		})
+
+		stdoutLines, _ = Read2LogByReader(ctx, true, stdoutReader)
+	}()
+	go func() {
+		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
+			if err != nil {
+				logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+				return
+			}
+		})
+
+		stderrLines, _ = Read2LogByReader(ctx, true, stderrReader)
+	}()
+
+	err = cmd.Wait()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		return stdoutLines, stderrLines, fmt.Errorf("执行命令，异常: %+v", err)
+	}
+
+	return stdoutLines, stderrLines, nil
 }

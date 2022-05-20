@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/md5"
@@ -547,4 +548,24 @@ func (this *timeoutReader) readAsync(p []byte) {
 
 		this.n, this.err = this.Reader.Read(p)
 	}(p)
+}
+
+func Read2LogByReader(ctx context.Context, save bool, reader *bufio.Reader) ([]string, error) {
+	var lines []string
+	for {
+		line, err := reader.ReadString('\n')
+		if err == io.EOF {
+			logrus.WithFields(logrus.Fields{}).Info("流读取，完成")
+			return lines, nil
+		}
+		if err != nil {
+			logrus.WithFields(logrus.Fields{"err": err}).Error("流读取，异常")
+			return lines, fmt.Errorf("流读取，异常: %+v", err)
+		}
+		line = strings.TrimSpace(line)
+		logrus.WithFields(logrus.Fields{"line": line}).Info("流读取")
+		if save {
+			lines = append(lines, line)
+		}
+	}
 }
