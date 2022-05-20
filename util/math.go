@@ -118,7 +118,11 @@ func AbsInt(value int) int {
 	return -value
 }
 
-func Avg(data []float64) float64 {
+func Avg(data ...float64) float64 {
+	return Avgs(data)
+}
+
+func Avgs(data []float64) float64 {
 	if len(data) <= 0 {
 		return 0
 	}
@@ -138,7 +142,7 @@ func AvgAndVar(data []float64) (float64, float64) {
 	if len(data) <= 0 {
 		return 0, 0
 	}
-	avg := Avg(data)
+	avg := Avgs(data)
 	var variance float64
 	for i := range data {
 		variance += math.Pow(data[i]-avg, 2)
