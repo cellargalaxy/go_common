@@ -32,7 +32,7 @@ func TestDeAesCbcBookmark(t *testing.T) {
 func TestBookmark(t *testing.T) {
 	ctx := util.CreateLogCtx()
 	err := tool.BookmarkFile2Csv(ctx, "bookmark_new.csv",
-		"/home/meltsprout/bookmarks_2022_5_2.html",
+		"bookmark.html",
 	)
 	if err != nil {
 		panic(err)
