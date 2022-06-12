@@ -92,10 +92,7 @@ func Min(data ...float64) float64 {
 }
 
 func AbsFloat64(value float64) float64 {
-	if value >= 0 {
-		return value
-	}
-	return -value
+	return math.Abs(value)
 }
 
 func AbsInt64(value int64) int64 {
