@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"math"
 )
 
@@ -149,4 +150,12 @@ func AvgAndVar(data []float64) (float64, float64) {
 	}
 	variance /= float64(len(data))
 	return avg, variance
+}
+
+func SameTickFloat64(ctx context.Context, value1, value2, tick float64) bool {
+	return AbsFloat64(value1-value2) < tick
+}
+
+func SameTickFloat32(ctx context.Context, value1, value2, tick float32) bool {
+	return SameTickFloat64(ctx, float64(value1), float64(value2), float64(tick))
 }
