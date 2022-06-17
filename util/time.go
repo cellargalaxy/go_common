@@ -47,3 +47,29 @@ func WareDuration(duration time.Duration) time.Duration {
 	ns = int64(float64(ns) * rate)
 	return time.Duration(ns)
 }
+
+func MinDuration(data ...time.Duration) time.Duration {
+	if len(data) == 0 {
+		return 0
+	}
+	min := data[0]
+	for i := range data {
+		if data[i] < min {
+			min = data[i]
+		}
+	}
+	return min
+}
+
+func MaxDuration(data ...time.Duration) time.Duration {
+	if len(data) == 0 {
+		return 0
+	}
+	max := data[0]
+	for i := range data {
+		if max < data[i] {
+			max = data[i]
+		}
+	}
+	return max
+}
