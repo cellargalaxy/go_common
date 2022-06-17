@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/cellargalaxy/go_common/consd"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
@@ -35,14 +34,14 @@ func existRequestId(requestId string, duration time.Duration) bool {
 }
 
 func CreateErrResponse(message string) map[string]interface{} {
-	return createResponse(consd.HttpFailCode, message, nil)
+	return createResponse(HttpFailCode, message, nil)
 }
 
 func CreateResponse(data interface{}, err error) map[string]interface{} {
 	if err == nil {
-		return createResponse(consd.HttpSuccessCode, "", data)
+		return createResponse(HttpSuccessCode, "", data)
 	} else {
-		return createResponse(consd.HttpFailCode, err.Error(), data)
+		return createResponse(HttpFailCode, err.Error(), data)
 	}
 }
 
@@ -51,7 +50,7 @@ func createResponse(code int, msg string, data interface{}) map[string]interface
 }
 
 func Ping(context *gin.Context) {
-	context.JSON(http.StatusOK, gin.H{"code": consd.HttpSuccessCode, "msg": "pong", "data": map[string]interface{}{"ts": time.Now().Unix(), serverNameEnvKey: GetServerName("")}})
+	context.JSON(http.StatusOK, gin.H{"code": HttpSuccessCode, "msg": "pong", "data": map[string]interface{}{"ts": time.Now().Unix(), serverNameEnvKey: GetServerName("")}})
 }
 
 //token检查
@@ -97,7 +96,7 @@ func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 		}
 		if existRequestId(claims.RequestId, duration) {
 			c.Abort()
-			c.JSON(http.StatusOK, createResponse(consd.HttpReRequestCode, "JWT 请求重放非法", nil))
+			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "JWT 请求重放非法", nil))
 			return
 		}
 	}

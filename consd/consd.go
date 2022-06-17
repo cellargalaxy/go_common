@@ -1,5 +1,0 @@
-package consd
-
-func Init() {
-
-}
