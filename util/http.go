@@ -2,9 +2,12 @@ package util
 
 import (
 	"context"
+	"crypto/tls"
+	"fmt"
 	"github.com/cellargalaxy/go_common/consd"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -176,4 +179,69 @@ func HttpGet(url string) string {
 
 func HttpGetIp() string {
 	return HttpGet("https://ifconfig.co/ip")
+}
+
+func CreateNotTryHttpClient(timeout time.Duration) *resty.Client {
+	return CreateHttpClient(timeout, 0, 0, 0, nil, true)
+}
+
+func CreateHttpClient(timeout, sleep, maxSleep time.Duration, retry int, header map[string]string, skipTls bool) *resty.Client {
+	client := resty.New()
+	if timeout > 0 {
+		client = client.SetTimeout(timeout)
+	}
+	if retry > 0 {
+		client = client.SetRetryCount(retry)
+		client = client.SetRetryWaitTime(sleep)
+		client = client.SetRetryMaxWaitTime(maxSleep)
+		client = client.AddRetryCondition(func(response *resty.Response, err error) bool {
+			var ctx context.Context
+			if response != nil && response.Request != nil {
+				ctx = response.Request.Context()
+			}
+			if ctx == nil || GetLogId(ctx) <= 0 {
+				ctx = CreateLogCtx()
+			}
+			var statusCode int
+			if response != nil {
+				statusCode = response.StatusCode()
+			}
+			isRetry := statusCode != http.StatusOK || err != nil
+			if isRetry {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "err": err}).Warn("HTTP请求异常，进行重试")
+			}
+			return isRetry
+		})
+		client = client.SetRetryAfter(func(client *resty.Client, response *resty.Response) (time.Duration, error) {
+			var ctx context.Context
+			if response != nil && response.Request != nil {
+				ctx = response.Request.Context()
+			}
+			if ctx == nil || GetLogId(ctx) <= 0 {
+				ctx = CreateLogCtx()
+			}
+			var attempt int
+			if response != nil && response.Request != nil {
+				attempt = response.Request.Attempt
+			}
+			if attempt > retry {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt}).Error("HTTP请求异常，超过最大重试次数")
+				return 0, fmt.Errorf("HTTP请求异常，超过最大重试次数")
+			}
+			wareSleep := sleep
+			for i := 0; i < attempt-1; i++ {
+				wareSleep *= 10
+			}
+			wareSleep = WareDuration(wareSleep)
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt, "wareSleep": wareSleep}).Warn("HTTP请求异常，休眠重试")
+			return wareSleep, nil
+		})
+	}
+	for key := range header {
+		client = client.SetHeader(key, header[key])
+	}
+	if skipTls {
+		client = client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+	}
+	return client
 }

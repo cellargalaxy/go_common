@@ -1,7 +1,6 @@
 package util
 
 import (
-	"crypto/tls"
 	"github.com/go-resty/resty/v2"
 	"time"
 )
@@ -9,9 +8,7 @@ import (
 var httpClient *resty.Client
 
 func init() {
-	httpClient = resty.New().
-		SetTimeout(5 * time.Second).
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+	httpClient = CreateNotTryHttpClient(time.Second * 5)
 
 	initRegexp()
 	initHttp()
