@@ -23,3 +23,11 @@ type HttpRequestParam struct {
 	Header map[string]string `json:"header"`
 	Body   string            `json:"body"`
 }
+
+type PingRequest struct {
+}
+
+type PingResponse struct {
+	Ts         int64  `json:"ts"`
+	ServerName string `json:"server_name"`
+}
