@@ -159,6 +159,9 @@ func GetLogId(ctx context.Context) int64 {
 	logId, _ := logIdP.(int64)
 	return logId
 }
+func GetLogIdString(ctx context.Context) string {
+	return strconv.FormatInt(GetLogId(ctx), 10)
+}
 func SetLogId(ctx context.Context) context.Context {
 	logIdP := GetCtxValue(ctx, LogIdKey)
 	logId, ok := logIdP.(int64)
