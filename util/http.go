@@ -16,6 +16,7 @@ import (
 )
 
 const TokenKey = "Authorization"
+const BearerKey = "Bearer"
 const ClaimsKey = "claims"
 
 var httpLocalCache *cache.Cache
@@ -58,7 +59,7 @@ func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 	token := c.Request.Header.Get(TokenKey)
 	logrus.WithContext(c).WithFields(logrus.Fields{"token": token}).Info("解析token")
 	tokens := strings.SplitN(token, " ", 2)
-	if len(tokens) != 2 || tokens[0] != "Bearer" {
+	if len(tokens) != 2 || tokens[0] != BearerKey {
 		c.Abort()
 		c.JSON(http.StatusOK, CreateErrResponse("Authorization非法"))
 		return
