@@ -6,11 +6,22 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"github.com/cellargalaxy/go_common/model"
 	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
 	"github.com/wumansgy/goEncrypt"
+	"time"
 )
 
+func GenDefaultJWT(ctx context.Context, expire time.Duration, defaultServerName, secret string) (string, error) {
+	now := time.Now()
+	var claims model.Claims
+	claims.IssuedAt = now.Unix()
+	claims.ExpiresAt = now.Unix() + int64(expire.Seconds())
+	claims.RequestId = fmt.Sprint(GenId())
+	claims.Caller = GetServerName(defaultServerName)
+	return GenJWT(ctx, secret, claims)
+}
 func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, error) {
 	secretByte, err := EnSha256(ctx, []byte(secret))
 	if err != nil {
