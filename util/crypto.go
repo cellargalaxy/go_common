@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+func GenAuthorizationJWT(ctx context.Context, expire time.Duration, secret string) (string, string) {
+	token, _ := GenDefaultJWT(ctx, expire, secret)
+	return TokenKey, fmt.Sprintf("%s %s", BearerKey, token)
+}
 func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (string, error) {
 	now := time.Now()
 	var claims model.Claims
