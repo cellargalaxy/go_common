@@ -150,8 +150,15 @@ func AvgAndVar(data []float64) (float64, float64) {
 }
 
 func SameTickFloat64(ctx context.Context, value1, value2, tick float64) bool {
-	tick *= 1.5
-	return AbsFloat64(value1-value2) < tick
+	if value1 < value2 {
+		value1 += tick
+		return value2 < value1
+	}
+	if value2 < value1 {
+		value2 += tick
+		return value1 < value2
+	}
+	return true
 }
 
 func SameTickFloat32(ctx context.Context, value1, value2, tick float32) bool {
