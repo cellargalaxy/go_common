@@ -21,3 +21,9 @@ func GetCtxValue(ctx context.Context, key string) interface{} {
 func SetCtxValue(ctx context.Context, key string, value interface{}) context.Context {
 	return context.WithValue(ctx, key, value)
 }
+
+func GenCtx() context.Context {
+	ctx := context.Background()
+	ctx = SetLogId(ctx)
+	return ctx
+}

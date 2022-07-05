@@ -80,7 +80,7 @@ func ExitSignal(fun func(ctx context.Context, signal os.Signal)) {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGKILL)
 	go func() {
 		s := <-signalChan
-		ctx := CreateLogCtx()
+		ctx := GenCtx()
 		fun(ctx, s)
 		os.Exit(0)
 	}()

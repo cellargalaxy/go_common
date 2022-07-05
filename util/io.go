@@ -484,7 +484,7 @@ func (this *timeoutWriter) write(p []byte) (int, error) {
 
 func (this *timeoutWriter) writeAsync(p []byte) {
 	go func(p []byte) {
-		ctx := CreateLogCtx()
+		ctx := GenCtx()
 		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
 			*this.ch <- true
 			if err != nil {
@@ -537,7 +537,7 @@ func (this *timeoutReader) read(p []byte) (int, error) {
 
 func (this *timeoutReader) readAsync(p []byte) {
 	go func(p []byte) {
-		ctx := CreateLogCtx()
+		ctx := GenCtx()
 		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
 			*this.ch <- true
 			if err != nil {

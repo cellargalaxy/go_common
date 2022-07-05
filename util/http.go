@@ -7,7 +7,6 @@ import (
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
-	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
@@ -18,19 +17,12 @@ const TokenKey = "Authorization"
 const BearerKey = "Bearer"
 const ClaimsKey = "claims"
 
-var httpLocalCache *cache.Cache
+var HttpClientNotReTry *resty.Client
+var ip string
 
-func initHttp() {
-	httpLocalCache = cache.New(time.Second, time.Second)
-	if httpLocalCache == nil {
-		panic("创建本地缓存对象为空")
-	}
-}
-
-func existRequestId(requestId string, duration time.Duration) bool {
-	_, ok := httpLocalCache.Get(requestId)
-	httpLocalCache.Set(requestId, requestId, duration)
-	return ok
+func initHttp(ctx context.Context) {
+	HttpClientNotReTry = CreateNotReTryHttpClient(time.Second * 5)
+	flushHttpIpAsync(ctx)
 }
 
 func CreateErrResponse(message string) map[string]interface{} {
@@ -50,10 +42,62 @@ func createResponse(code int, msg string, data interface{}) map[string]interface
 }
 
 func Ping(context *gin.Context) {
-	context.JSON(http.StatusOK, CreateResponse(model.PingResponse{Ts: time.Now().Unix(), ServerName: GetServerName("")}, nil))
+	context.JSON(http.StatusOK, CreateResponse(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName("")}, nil))
 }
 
-//token检查
+func HttpClaims(c *gin.Context, validateHandler model.HttpValidateInter) {
+	token := c.Request.Header.Get(TokenKey)
+	logrus.WithContext(c).WithFields(logrus.Fields{"token": token}).Info("解析token")
+	tokens := strings.SplitN(token, " ", 2)
+	if len(tokens) != 2 || tokens[0] != BearerKey {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("Authorization非法"))
+		return
+	}
+	secret := validateHandler.GetSecret(c)
+	claims := validateHandler.CreateClaims(c)
+	if claims == nil {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("claims为空"))
+		return
+	}
+	jwtToken, err := ParseJWT(c, tokens[1], secret, claims)
+	if err != nil {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse(err.Error()))
+		return
+	}
+	if jwtToken == nil {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("jwtToken为空"))
+		return
+	}
+	if !jwtToken.Valid {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("jwtToken非法"))
+		return
+	}
+
+	if claims.ReqId == "" {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("ReqId为空"))
+		return
+	}
+	expiresAt := time.Unix(claims.ExpiresAt, 0)
+	duration := expiresAt.Sub(time.Now())
+	if duration.Nanoseconds() <= 0 {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("jwtToken过期"))
+		return
+	}
+	if existRequestId(claims.ReqId, duration) {
+		c.Abort()
+		c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求重放非法", nil))
+		return
+	}
+	c.Set(ClaimsKey, claims)
+}
+
 func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 	token := c.Request.Header.Get(TokenKey)
 	logrus.WithContext(c).WithFields(logrus.Fields{"token": token}).Info("解析token")
@@ -65,6 +109,11 @@ func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 	}
 	secret := validateHandler.GetSecret(c)
 	claims := validateHandler.CreateClaims(c)
+	if claims == nil {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("claims为空"))
+		return
+	}
 	jwtToken, err := ParseJWT(c, tokens[1], secret, claims)
 	if err != nil {
 		c.Abort()
@@ -73,34 +122,33 @@ func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 	}
 	if jwtToken == nil {
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("JWT token为空"))
+		c.JSON(http.StatusOK, CreateErrResponse("jwtToken为空"))
 		return
 	}
 	if !jwtToken.Valid {
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("JWT token非法"))
+		c.JSON(http.StatusOK, CreateErrResponse("jwtToken非法"))
 		return
 	}
-	if !claims.AllowReRequest {
-		if claims.RequestId == "" {
-			c.Abort()
-			c.JSON(http.StatusOK, CreateErrResponse("JWT request_id为空"))
-			return
-		}
-		expiresAt := time.Unix(claims.ExpiresAt, 0)
-		duration := expiresAt.Sub(time.Now())
-		if duration.Nanoseconds() <= 0 {
-			c.Abort()
-			c.JSON(http.StatusOK, CreateErrResponse("JWT token过期"))
-			return
-		}
-		if existRequestId(claims.RequestId, duration) {
-			c.Abort()
-			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "JWT 请求重放非法", nil))
-			return
-		}
+
+	if claims.ReqId == "" {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("ReqId为空"))
+		return
 	}
-	c.Set(ClaimsKey, jwtToken.Claims)
+	expiresAt := time.Unix(claims.ExpiresAt, 0)
+	duration := expiresAt.Sub(time.Now())
+	if duration.Nanoseconds() <= 0 {
+		c.Abort()
+		c.JSON(http.StatusOK, CreateErrResponse("jwtToken过期"))
+		return
+	}
+	if existRequestId(claims.ReqId, duration) {
+		c.Abort()
+		c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求重放非法", nil))
+		return
+	}
+	c.Set(ClaimsKey, claims)
 }
 
 func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error) {
@@ -161,27 +209,61 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 	return &param, nil
 }
 
-func HttpGet(url string) string {
-	response, err := httpClient.R().Get(url)
+func GetIp() string {
+	return ip
+}
+
+func flushHttpIpAsync(ctx context.Context) {
+	go func() {
+		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Warn("异步刷新IP，退出")
+			flushHttpIpAsync(ctx)
+		})
+
+		for {
+			FlushHttpIp(ctx)
+			time.Sleep(time.Hour)
+		}
+	}()
+}
+
+func FlushHttpIp(ctx context.Context) {
+	for i := 0; i < 10; i++ {
+		object := GetHttpIp(ctx)
+		object = strings.TrimSpace(object)
+		if object == "" {
+			time.Sleep(time.Second)
+			continue
+		}
+		ip = object
+		return
+	}
+}
+
+func GetHttpIp(ctx context.Context) string {
+	return HttpGet(ctx, "https://ifconfig.co/ip")
+}
+
+func HttpGet(ctx context.Context, url string) string {
+	response, err := HttpClientNotReTry.R().SetContext(ctx).Get(url)
 	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"url": url, "err": err}).Error("HttpGet，请求异常")
 		return ""
 	}
 	if response == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"url": url}).Error("HttpGet，响应为空")
 		return ""
 	}
 	statusCode := response.StatusCode()
 	body := response.String()
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "len(body)": len(body)}).Info("HttpGet，响应")
 	if statusCode != http.StatusOK {
 		return ""
 	}
 	return body
 }
 
-func HttpGetIp() string {
-	return HttpGet("https://ifconfig.co/ip")
-}
-
-func CreateNotTryHttpClient(timeout time.Duration) *resty.Client {
+func CreateNotReTryHttpClient(timeout time.Duration) *resty.Client {
 	return CreateHttpClient(timeout, 0, 0, 0, nil, true)
 }
 
@@ -192,15 +274,19 @@ func CreateHttpClient(timeout, sleep, maxSleep time.Duration, retry int, header 
 	}
 	if retry > 0 {
 		client = client.SetRetryCount(retry)
-		client = client.SetRetryWaitTime(sleep)
-		client = client.SetRetryMaxWaitTime(maxSleep)
+		if sleep > 0 {
+			client = client.SetRetryWaitTime(sleep)
+		}
+		if maxSleep > 0 {
+			client = client.SetRetryMaxWaitTime(maxSleep)
+		}
 		client = client.AddRetryCondition(func(response *resty.Response, err error) bool {
 			var ctx context.Context
 			if response != nil && response.Request != nil {
 				ctx = response.Request.Context()
 			}
 			if ctx == nil || GetLogId(ctx) <= 0 {
-				ctx = CreateLogCtx()
+				ctx = GenCtx()
 			}
 			var statusCode int
 			if response != nil {
@@ -218,7 +304,7 @@ func CreateHttpClient(timeout, sleep, maxSleep time.Duration, retry int, header 
 				ctx = response.Request.Context()
 			}
 			if ctx == nil || GetLogId(ctx) <= 0 {
-				ctx = CreateLogCtx()
+				ctx = GenCtx()
 			}
 			var attempt int
 			if response != nil && response.Request != nil {

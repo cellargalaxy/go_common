@@ -7,7 +7,7 @@ import (
 )
 
 func TestDeAesCbcBookmark(t *testing.T) {
-	ctx := util.CreateLogCtx()
+	ctx := util.GenCtx()
 	secret, err := util.ReadFileWithString(ctx, "bookmark_secret.txt", "")
 	if err != nil {
 		panic(err)
@@ -30,7 +30,7 @@ func TestDeAesCbcBookmark(t *testing.T) {
 }
 
 func TestBookmark(t *testing.T) {
-	ctx := util.CreateLogCtx()
+	ctx := util.GenCtx()
 	err := tool.BookmarkFile2Csv(ctx, "bookmark_new.csv",
 		"bookmark.html",
 	)
@@ -40,7 +40,7 @@ func TestBookmark(t *testing.T) {
 }
 
 func TestEnAesCbcBookmark(t *testing.T) {
-	ctx := util.CreateLogCtx()
+	ctx := util.GenCtx()
 	secret, err := util.ReadFileWithString(ctx, "bookmark_secret.txt", "")
 	if err != nil {
 		panic(err)
@@ -63,6 +63,6 @@ func TestEnAesCbcBookmark(t *testing.T) {
 }
 
 func TestBookmarkCsv2Xml(t *testing.T) {
-	ctx := util.CreateLogCtx()
+	ctx := util.GenCtx()
 	tool.BookmarkCsv2Xml(ctx, "bookmark_back.csv", "bookmark.html")
 }

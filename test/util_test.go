@@ -12,7 +12,7 @@ import (
 )
 
 func TestInitLog(t *testing.T) {
-	ctx := util.CreateLogCtx()
+	ctx := util.GenCtx()
 	time.Sleep(3 * time.Second)
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"TestInitLog": "TestInitLog"}).Info("TestInitLog")
 }
@@ -207,7 +207,7 @@ func TestGenId(t *testing.T) {
 }
 
 func TestParseId(t *testing.T) {
-	ctx := util.CreateLogCtx()
+	ctx := util.GenCtx()
 	id := util.GenId()
 	fmt.Println(util.ParseId(ctx, id))
 }
@@ -233,7 +233,7 @@ func TestGetWriteFile(t *testing.T) {
 }
 
 func TestCreateFolderPath(t *testing.T) {
-	ctx := util.CreateLogCtx()
+	ctx := util.GenCtx()
 	err := util.CreateFolderPath(ctx, "./tmp")
 	if err != nil {
 		t.Errorf("err: %+v\n", err)

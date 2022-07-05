@@ -7,10 +7,10 @@ import (
 
 type Claims struct {
 	jwt.StandardClaims
-	Caller         string `json:"caller,omitempty"`
-	AllowReRequest bool   `json:"allow_re_request,omitempty"`
-	RequestId      string `json:"request_id,omitempty"`
-	CreateTime     int64  `json:"create_time,omitempty"`
+	Ip         string `json:"ip,omitempty"`
+	ServerName string `json:"sn,omitempty"`
+	LogId      int64  `json:"logid,omitempty"`
+	ReqId      string `json:"reqid,omitempty"`
 }
 
 type HttpValidateInter interface {
@@ -28,6 +28,6 @@ type PingRequest struct {
 }
 
 type PingResponse struct {
-	Ts         int64  `json:"ts"`
-	ServerName string `json:"server_name"`
+	Timestamp  int64  `json:"ts"`
+	ServerName string `json:"sn"`
 }

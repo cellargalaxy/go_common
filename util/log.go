@@ -57,7 +57,6 @@ func InitLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Le
 	})
 	var hook paramHook
 	hook.serverName = serverName
-	hook.flushIpAsync()
 	logrus.AddHook(&hook)
 }
 
@@ -87,20 +86,18 @@ func CreateLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.
 	})
 	var hook paramHook
 	hook.serverName = serverName
-	hook.flushIpAsync()
 	log.AddHook(&hook)
 	return log
 }
 
 type paramHook struct {
 	serverName string
-	ip         string
 }
 
 func (this *paramHook) Fire(entry *logrus.Entry) error {
 	entry.Data[LogIdKey] = this.getLogId(entry)
 	entry.Data[ServerNameKey] = this.serverName
-	entry.Data[IpKey] = this.ip
+	entry.Data[IpKey] = GetIp()
 	entry.Data[CallerKey] = this.getCaller(entry)
 	return nil
 }
@@ -128,56 +125,10 @@ func (this *paramHook) getCaller(entry *logrus.Entry) string {
 	}
 	return fmt.Sprintf(`"%s:%d"`, file, line)
 }
-func (this *paramHook) flushIpAsync() {
-	go func() {
-		ctx := CreateLogCtx()
-		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
-			this.flushIpAsync()
-		})
-
-		for {
-			this.FlushIp()
-			time.Sleep(time.Hour)
-		}
-	}()
-}
-func (this *paramHook) FlushIp() {
-	for i := 0; i < 5; i++ {
-		ip := HttpGetIp()
-		if ip != "" {
-			this.ip = ip
-			return
-		}
-	}
-}
 func (this *paramHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
-func GetLogId(ctx context.Context) int64 {
-	logIdP := GetCtxValue(ctx, LogIdKey)
-	logId, _ := logIdP.(int64)
-	return logId
-}
-func GetLogIdString(ctx context.Context) string {
-	return strconv.FormatInt(GetLogId(ctx), 10)
-}
-func SetLogId(ctx context.Context) context.Context {
-	logIdP := GetCtxValue(ctx, LogIdKey)
-	logId, ok := logIdP.(int64)
-	if !ok {
-		logId = CreateLogId()
-		ctx = SetCtxValue(ctx, LogIdKey, logId)
-	}
-	return ctx
-}
-func CreateLogId() int64 {
-	return GenId()
-}
-func CreateLogCtx() context.Context {
-	ctx := context.Background()
-	return SetLogId(ctx)
-}
 func GinLogId(c *gin.Context) {
 	logId := GetLogId(c)
 	if logId <= 0 {
@@ -185,7 +136,7 @@ func GinLogId(c *gin.Context) {
 		logId, _ = strconv.ParseInt(logIdString, 10, 64)
 	}
 	if logId <= 0 {
-		logId = CreateLogId()
+		logId = GenLogId()
 	}
 	c.Set(LogIdKey, logId)
 	c.Header(LogIdKey, strconv.Itoa(int(logId)))
@@ -250,4 +201,25 @@ func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (strin
 		logrus.WithContext(ctx).WithFields(fields).Info()
 		return
 	}
+}
+
+func GenLogId() int64 {
+	return GenId()
+}
+func GetLogId(ctx context.Context) int64 {
+	logIdP := GetCtxValue(ctx, LogIdKey)
+	logId, _ := logIdP.(int64)
+	return logId
+}
+func GetLogIdString(ctx context.Context) string {
+	return strconv.FormatInt(GetLogId(ctx), 10)
+}
+func SetLogId(ctx context.Context) context.Context {
+	logIdP := GetCtxValue(ctx, LogIdKey)
+	logId, ok := logIdP.(int64)
+	if !ok {
+		logId = GenLogId()
+		ctx = SetCtxValue(ctx, LogIdKey, logId)
+	}
+	return ctx
 }
