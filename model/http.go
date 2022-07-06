@@ -15,7 +15,7 @@ type Claims struct {
 
 type HttpValidateInter interface {
 	GetSecret(c *gin.Context) string
-	CreateClaims(c *gin.Context) *Claims
+	CreateClaims(c *gin.Context) Claims
 }
 
 type HttpRequestParam struct {

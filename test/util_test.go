@@ -240,3 +240,10 @@ func TestCreateFolderPath(t *testing.T) {
 		return
 	}
 }
+
+func TestGetIp(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		fmt.Println(util.GetIp())
+		time.Sleep(time.Second)
+	}
+}

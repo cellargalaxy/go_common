@@ -42,7 +42,7 @@ func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, erro
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT加密异常")
 		return "", fmt.Errorf("JWT加密异常: %+v", err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"token": token}).Info("JWT加密")
+	//logrus.WithContext(ctx).WithFields(logrus.Fields{"token": token}).Info("JWT加密")
 	return token, nil
 }
 func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.Token, error) {
@@ -66,7 +66,7 @@ func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jw
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT解密异常")
 		return nil, fmt.Errorf("JWT解密异常: %+v", err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": ToJsonString(claims)}).Info("JWT解密")
+	//logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": ToJsonString(claims)}).Info("JWT解密")
 	return jwtToken, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,62 +46,57 @@ func Ping(context *gin.Context) {
 	context.JSON(http.StatusOK, CreateResponse(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName("")}, nil))
 }
 
+func GetClaims(ctx context.Context) *model.Claims {
+	object := GetCtxValue(ctx, ClaimsKey)
+	claims, _ := object.(*model.Claims)
+	return claims
+}
+func SetClaims(ctx context.Context, claims *model.Claims) {
+	if claims == nil {
+		return
+	}
+	SetCtxValue(ctx, ClaimsKey, claims)
+}
+
 func HttpClaims(c *gin.Context, validateHandler model.HttpValidateInter) {
+	defer func() {
+		logId := GetLogId(c)
+		if logId <= 0 {
+			logIdString := c.Request.Header.Get(LogIdKey)
+			logId, _ = strconv.ParseInt(logIdString, 10, 64)
+		}
+		if logId <= 0 {
+			logId = GenLogId()
+		}
+		c.Set(LogIdKey, logId)
+		c.Header(LogIdKey, strconv.Itoa(int(logId)))
+		c.Next()
+	}()
+
 	token := c.Request.Header.Get(TokenKey)
-	logrus.WithContext(c).WithFields(logrus.Fields{"token": token}).Info("解析token")
 	tokens := strings.SplitN(token, " ", 2)
 	if len(tokens) != 2 || tokens[0] != BearerKey {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("Authorization非法"))
 		return
 	}
 	secret := validateHandler.GetSecret(c)
 	claims := validateHandler.CreateClaims(c)
-	if claims == nil {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("claims为空"))
-		return
-	}
-	jwtToken, err := ParseJWT(c, tokens[1], secret, claims)
+	jwtToken, err := ParseJWT(c, tokens[1], secret, &claims)
+	c.Set(LogIdKey, claims.LogId)
 	if err != nil {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse(err.Error()))
 		return
 	}
 	if jwtToken == nil {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("jwtToken为空"))
 		return
 	}
 	if !jwtToken.Valid {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("jwtToken非法"))
 		return
 	}
-
-	if claims.ReqId == "" {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("ReqId为空"))
-		return
-	}
-	expiresAt := time.Unix(claims.ExpiresAt, 0)
-	duration := expiresAt.Sub(time.Now())
-	if duration.Nanoseconds() <= 0 {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("jwtToken过期"))
-		return
-	}
-	if existRequestId(claims.ReqId, duration) {
-		c.Abort()
-		c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求重放非法", nil))
-		return
-	}
-	c.Set(ClaimsKey, claims)
+	SetClaims(c, &claims)
 }
 
 func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 	token := c.Request.Header.Get(TokenKey)
-	logrus.WithContext(c).WithFields(logrus.Fields{"token": token}).Info("解析token")
+	//logrus.WithContext(c).WithFields(logrus.Fields{"token": token}).Info("解析token")
 	tokens := strings.SplitN(token, " ", 2)
 	if len(tokens) != 2 || tokens[0] != BearerKey {
 		c.Abort()
@@ -109,12 +105,7 @@ func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 	}
 	secret := validateHandler.GetSecret(c)
 	claims := validateHandler.CreateClaims(c)
-	if claims == nil {
-		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("claims为空"))
-		return
-	}
-	jwtToken, err := ParseJWT(c, tokens[1], secret, claims)
+	jwtToken, err := ParseJWT(c, tokens[1], secret, &claims)
 	if err != nil {
 		c.Abort()
 		c.JSON(http.StatusOK, CreateErrResponse(err.Error()))
@@ -148,7 +139,6 @@ func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 		c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求重放非法", nil))
 		return
 	}
-	c.Set(ClaimsKey, claims)
 }
 
 func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error) {
