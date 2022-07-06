@@ -63,6 +63,18 @@ func TestEnSHa256(t *testing.T) {
 	t.Logf("data: %+v\n", data)
 }
 
+func TestGenDefaultJWT(t *testing.T) {
+	ctx := util.GenCtx()
+	time.Sleep(time.Second * 3)
+	token, err := util.GenDefaultJWT(ctx, time.Minute, jwtSecret)
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	logrus.WithContext(ctx).Info(token)
+	t.Logf("token: %+v\n", token)
+}
+
 func TestGenJWT(t *testing.T) {
 	ctx := context.Background()
 	var claims model.Claims
@@ -254,6 +266,7 @@ func (this *HttpClaims) GetSecret(c *gin.Context) string {
 func (this *HttpClaims) CreateClaims(c *gin.Context) model.Claims {
 	return model.Claims{}
 }
+
 func claims(ctx *gin.Context) {
 	util.HttpClaims(ctx, &HttpClaims{})
 }
@@ -268,6 +281,7 @@ func TestHttpClaims(t *testing.T) {
 		return
 	}
 }
+
 func validate(ctx *gin.Context) {
 	util.HttpValidate(ctx, &HttpClaims{})
 }
