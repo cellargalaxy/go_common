@@ -3,6 +3,7 @@ package model
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
+	json "github.com/json-iterator/go"
 )
 
 type Claims struct {
@@ -11,6 +12,11 @@ type Claims struct {
 	ServerName string `json:"sn,omitempty"`
 	LogId      int64  `json:"logid,omitempty"`
 	ReqId      string `json:"reqid,omitempty"`
+}
+
+func (this Claims) String() string {
+	data, _ := json.MarshalToString(this)
+	return data
 }
 
 type HttpValidateInter interface {

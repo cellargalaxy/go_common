@@ -3,12 +3,17 @@ package test
 import (
 	"context"
 	"fmt"
+	"github.com/cellargalaxy/go_common/model"
 	"github.com/cellargalaxy/go_common/util"
-	"github.com/golang-jwt/jwt"
+	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"math/rand"
 	"testing"
 	"time"
+)
+
+const (
+	jwtSecret = "jwtSecret"
 )
 
 func TestInitLog(t *testing.T) {
@@ -58,24 +63,15 @@ func TestEnSHa256(t *testing.T) {
 	t.Logf("data: %+v\n", data)
 }
 
-type MyClaims struct {
-	Username string `json:"username"`
-	jwt.StandardClaims
-}
-
-func (this MyClaims) String() string {
-	return util.ToJsonString(this)
-}
-
-//func (c MyClaims) Valid() error {
-//	return nil
-//}
 func TestGenJWT(t *testing.T) {
 	ctx := context.Background()
-	var claims MyClaims
-	claims.Username = "我是Username"
-	claims.ExpiresAt = time.Now().Unix() + 100
-	token, err := util.GenJWT(ctx, "aa", &claims)
+	var claims model.Claims
+	claims.Ip = "Ip"
+	claims.ServerName = "ServerName"
+	claims.LogId = 123456789
+	claims.ReqId = "ReqId"
+	claims.ExpiresAt = time.Now().Unix() + 1000
+	token, err := util.GenJWT(ctx, jwtSecret, &claims)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -85,8 +81,8 @@ func TestGenJWT(t *testing.T) {
 
 func TestParseJWT(t *testing.T) {
 	ctx := context.Background()
-	var claims MyClaims
-	token, err := util.ParseJWT(ctx, "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE2Mjc3MjQ2MTIsImV4cCI6MTYyNzcyNDY0Mn0.FEu96aZAtw7LzqqOKlGvfYE4V133vNjSIC1SC92oPxE", "aa", &claims)
+	var claims model.Claims
+	token, err := util.ParseJWT(ctx, "", jwtSecret, &claims)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -242,8 +238,47 @@ func TestCreateFolderPath(t *testing.T) {
 }
 
 func TestGetIp(t *testing.T) {
+	ctx := util.GenCtx()
 	for i := 0; i < 1000; i++ {
-		fmt.Println(util.GetIp())
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info(util.GetIp())
 		time.Sleep(time.Second)
+	}
+}
+
+type HttpClaims struct {
+}
+
+func (this *HttpClaims) GetSecret(c *gin.Context) string {
+	return jwtSecret
+}
+func (this *HttpClaims) CreateClaims(c *gin.Context) model.Claims {
+	return model.Claims{}
+}
+func claims(ctx *gin.Context) {
+	util.HttpClaims(ctx, &HttpClaims{})
+}
+func TestHttpClaims(t *testing.T) {
+	fmt.Println("http://127.0.0.1:8888/ping")
+	engine := gin.Default()
+	engine.Use(util.GinLog)
+	engine.GET("/ping", claims, util.Ping)
+	err := engine.Run(":8888")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+}
+func validate(ctx *gin.Context) {
+	util.HttpValidate(ctx, &HttpClaims{})
+}
+func TestHttpValidate(t *testing.T) {
+	fmt.Println("http://127.0.0.1:8888/ping")
+	engine := gin.Default()
+	engine.Use(util.GinLog)
+	engine.GET("/ping", validate, util.Ping)
+	err := engine.Run(":8888")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
 	}
 }

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"github.com/patrickmn/go-cache"
 	"time"
 )
@@ -15,7 +16,8 @@ func initCache() {
 }
 
 func existRequestId(reqId string, duration time.Duration) bool {
-	_, ok := localCache.Get("reqid-" + reqId)
-	localCache.Set(reqId, "", duration)
+	key := fmt.Sprintf("reqid-%s", reqId)
+	_, ok := localCache.Get(key)
+	localCache.Set(key, "", duration)
 	return ok
 }

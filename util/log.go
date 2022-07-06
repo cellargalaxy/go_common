@@ -129,19 +129,6 @@ func (this *paramHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
-func GinLogId(c *gin.Context) {
-	logId := GetLogId(c)
-	if logId <= 0 {
-		logIdString := c.Request.Header.Get(LogIdKey)
-		logId, _ = strconv.ParseInt(logIdString, 10, 64)
-	}
-	if logId <= 0 {
-		logId = GenLogId()
-	}
-	c.Set(LogIdKey, logId)
-	c.Header(LogIdKey, strconv.Itoa(int(logId)))
-	c.Next()
-}
 func GinLog(c *gin.Context) {
 	startTime := time.Now()
 	c.Next()
