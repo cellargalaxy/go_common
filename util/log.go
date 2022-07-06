@@ -19,6 +19,7 @@ import (
 	"time"
 )
 
+const ReqIdKey = "reqid"
 const LogIdKey = "logid"
 const ServerNameKey = "sn"
 const IpKey = "ip"
@@ -194,19 +195,43 @@ func GenLogId() int64 {
 	return GenId()
 }
 func GetLogId(ctx context.Context) int64 {
-	logIdP := GetCtxValue(ctx, LogIdKey)
-	logId, _ := logIdP.(int64)
-	return logId
+	idP := GetCtxValue(ctx, LogIdKey)
+	id, _ := idP.(int64)
+	return id
 }
 func GetLogIdString(ctx context.Context) string {
 	return strconv.FormatInt(GetLogId(ctx), 10)
 }
 func SetLogId(ctx context.Context) context.Context {
-	logIdP := GetCtxValue(ctx, LogIdKey)
-	logId, ok := logIdP.(int64)
+	idP := GetCtxValue(ctx, LogIdKey)
+	id, ok := idP.(int64)
 	if !ok {
-		logId = GenLogId()
-		ctx = SetCtxValue(ctx, LogIdKey, logId)
+		id = GenLogId()
+		ctx = SetCtxValue(ctx, LogIdKey, id)
+	}
+	return ctx
+}
+
+func GenReqId() int64 {
+	return GenId()
+}
+func GetReqId(ctx context.Context) int64 {
+	idP := GetCtxValue(ctx, ReqIdKey)
+	id, ok := idP.(int64)
+	if id <= 0 || !ok {
+		id = GenReqId()
+	}
+	return id
+}
+func GetReqIdString(ctx context.Context) string {
+	return strconv.FormatInt(GetReqId(ctx), 10)
+}
+func SetReqId(ctx context.Context) context.Context {
+	idP := GetCtxValue(ctx, ReqIdKey)
+	id, ok := idP.(int64)
+	if id <= 0 || !ok {
+		id = GenReqId()
+		ctx = SetCtxValue(ctx, ReqIdKey, id)
 	}
 	return ctx
 }

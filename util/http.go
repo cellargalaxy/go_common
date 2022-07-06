@@ -70,7 +70,7 @@ func initGinLogId(c *gin.Context) {
 	c.Header(LogIdKey, GetLogIdString(c))
 }
 
-func HttpClaims(c *gin.Context, validateHandler model.HttpValidateInter) {
+func HttpClaims(c *gin.Context, secret string) {
 	defer func() {
 		initGinLogId(c)
 		c.Next()
@@ -81,8 +81,7 @@ func HttpClaims(c *gin.Context, validateHandler model.HttpValidateInter) {
 	if len(tokens) != 2 || tokens[0] != BearerKey {
 		return
 	}
-	secret := validateHandler.GetSecret(c)
-	claims := validateHandler.CreateClaims(c)
+	var claims model.Claims
 	jwtToken, err := ParseJWT(c, tokens[1], secret, &claims)
 	c.Set(LogIdKey, claims.LogId)
 	if err != nil {
@@ -97,7 +96,7 @@ func HttpClaims(c *gin.Context, validateHandler model.HttpValidateInter) {
 	c.Set(ClaimsKey, &claims)
 }
 
-func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
+func HttpValidate(c *gin.Context, secret string) {
 	token := c.Request.Header.Get(TokenKey)
 	tokens := strings.SplitN(token, " ", 2)
 	if len(tokens) != 2 || tokens[0] != BearerKey {
@@ -106,8 +105,7 @@ func HttpValidate(c *gin.Context, validateHandler model.HttpValidateInter) {
 		c.JSON(http.StatusOK, CreateErrResponse("Authorization非法"))
 		return
 	}
-	secret := validateHandler.GetSecret(c)
-	claims := validateHandler.CreateClaims(c)
+	var claims model.Claims
 	jwtToken, err := ParseJWT(c, tokens[1], secret, &claims)
 	c.Set(LogIdKey, claims.LogId)
 	if err != nil {

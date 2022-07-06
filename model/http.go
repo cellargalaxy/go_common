@@ -1,7 +1,6 @@
 package model
 
 import (
-	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 	json "github.com/json-iterator/go"
 )
@@ -17,11 +16,6 @@ type Claims struct {
 func (this Claims) String() string {
 	data, _ := json.MarshalToString(this)
 	return data
-}
-
-type HttpValidateInter interface {
-	GetSecret(c *gin.Context) string
-	CreateClaims(c *gin.Context) Claims
 }
 
 type HttpRequestParam struct {
