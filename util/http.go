@@ -13,19 +13,23 @@ import (
 	"time"
 )
 
-const TokenKey = "Authorization"
+const AuthorizationKey = "Authorization"
 const BearerKey = "Bearer"
 const ClaimsKey = "claims"
 
-var HttpClientNotReTry *resty.Client
+var HttpClientNotRetry *resty.Client
 var ip string
 
 func initHttp(ctx context.Context) {
-	HttpClientNotReTry = CreateNotReTryHttpClient(time.Second * 5)
+	HttpClientNotRetry = CreateNotRetryHttpClient(time.Second * 5)
 	flushHttpIpAsync(ctx)
 }
 
-func CreateErrResponse(message string) map[string]interface{} {
+func CreateResponseByErr(err error) map[string]interface{} {
+	return CreateResponse(nil, err)
+}
+
+func CreateFailResponse(message string) map[string]interface{} {
 	return createResponse(HttpFailCode, message, nil)
 }
 
@@ -58,11 +62,8 @@ func SetClaims(ctx context.Context, claims *model.Claims) context.Context {
 	return SetCtxValue(ctx, ClaimsKey, claims)
 }
 
-func initGinLogId(c *gin.Context) {
+func setGinLogId(c *gin.Context) {
 	logId := GetLogId(c)
-	if logId <= 0 {
-		logId = String2Int64(c.Request.Header.Get(LogIdKey))
-	}
 	if logId <= 0 {
 		logId = GenLogId()
 	}
@@ -70,13 +71,13 @@ func initGinLogId(c *gin.Context) {
 	c.Header(LogIdKey, GetLogIdString(c))
 }
 
-func HttpClaims(c *gin.Context, secret string) {
+func ClaimsHttp(c *gin.Context, secret string) {
 	defer func() {
-		initGinLogId(c)
+		setGinLogId(c)
 		c.Next()
 	}()
 
-	token := c.Request.Header.Get(TokenKey)
+	token := c.Request.Header.Get(AuthorizationKey)
 	tokens := strings.SplitN(token, " ", 2)
 	if len(tokens) != 2 || tokens[0] != BearerKey {
 		return
@@ -96,59 +97,57 @@ func HttpClaims(c *gin.Context, secret string) {
 	c.Set(ClaimsKey, &claims)
 }
 
-func HttpValidate(c *gin.Context, secret string) {
-	token := c.Request.Header.Get(TokenKey)
+func ValidateHttp(c *gin.Context, secret string) {
+	token := c.Request.Header.Get(AuthorizationKey)
 	tokens := strings.SplitN(token, " ", 2)
 	if len(tokens) != 2 || tokens[0] != BearerKey {
-		initGinLogId(c)
+		setGinLogId(c)
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("Authorization非法"))
+		c.JSON(http.StatusOK, CreateFailResponse("Authorization非法"))
 		return
 	}
 	var claims model.Claims
 	jwtToken, err := ParseJWT(c, tokens[1], secret, &claims)
-	c.Set(LogIdKey, claims.LogId)
 	if err != nil {
-		initGinLogId(c)
+		setGinLogId(c)
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse(err.Error()))
+		c.JSON(http.StatusOK, CreateResponseByErr(err))
 		return
 	}
 	if jwtToken == nil {
-		initGinLogId(c)
+		setGinLogId(c)
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("jwtToken为空"))
+		c.JSON(http.StatusOK, CreateFailResponse("jwtToken为空"))
 		return
 	}
 	if !jwtToken.Valid {
-		initGinLogId(c)
+		setGinLogId(c)
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("jwtToken非法"))
+		c.JSON(http.StatusOK, CreateFailResponse("jwtToken非法"))
 		return
 	}
-	c.Set(ClaimsKey, &claims)
 
 	if claims.ReqId == "" {
-		initGinLogId(c)
+		setGinLogId(c)
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("ReqId为空"))
+		c.JSON(http.StatusOK, CreateFailResponse("ReqId为空"))
 		return
 	}
 	expiresAt := time.Unix(claims.ExpiresAt, 0)
 	duration := expiresAt.Sub(time.Now())
 	if duration.Nanoseconds() <= 0 {
-		initGinLogId(c)
+		setGinLogId(c)
 		c.Abort()
-		c.JSON(http.StatusOK, CreateErrResponse("jwtToken过期"))
+		c.JSON(http.StatusOK, CreateFailResponse("jwtToken过期"))
 		return
 	}
-	if existRequestId(claims.ReqId, duration) {
-		initGinLogId(c)
+	if existReqId(claims.ReqId, duration) {
+		setGinLogId(c)
 		c.Abort()
-		c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求重放非法", nil))
+		c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法重放", nil))
 		return
 	}
-	initGinLogId(c)
+	setGinLogId(c)
 	c.Next()
 }
 
@@ -246,7 +245,7 @@ func GetHttpIp(ctx context.Context) string {
 }
 
 func HttpGet(ctx context.Context, url string) string {
-	response, err := HttpClientNotReTry.R().SetContext(ctx).Get(url)
+	response, err := HttpClientNotRetry.R().SetContext(ctx).Get(url)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"url": url, "err": err}).Error("HttpGet，请求异常")
 		return ""
@@ -264,7 +263,7 @@ func HttpGet(ctx context.Context, url string) string {
 	return body
 }
 
-func CreateNotReTryHttpClient(timeout time.Duration) *resty.Client {
+func CreateNotRetryHttpClient(timeout time.Duration) *resty.Client {
 	return CreateHttpClient(timeout, 0, 0, 0, nil, true)
 }
 

@@ -257,18 +257,8 @@ func TestGetIp(t *testing.T) {
 	}
 }
 
-type HttpClaims struct {
-}
-
-func (this *HttpClaims) GetSecret(c *gin.Context) string {
-	return jwtSecret
-}
-func (this *HttpClaims) CreateClaims(c *gin.Context) model.Claims {
-	return model.Claims{}
-}
-
 func claims(ctx *gin.Context) {
-	util.HttpClaims(ctx, &HttpClaims{})
+	util.ClaimsHttp(ctx, jwtSecret)
 }
 func TestHttpClaims(t *testing.T) {
 	fmt.Println("http://127.0.0.1:8888/ping")
@@ -283,7 +273,7 @@ func TestHttpClaims(t *testing.T) {
 }
 
 func validate(ctx *gin.Context) {
-	util.HttpValidate(ctx, &HttpClaims{})
+	util.ValidateHttp(ctx, jwtSecret)
 }
 func TestHttpValidate(t *testing.T) {
 	fmt.Println("http://127.0.0.1:8888/ping")

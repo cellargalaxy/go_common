@@ -14,7 +14,7 @@ import (
 )
 
 func GenAuthorizationHeader(ctx context.Context, token string) (string, string) {
-	return TokenKey, fmt.Sprintf("%s %s", BearerKey, token)
+	return AuthorizationKey, fmt.Sprintf("%s %s", BearerKey, token)
 }
 func GenAuthorizationJWT(ctx context.Context, expire time.Duration, secret string) (string, string) {
 	token, _ := GenDefaultJWT(ctx, expire, secret)
@@ -28,7 +28,7 @@ func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (st
 	claims.Ip = GetIp()
 	claims.ServerName = GetServerName("")
 	claims.LogId = GetLogId(ctx)
-	claims.ReqId = GetReqIdString(ctx)
+	claims.ReqId = GetOrGenReqIdString(ctx)
 	return GenJWT(ctx, secret, claims)
 }
 func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, error) {
@@ -42,7 +42,6 @@ func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, erro
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT加密异常")
 		return "", fmt.Errorf("JWT加密异常: %+v", err)
 	}
-	//logrus.WithContext(ctx).WithFields(logrus.Fields{"token": token}).Info("JWT加密")
 	return token, nil
 }
 func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.Token, error) {
@@ -66,7 +65,6 @@ func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jw
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT解密异常")
 		return nil, fmt.Errorf("JWT解密异常: %+v", err)
 	}
-	//logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": ToJsonString(claims)}).Info("JWT解密")
 	return jwtToken, nil
 }
 
@@ -86,10 +84,7 @@ func EnAesCbcString(ctx context.Context, text, secret string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	text, err = EnBase64(ctx, en)
-	if err != nil {
-		return "", err
-	}
+	text = EnBase64(ctx, en)
 	return text, nil
 }
 
@@ -126,8 +121,8 @@ func EnAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	return en, nil
 }
 
-func EnBase64(ctx context.Context, data []byte) (string, error) {
-	return base64.StdEncoding.EncodeToString(data), nil
+func EnBase64(ctx context.Context, data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
 }
 func DeBase64(ctx context.Context, text string) ([]byte, error) {
 	data, err := base64.StdEncoding.DecodeString(text)

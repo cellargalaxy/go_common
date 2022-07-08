@@ -21,11 +21,11 @@ func GenId() int64 {
 }
 
 func GenStringId() string {
-	return strconv.Itoa(int(GenId()))
+	return strconv.FormatInt(GenId(), 10)
 }
 
 func ParseId(ctx context.Context, id int64) (time.Time, error) {
-	str := strconv.Itoa(int(id))
+	str := strconv.FormatInt(id, 10)
 	return ParseStringId(ctx, str)
 }
 

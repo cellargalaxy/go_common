@@ -15,8 +15,8 @@ func initCache() {
 	}
 }
 
-func existRequestId(reqId string, duration time.Duration) bool {
-	key := fmt.Sprintf("reqid-%s", reqId)
+func existReqId(reqId string, duration time.Duration) bool {
+	key := fmt.Sprintf("reqId-%s", reqId)
 	_, ok := localCache.Get(key)
 	localCache.Set(key, "", duration)
 	return ok

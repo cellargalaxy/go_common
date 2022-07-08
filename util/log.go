@@ -26,19 +26,22 @@ const IpKey = "ip"
 const CallerKey = "caller"
 
 func InitDefaultLog(defaultServerName string) {
-	InitLog(GetServerName(defaultServerName), 1, 100, 30, logrus.InfoLevel)
+	InitLog(GetServerName(defaultServerName), "", 1, 100, 30, logrus.InfoLevel)
 }
 
-func CreateDefaultLog(defaultServerName string) *logrus.Logger {
-	return CreateLog(GetServerName(defaultServerName), 1, 100, 30, logrus.InfoLevel)
+func CreateDefaultLog(defaultServerName, filename string) *logrus.Logger {
+	return CreateLog(GetServerName(defaultServerName), filename, 1, 100, 30, logrus.InfoLevel)
 }
 
-func InitLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Level) {
+func InitLog(serverName, filename string, maxSize, maxBackups, maxAge int, level logrus.Level) {
 	if serverName == "" {
 		serverName = "log"
 	}
+	if filename == "" {
+		filename = "log.log"
+	}
 	logrus.SetLevel(level)
-	filename := fmt.Sprintf("log/%s/log.log", serverName)
+	filename = fmt.Sprintf("log/%s/%s", serverName, filename)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename,   //日志文件的位置
 		MaxSize:    maxSize,    //在进行切割之前，日志文件的最大大小（以MB为单位）
@@ -61,13 +64,16 @@ func InitLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Le
 	logrus.AddHook(&hook)
 }
 
-func CreateLog(serverName string, maxSize, maxBackups, maxAge int, level logrus.Level) *logrus.Logger {
+func CreateLog(serverName, filename string, maxSize, maxBackups, maxAge int, level logrus.Level) *logrus.Logger {
 	if serverName == "" {
 		serverName = "log"
 	}
+	if filename == "" {
+		filename = fmt.Sprintf("%s.log", GenStringId())
+	}
 	log := logrus.New()
 	log.SetLevel(level)
-	filename := fmt.Sprintf("log/%s/log.log", serverName)
+	filename = fmt.Sprintf("log/%s/%s", serverName, filename)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename,   //日志文件的位置
 		MaxSize:    maxSize,    //在进行切割之前，日志文件的最大大小（以MB为单位）
@@ -140,11 +146,11 @@ func GinLog(c *gin.Context) {
 	requestURI := c.Request.RequestURI
 	status := c.Writer.Status()
 	if status == http.StatusOK {
-		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Info("")
+		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Info()
 	} else if status >= 500 {
-		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Error("")
+		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Error()
 	} else {
-		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Warn("")
+		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Warn()
 	}
 }
 
@@ -203,10 +209,8 @@ func GetLogIdString(ctx context.Context) string {
 	return strconv.FormatInt(GetLogId(ctx), 10)
 }
 func SetLogId(ctx context.Context) context.Context {
-	idP := GetCtxValue(ctx, LogIdKey)
-	id, ok := idP.(int64)
-	if !ok {
-		id = GenLogId()
+	id := GenLogId()
+	if id <= 0 {
 		ctx = SetCtxValue(ctx, LogIdKey, id)
 	}
 	return ctx
@@ -217,20 +221,22 @@ func GenReqId() int64 {
 }
 func GetReqId(ctx context.Context) int64 {
 	idP := GetCtxValue(ctx, ReqIdKey)
-	id, ok := idP.(int64)
-	if id <= 0 || !ok {
+	id, _ := idP.(int64)
+	return id
+}
+func GetOrGenReqId(ctx context.Context) int64 {
+	id := GetReqId(ctx)
+	if id <= 0 {
 		id = GenReqId()
 	}
 	return id
 }
-func GetReqIdString(ctx context.Context) string {
-	return strconv.FormatInt(GetReqId(ctx), 10)
+func GetOrGenReqIdString(ctx context.Context) string {
+	return strconv.FormatInt(GetOrGenReqId(ctx), 10)
 }
 func SetReqId(ctx context.Context) context.Context {
-	idP := GetCtxValue(ctx, ReqIdKey)
-	id, ok := idP.(int64)
-	if id <= 0 || !ok {
-		id = GenReqId()
+	id := GetReqId(ctx)
+	if id <= 0 {
 		ctx = SetCtxValue(ctx, ReqIdKey, id)
 	}
 	return ctx
