@@ -9,3 +9,5 @@ const (
 const (
 	PingPath = "/ping"
 )
+
+const DbMaxBatchAddLength = 1000
