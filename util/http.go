@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,10 +20,13 @@ const ClaimsKey = "claims"
 
 var HttpClientNotRetry *resty.Client
 var ip string
+var httpOnce sync.Once
 
 func initHttp(ctx context.Context) {
 	HttpClientNotRetry = CreateNotRetryHttpClient(time.Second * 5)
-	flushHttpIpAsync(ctx)
+	httpOnce.Do(func() {
+		flushHttpIpAsync(ctx)
+	})
 }
 
 func CreateResponseByErr(err error) map[string]interface{} {
