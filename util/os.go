@@ -16,6 +16,12 @@ import (
 
 const serverNameEnvKey = "server_name"
 
+var defaultServerName string
+
+func InitOs(serverName string) {
+	defaultServerName = serverName
+}
+
 func Defer(ctx context.Context, callback func(ctx context.Context, err interface{}, stack string)) {
 	err := recover()
 	var buf [1024 * 4]byte
@@ -24,7 +30,7 @@ func Defer(ctx context.Context, callback func(ctx context.Context, err interface
 	callback(ctx, err, stack)
 }
 
-func GetServerName(defaultServerName string) string {
+func GetServerName() string {
 	return GetEnvString(serverNameEnvKey, defaultServerName)
 }
 

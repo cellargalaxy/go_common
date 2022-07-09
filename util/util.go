@@ -6,3 +6,7 @@ func init() {
 	initRegexp()
 	initHttp(ctx)
 }
+
+func Init(serverName string) {
+	InitOs(serverName)
+}
