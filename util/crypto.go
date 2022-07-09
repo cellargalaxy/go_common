@@ -26,7 +26,7 @@ func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (st
 	claims.IssuedAt = now.Unix()
 	claims.ExpiresAt = now.Add(expire).Unix()
 	claims.Ip = GetIp()
-	claims.ServerName = GetServerName("")
+	claims.ServerName = GetServerName()
 	claims.LogId = GetLogId(ctx)
 	claims.ReqId = GetOrGenReqIdString(ctx)
 	return GenJWT(ctx, secret, claims)

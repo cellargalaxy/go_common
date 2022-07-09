@@ -9,4 +9,5 @@ func init() {
 
 func Init(serverName string) {
 	InitOs(serverName)
+	InitDefaultLog()
 }

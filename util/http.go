@@ -47,7 +47,7 @@ func createResponse(code int, msg string, data interface{}) map[string]interface
 
 func Ping(c *gin.Context) {
 	logrus.WithContext(c).WithFields(logrus.Fields{"claims": GetClaims(c)}).Info("Ping")
-	c.JSON(http.StatusOK, CreateResponse(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName("")}, nil))
+	c.JSON(http.StatusOK, CreateResponse(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName()}, nil))
 }
 
 func GetClaims(ctx context.Context) *model.Claims {

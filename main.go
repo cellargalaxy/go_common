@@ -1,9 +1,10 @@
 package main
 
 import (
-	"time"
+	"fmt"
+	"github.com/cellargalaxy/go_common/util"
 )
 
 func main() {
-	time.Sleep(time.Second)
+	fmt.Println(util.GenId())
 }
