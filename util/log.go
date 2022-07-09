@@ -209,8 +209,9 @@ func GetLogIdString(ctx context.Context) string {
 	return strconv.FormatInt(GetLogId(ctx), 10)
 }
 func SetLogId(ctx context.Context) context.Context {
-	id := GenLogId()
+	id := GetLogId(ctx)
 	if id <= 0 {
+		id = GenId()
 		ctx = SetCtxValue(ctx, LogIdKey, id)
 	}
 	return ctx
@@ -237,6 +238,7 @@ func GetOrGenReqIdString(ctx context.Context) string {
 func SetReqId(ctx context.Context) context.Context {
 	id := GetReqId(ctx)
 	if id <= 0 {
+		id = GenId()
 		ctx = SetCtxValue(ctx, ReqIdKey, id)
 	}
 	return ctx

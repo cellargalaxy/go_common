@@ -16,10 +16,18 @@ const (
 	jwtSecret = "jwtSecret"
 )
 
-func TestInitLog(t *testing.T) {
+func TestLogId(t *testing.T) {
 	ctx := util.GenCtx()
 	time.Sleep(3 * time.Second)
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"TestInitLog": "TestInitLog"}).Info("TestInitLog")
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"GetLogId": util.GetLogId(ctx)}).Info("TestLogId")
+}
+
+func TestReqId(t *testing.T) {
+	ctx := util.GenCtx()
+	time.Sleep(3 * time.Second)
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"GetReqId": util.GetReqId(ctx)}).Info("TestReqId")
+	ctx = util.SetReqId(ctx)
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"GetReqId": util.GetReqId(ctx)}).Info("TestReqId")
 }
 
 func TestContainNum(t *testing.T) {
