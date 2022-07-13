@@ -10,19 +10,46 @@ import (
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
-const AuthorizationKey = "Authorization"
-const BearerKey = "Bearer"
-const ClaimsKey = "claims"
+const (
+	AuthorizationKey = "Authorization"
+	BearerKey        = "Bearer"
+	ClaimsKey        = "claims"
+)
 
-var HttpClientNotRetry *resty.Client
+const (
+	TimeoutDefault   = time.Second * 5
+	SleepDefault     = time.Second * 5
+	MaxSleepDefault  = time.Minute * 5
+	RetryDefault     = 3
+	UserAgentDefault = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
+)
+
+var httpClient *resty.Client
+var httpClientOnce sync.Once
+var httpClientRetry *resty.Client
+var httpClientRetryOnce sync.Once
 var ip string
 
 func initHttp(ctx context.Context) {
-	HttpClientNotRetry = CreateNotRetryHttpClient(time.Second * 5)
 	flushHttpIpAsync(ctx)
+}
+
+func GetHttpClient() *resty.Client {
+	httpClientOnce.Do(func() {
+		httpClient = CreateNotRetryHttpClient(TimeoutDefault)
+	})
+	return httpClient
+}
+
+func GetHttpClientRetry() *resty.Client {
+	httpClientRetryOnce.Do(func() {
+		httpClientRetry = CreateHttpClient(TimeoutDefault, SleepDefault, MaxSleepDefault, RetryDefault, map[string]string{"User-Agent": UserAgentDefault}, true)
+	})
+	return httpClientRetry
 }
 
 func CreateResponseByErr(err error) map[string]interface{} {
@@ -245,7 +272,7 @@ func GetHttpIp(ctx context.Context) string {
 }
 
 func HttpGet(ctx context.Context, url string) string {
-	response, err := HttpClientNotRetry.R().SetContext(ctx).Get(url)
+	response, err := GetHttpClient().R().SetContext(ctx).Get(url)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"url": url, "err": err}).Error("HttpGet，请求异常")
 		return ""
