@@ -9,7 +9,8 @@ require (
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-playground/validator/v10 v10.11.0 // indirect
 	github.com/go-resty/resty/v2 v2.7.0
-	github.com/gocarina/gocsv v0.0.0-20220531201732-5f969b02b902
+	github.com/gocarina/gocsv v0.0.0-20220712153207-8b2118da4570
+	github.com/goccy/go-json v0.9.8 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12
@@ -19,10 +20,10 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
 	github.com/sirupsen/logrus v1.8.1
 	github.com/wumansgy/goEncrypt v1.0.0
-	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
-	golang.org/x/net v0.0.0-20220615171555-694bf12d69de // indirect
-	golang.org/x/sys v0.0.0-20220615213510-4f61da869c0c // indirect
+	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
+	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect
+	golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0
-	gorm.io/gorm v1.23.6
+	gorm.io/gorm v1.23.8
 )
