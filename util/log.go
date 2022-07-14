@@ -216,6 +216,11 @@ func SetLogId(ctx context.Context) context.Context {
 	}
 	return ctx
 }
+func ResetLogId(ctx context.Context) context.Context {
+	id := GenId()
+	ctx = SetCtxValue(ctx, LogIdKey, id)
+	return ctx
+}
 
 func GenReqId() int64 {
 	return GenId()
@@ -241,5 +246,10 @@ func SetReqId(ctx context.Context) context.Context {
 		id = GenId()
 		ctx = SetCtxValue(ctx, ReqIdKey, id)
 	}
+	return ctx
+}
+func ResetReqId(ctx context.Context) context.Context {
+	id := GenId()
+	ctx = SetCtxValue(ctx, ReqIdKey, id)
 	return ctx
 }
