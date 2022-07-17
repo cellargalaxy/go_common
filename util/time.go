@@ -76,7 +76,7 @@ func MaxDuration(data ...time.Duration) time.Duration {
 
 func Sleep(ctx context.Context, sleep time.Duration) {
 	select {
-	case <-time.NewTicker(sleep).C:
+	case <-time.After(sleep):
 	case <-ctx.Done():
 	}
 }
