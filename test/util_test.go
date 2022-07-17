@@ -294,3 +294,11 @@ func TestHttpValidate(t *testing.T) {
 		return
 	}
 }
+
+func TestSleep(t *testing.T) {
+	ctx := util.GenCtx()
+	ctx, _ = context.WithTimeout(ctx, time.Second*6)
+	start := time.Now()
+	util.Sleep(ctx, time.Second*5)
+	fmt.Println(time.Now().Sub(start))
+}

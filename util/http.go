@@ -249,7 +249,7 @@ func flushHttpIpAsync(ctx context.Context) {
 
 		for {
 			FlushHttpIp(ctx)
-			time.Sleep(time.Hour)
+			Sleep(ctx, time.Hour)
 		}
 	}()
 }
@@ -259,7 +259,7 @@ func FlushHttpIp(ctx context.Context) {
 		object := GetHttpIp(ctx)
 		object = strings.TrimSpace(object)
 		if object == "" {
-			time.Sleep(time.Second)
+			Sleep(ctx, time.Second)
 			continue
 		}
 		ip = object
