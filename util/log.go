@@ -211,13 +211,13 @@ func GetLogIdString(ctx context.Context) string {
 func SetLogId(ctx context.Context) context.Context {
 	id := GetLogId(ctx)
 	if id <= 0 {
-		id = GenId()
+		id = GenLogId()
 		ctx = SetCtxValue(ctx, LogIdKey, id)
 	}
 	return ctx
 }
 func ResetLogId(ctx context.Context) context.Context {
-	id := GenId()
+	id := GenLogId()
 	ctx = SetCtxValue(ctx, LogIdKey, id)
 	return ctx
 }
@@ -243,13 +243,17 @@ func GetOrGenReqIdString(ctx context.Context) string {
 func SetReqId(ctx context.Context) context.Context {
 	id := GetReqId(ctx)
 	if id <= 0 {
-		id = GenId()
+		id = GenReqId()
 		ctx = SetCtxValue(ctx, ReqIdKey, id)
 	}
 	return ctx
 }
 func ResetReqId(ctx context.Context) context.Context {
-	id := GenId()
+	id := GenReqId()
 	ctx = SetCtxValue(ctx, ReqIdKey, id)
+	return ctx
+}
+func RmReqId(ctx context.Context) context.Context {
+	ctx = SetCtxValue(ctx, ReqIdKey, 0)
 	return ctx
 }
