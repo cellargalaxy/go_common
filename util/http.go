@@ -21,7 +21,7 @@ const (
 )
 
 const (
-	TimeoutDefault   = time.Second * 5
+	TimeoutDefault   = time.Second * 3
 	SleepDefault     = time.Second * 5
 	MaxSleepDefault  = time.Minute * 5
 	RetryDefault     = 3
