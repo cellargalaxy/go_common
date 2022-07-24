@@ -2,14 +2,11 @@ package util
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/gin-gonic/gin"
 	"github.com/natefinch/lumberjack"
 	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"io"
 	"net/http"
 	"os"
@@ -151,49 +148,6 @@ func GinLog(c *gin.Context) {
 		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Error()
 	} else {
 		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Warn()
-	}
-}
-
-type GormLog struct {
-	ShowSql    bool
-	IgnoreErrs []error
-}
-
-func (this GormLog) LogMode(logger.LogLevel) logger.Interface {
-	return this
-}
-func (this GormLog) Info(ctx context.Context, s string, args ...interface{}) {
-	logrus.WithContext(ctx).Infof(s, args)
-}
-func (this GormLog) Warn(ctx context.Context, s string, args ...interface{}) {
-	logrus.WithContext(ctx).Warnf(s, args)
-}
-func (this GormLog) Error(ctx context.Context, s string, args ...interface{}) {
-	logrus.WithContext(ctx).Errorf(s, args)
-}
-func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		ignore := false
-		for i := range this.IgnoreErrs {
-			if errors.Is(err, this.IgnoreErrs[i]) {
-				ignore = true
-				break
-			}
-		}
-		if !ignore {
-			elapsed := time.Since(begin)
-			sql, _ := fc()
-			fields := logrus.Fields{"err": err, "elapsed": elapsed, "sql": sql}
-			logrus.WithContext(ctx).WithFields(fields).Error()
-			return
-		}
-	}
-	if this.ShowSql {
-		elapsed := time.Since(begin)
-		sql, _ := fc()
-		fields := logrus.Fields{"elapsed": elapsed, "sql": sql}
-		logrus.WithContext(ctx).WithFields(fields).Info()
-		return
 	}
 }
 
