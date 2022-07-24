@@ -47,14 +47,14 @@ func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (strin
 		}
 	}
 	if this.InsertShow && strings.HasPrefix(sql, "INSERT") {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Error()
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Info()
 	} else if this.DeleteShow && strings.HasPrefix(sql, "DELETE") {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Error()
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Info()
 	} else if this.SelectShow && strings.HasPrefix(sql, "SELECT") {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Error()
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Info()
 	} else if this.UpdateShow && strings.HasPrefix(sql, "UPDATE") {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Error()
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Info()
 	} else if this.OtherShow {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Error()
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Info()
 	}
 }
