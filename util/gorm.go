@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+const (
+	DefaultSqlLen = 64
+)
+
 type GormLogHandle interface {
 	Handle(ctx context.Context, begin time.Time, sql string, err error)
 }
@@ -46,7 +50,7 @@ func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (strin
 }
 
 func NewDefaultGormSqlHandle() GormLogHandle {
-	return NewGormSqlHandle([]error{gorm.ErrRecordNotFound}, 64, false, true, true, false, true)
+	return NewGormSqlHandle([]error{gorm.ErrRecordNotFound}, DefaultSqlLen, false, true, true, false, true)
 }
 
 func NewGormSqlHandle(ignoreErrs []error, sqlLen int, insertShow, deleteShow, selectShow, updateShow, otherShow bool) GormLogHandle {
