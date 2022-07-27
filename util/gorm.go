@@ -4,19 +4,22 @@ import (
 	"context"
 	"errors"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"strings"
 	"time"
 )
 
+type GormLogHandle interface {
+	Handle(ctx context.Context, begin time.Time, sql string, err error)
+}
+
+func NewGormLog(handles ...GormLogHandle) logger.Interface {
+	return GormLog{handles: handles}
+}
+
 type GormLog struct {
-	IgnoreErrs []error
-	SqlLen     int
-	InsertShow bool
-	DeleteShow bool
-	SelectShow bool
-	UpdateShow bool
-	OtherShow  bool
+	handles []GormLogHandle
 }
 
 func (this GormLog) LogMode(logger.LogLevel) logger.Interface {
@@ -32,10 +35,36 @@ func (this GormLog) Error(ctx context.Context, s string, args ...interface{}) {
 	logrus.WithContext(ctx).Errorf(s, args)
 }
 
-//SELECT * FROM `fund_rate` WHERE exchange = 'ftx' AND end_time >= '2022-07-23 21:50:00.953' AND symbol in ('1INCH-PERP','AAVE-PERP
 func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-	elapsed := time.Since(begin)
 	sql, _ := fc()
+	for i := range this.handles {
+		if this.handles[i] == nil {
+			continue
+		}
+		this.handles[i].Handle(ctx, begin, sql, err)
+	}
+}
+
+func NewDefaultGormSqlHandle() GormLogHandle {
+	return NewGormSqlHandle([]error{gorm.ErrRecordNotFound}, 64, false, true, true, false, true)
+}
+
+func NewGormSqlHandle(ignoreErrs []error, sqlLen int, insertShow, deleteShow, selectShow, updateShow, otherShow bool) GormLogHandle {
+	return GormSqlHandle{IgnoreErrs: ignoreErrs, SqlLen: sqlLen, InsertShow: insertShow, DeleteShow: deleteShow, SelectShow: selectShow, UpdateShow: updateShow, OtherShow: otherShow}
+}
+
+type GormSqlHandle struct {
+	IgnoreErrs []error
+	SqlLen     int
+	InsertShow bool
+	DeleteShow bool
+	SelectShow bool
+	UpdateShow bool
+	OtherShow  bool
+}
+
+func (this GormSqlHandle) Handle(ctx context.Context, begin time.Time, sql string, err error) {
+	elapsed := time.Since(begin)
 	if this.SqlLen > 0 && this.SqlLen < len(sql) {
 		sql = sql[:this.SqlLen]
 	}
