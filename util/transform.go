@@ -39,7 +39,13 @@ func String2IntWithCarry(value string, carry int) int {
 		return 0
 	}
 	if len(ss) == 1 {
+		for i := 0; i < carry; i++ {
+			ss[0] += "0"
+		}
 		return String2Int(ss[0])
+	}
+	for len(ss[1]) < carry {
+		ss[1] += "0"
 	}
 	ss[1] = ss[1][:carry]
 	return String2Int(strings.Join(ss, ""))
