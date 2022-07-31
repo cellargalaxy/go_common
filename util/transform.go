@@ -33,6 +33,18 @@ func Int2String(value int) string {
 	return strconv.Itoa(value)
 }
 
+func String2IntWithCarry(value string, carry int) int {
+	ss := strings.Split(value, ".")
+	if len(ss) == 0 || len(ss) > 2 {
+		return 0
+	}
+	if len(ss) == 1 {
+		return String2Int(ss[0])
+	}
+	ss[1] = ss[1][:carry]
+	return String2Int(strings.Join(ss, ""))
+}
+
 func Hump2Underscore(text string) string {
 	for j := 'A'; j <= 'Z'; j++ {
 		text = strings.ReplaceAll(text, fmt.Sprintf("%c", j), fmt.Sprintf("_%c", j+32))
