@@ -24,9 +24,12 @@ func InitOs(serverName string) {
 
 func Defer(ctx context.Context, callback func(ctx context.Context, err interface{}, stack string)) {
 	err := recover()
-	var buf [1024 * 4]byte
-	n := runtime.Stack(buf[:], false)
-	stack := string(buf[:n])
+	var stack string
+	if err != nil {
+		var buf [1024]byte
+		n := runtime.Stack(buf[:], false)
+		stack = string(buf[:n])
+	}
 	callback(ctx, err, stack)
 }
 
