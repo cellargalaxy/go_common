@@ -81,7 +81,7 @@ func ClaimsHttp(c *gin.Context, secret string) {
 		return
 	}
 	var claims model.Claims
-	jwtToken, err := ParseJWT(c, authorizations[1], secret, &claims)
+	jwtToken, err := ParseJWT(c, token, secret, &claims)
 	c.Set(LogIdKey, claims.LogId)
 	if err != nil {
 		return
