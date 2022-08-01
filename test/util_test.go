@@ -302,3 +302,17 @@ func TestSleep(t *testing.T) {
 	util.Sleep(ctx, time.Second*2)
 	fmt.Println(time.Now().Sub(start))
 }
+
+func TestForeverSingleGoPool(t *testing.T) {
+	ctx := util.GenCtx()
+	pool, err := util.NewForeverSingleGoPool(ctx, func() {
+		time.Sleep(time.Second)
+		fmt.Println("Now", time.Now())
+	})
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	pool.IsClosed()
+	time.Sleep(time.Minute)
+}
