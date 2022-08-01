@@ -132,12 +132,6 @@ func ValidateHttp(c *gin.Context, secret string) {
 		return
 	}
 
-	if claims.ReqId == "" {
-		setGinLogId(c)
-		c.Abort()
-		c.JSON(http.StatusOK, CreateFailResponse("ReqId为空"))
-		return
-	}
 	expiresAt := time.Unix(claims.ExpiresAt, 0)
 	duration := expiresAt.Sub(time.Now())
 	if duration.Nanoseconds() <= 0 {
@@ -146,11 +140,13 @@ func ValidateHttp(c *gin.Context, secret string) {
 		c.JSON(http.StatusOK, CreateFailResponse("jwtToken过期"))
 		return
 	}
-	if existReqId(claims.ReqId, duration) {
-		setGinLogId(c)
-		c.Abort()
-		c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法重放", nil))
-		return
+	if claims.ReqId != "" {
+		if existReqId(claims.ReqId, duration) {
+			setGinLogId(c)
+			c.Abort()
+			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法重放", nil))
+			return
+		}
 	}
 	setGinLogId(c)
 	c.Next()
