@@ -27,3 +27,12 @@ func GenCtx() context.Context {
 	ctx = SetLogId(ctx)
 	return ctx
 }
+
+func CtxDone(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}

@@ -305,14 +305,33 @@ func TestSleep(t *testing.T) {
 
 func TestForeverSingleGoPool(t *testing.T) {
 	ctx := util.GenCtx()
-	pool, err := util.NewForeverSingleGoPool(ctx, func() {
-		time.Sleep(time.Second)
-		fmt.Println("Now", time.Now())
+	//ctx, cancel := context.WithCancel(ctx)
+	pool, err := util.NewForeverSingleGoPool(ctx, "test", time.Millisecond*500, func(ctx context.Context) {
+		defer util.Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
+			if err != nil {
+				fmt.Println("err", err)
+			}
+		})
+		//time.Sleep(time.Minute * 500)
+		util.Sleep(ctx, time.Millisecond*500)
+		now := time.Now()
+		fmt.Println("Now", now, now.Unix()%2)
+		//fmt.Println("/", 1/(now.Unix()%2))
+		//var object []string
+		//fmt.Println("object[0]", object[0])
+		var object map[string]string
+		object[""] = ""
 	})
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
 	}
-	pool.IsClosed()
-	time.Sleep(time.Minute)
+	time.Sleep(time.Second * 10)
+	fmt.Println("pool.Release() start", pool.IsClosed())
+	//cancel()
+	pool.Release()
+	fmt.Println("pool.Release() end", pool.IsClosed())
+	time.Sleep(time.Second * 3)
+	fmt.Println("pool.Release() after", pool.IsClosed())
+	time.Sleep(time.Second * 3)
 }
