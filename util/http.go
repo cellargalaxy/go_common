@@ -37,7 +37,7 @@ func GetIp() string {
 
 func flushHttpIpAsync(ctx context.Context) {
 	go func() {
-		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
+		defer Defer(func(err interface{}, stack string) {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Warn("异步刷新IP，退出")
 			flushHttpIpAsync(ctx)
 		})

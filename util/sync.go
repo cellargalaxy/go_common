@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func NewForeverSingleGoPool(ctx context.Context, name string, sleep time.Duration, task func(ctx context.Context)) (*ants.Pool, error) {
+func NewForeverSingleGoPool(ctx context.Context, name string, sleep time.Duration, task func(ctx context.Context, cancel func())) (*ants.Pool, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	pool, err := ants.NewPool(1, ants.WithMaxBlockingTasks(1))
 	if pool == nil {
@@ -47,7 +47,7 @@ func NewForeverSingleGoPool(ctx context.Context, name string, sleep time.Duratio
 			}()
 		}()
 
-		task(ctx)
+		task(ctx, cancel)
 	}
 
 	err = pool.Submit(submit)

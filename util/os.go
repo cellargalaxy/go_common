@@ -22,7 +22,7 @@ func InitOs(serverName string) {
 	defaultServerName = serverName
 }
 
-func Defer(ctx context.Context, callback func(ctx context.Context, err interface{}, stack string)) {
+func Defer(callback func(err interface{}, stack string)) {
 	err := recover()
 	var stack string
 	if err != nil {
@@ -30,7 +30,7 @@ func Defer(ctx context.Context, callback func(ctx context.Context, err interface
 		n := runtime.Stack(buf[:], false)
 		stack = string(buf[:n])
 	}
-	callback(ctx, err, stack)
+	callback(err, stack)
 }
 
 func GetServerName() string {
@@ -119,7 +119,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 	stderrReader := bufio.NewReader(stderr)
 	var stdoutLines, stderrLines []string
 	go func() {
-		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
+		defer Defer(func(err interface{}, stack string) {
 			if err != nil {
 				logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 				return
@@ -129,7 +129,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 		stdoutLines, _ = Read2LogByReader(ctx, true, stdoutReader)
 	}()
 	go func() {
-		defer Defer(ctx, func(ctx context.Context, err interface{}, stack string) {
+		defer Defer(func(err interface{}, stack string) {
 			if err != nil {
 				logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 				return
