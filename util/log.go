@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -160,20 +159,18 @@ func GetLogId(ctx context.Context) int64 {
 	return id
 }
 func GetLogIdString(ctx context.Context) string {
-	return strconv.FormatInt(GetLogId(ctx), 10)
+	return Int642String(GetLogId(ctx))
 }
 func SetLogId(ctx context.Context) context.Context {
-	id := GetLogId(ctx)
-	if id <= 0 {
-		id = GenLogId()
-		ctx = SetCtxValue(ctx, LogIdKey, id)
+	if 0 < GetLogId(ctx) {
+		return ctx
 	}
-	return ctx
+	return SetCtxValue(ctx, LogIdKey, GenLogId())
 }
+
+//Deprecated: Watch out for memory leaks.
 func ResetLogId(ctx context.Context) context.Context {
-	id := GenLogId()
-	ctx = SetCtxValue(ctx, LogIdKey, id)
-	return ctx
+	return SetCtxValue(ctx, LogIdKey, GenLogId())
 }
 
 func GenReqId() int64 {
@@ -192,21 +189,23 @@ func GetOrGenReqId(ctx context.Context) int64 {
 	return id
 }
 func GetOrGenReqIdString(ctx context.Context) string {
-	return strconv.FormatInt(GetOrGenReqId(ctx), 10)
+	return Int642String(GetOrGenReqId(ctx))
 }
 func SetReqId(ctx context.Context) context.Context {
-	id := GetReqId(ctx)
-	if id <= 0 {
-		id = GenReqId()
-		ctx = SetCtxValue(ctx, ReqIdKey, id)
+	if 0 < GetReqId(ctx) {
+		return ctx
 	}
-	return ctx
+	return SetCtxValue(ctx, ReqIdKey, GenReqId())
 }
+
+//Deprecated: Watch out for memory leaks.
 func ResetReqId(ctx context.Context) context.Context {
 	id := GenReqId()
 	ctx = SetCtxValue(ctx, ReqIdKey, id)
 	return ctx
 }
+
+//Deprecated: Watch out for memory leaks.
 func RmReqId(ctx context.Context) context.Context {
 	ctx = SetCtxValue(ctx, ReqIdKey, 0)
 	return ctx
