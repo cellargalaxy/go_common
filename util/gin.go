@@ -59,14 +59,12 @@ func setGinLogId(c *gin.Context) {
 		logId = GenLogId()
 	}
 	c.Set(LogIdKey, logId)
-	c.Header(LogIdKey, GetLogIdString(c))
+	c.Header(LogIdKey, Int642String(logId))
 }
 
 func ClaimsHttp(c *gin.Context, secret string) {
-	defer func() {
-		setGinLogId(c)
-		c.Next()
-	}()
+	setGinLogId(c)
+	defer c.Next()
 
 	var token string
 	authorization := c.Request.Header.Get(AuthorizationKey)
@@ -96,6 +94,8 @@ func ClaimsHttp(c *gin.Context, secret string) {
 }
 
 func ValidateHttp(c *gin.Context, secret string) {
+	setGinLogId(c)
+
 	var token string
 	authorization := c.Request.Header.Get(AuthorizationKey)
 	authorizations := strings.SplitN(authorization, " ", 2)
@@ -106,7 +106,6 @@ func ValidateHttp(c *gin.Context, secret string) {
 		token = c.Query(AuthorizationKey)
 	}
 	if token == "" {
-		setGinLogId(c)
 		c.Abort()
 		c.JSON(http.StatusOK, CreateFailResponse("Authorization非法"))
 		return
@@ -114,19 +113,16 @@ func ValidateHttp(c *gin.Context, secret string) {
 	var claims model.Claims
 	jwtToken, err := ParseJWT(c, token, secret, &claims)
 	if err != nil {
-		setGinLogId(c)
 		c.Abort()
 		c.JSON(http.StatusOK, CreateResponseByErr(err))
 		return
 	}
 	if jwtToken == nil {
-		setGinLogId(c)
 		c.Abort()
 		c.JSON(http.StatusOK, CreateFailResponse("jwtToken为空"))
 		return
 	}
 	if !jwtToken.Valid {
-		setGinLogId(c)
 		c.Abort()
 		c.JSON(http.StatusOK, CreateFailResponse("jwtToken非法"))
 		return
@@ -135,14 +131,12 @@ func ValidateHttp(c *gin.Context, secret string) {
 	expiresAt := time.Unix(claims.ExpiresAt, 0)
 	duration := expiresAt.Sub(time.Now())
 	if duration.Nanoseconds() <= 0 {
-		setGinLogId(c)
 		c.Abort()
 		c.JSON(http.StatusOK, CreateFailResponse("jwtToken过期"))
 		return
 	}
 	if claims.ReqId != "" {
 		if existReqId(claims.ReqId, duration) {
-			setGinLogId(c)
 			c.Abort()
 			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法重放", nil))
 			return
@@ -150,12 +144,10 @@ func ValidateHttp(c *gin.Context, secret string) {
 	}
 	if claims.Uri != "" {
 		if claims.Uri != c.Request.RequestURI {
-			setGinLogId(c)
 			c.Abort()
 			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法uri", nil))
 			return
 		}
 	}
-	setGinLogId(c)
 	c.Next()
 }
