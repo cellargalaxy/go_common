@@ -39,7 +39,7 @@ func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, erro
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token, err := jwtToken.SignedString(secretByte)
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT加密异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "hex": fmt.Sprintf("%x", secretByte)}).Error("JWT加密异常")
 		return "", fmt.Errorf("JWT加密异常: %+v", err)
 	}
 	return token, nil
@@ -62,7 +62,7 @@ func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jw
 	}
 
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("JWT解密异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "hex": fmt.Sprintf("%x", secretByte)}).Error("JWT解密异常")
 		return nil, fmt.Errorf("JWT解密异常: %+v", err)
 	}
 	return jwtToken, nil
