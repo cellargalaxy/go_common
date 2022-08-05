@@ -11,6 +11,7 @@ type Claims struct {
 	ServerName string `json:"sn,omitempty"`
 	LogId      int64  `json:"logid,omitempty"`
 	ReqId      string `json:"reqid,omitempty"`
+	Uri        string `json:"uri,omitempty"`
 }
 
 func (this Claims) String() string {

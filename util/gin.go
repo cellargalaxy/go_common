@@ -148,6 +148,14 @@ func ValidateHttp(c *gin.Context, secret string) {
 			return
 		}
 	}
+	if claims.Uri != "" {
+		if claims.Uri != c.Request.RequestURI {
+			setGinLogId(c)
+			c.Abort()
+			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法uri", nil))
+			return
+		}
+	}
 	setGinLogId(c)
 	c.Next()
 }

@@ -135,18 +135,17 @@ func (this *paramHook) Levels() []logrus.Level {
 func GinLog(c *gin.Context) {
 	startTime := time.Now()
 	c.Next()
-	endTime := time.Now()
-	latencyTime := endTime.Sub(startTime)
-	clientIP := c.ClientIP()
+	consume := time.Now().Sub(startTime)
+	ip := c.ClientIP()
 	method := c.Request.Method
-	requestURI := c.Request.RequestURI
+	uri := c.Request.RequestURI
 	status := c.Writer.Status()
 	if status == http.StatusOK {
-		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Info()
+		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Info("gin")
 	} else if status >= 500 {
-		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Error()
+		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Error("gin")
 	} else {
-		logrus.WithContext(c).WithFields(logrus.Fields{"clientIP": clientIP, "method": method, "requestURI": requestURI, "status": status, "latencyTime": latencyTime}).Warn()
+		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Warn("gin")
 	}
 }
 
