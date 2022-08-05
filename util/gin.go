@@ -54,7 +54,11 @@ func SetClaims(ctx context.Context, claims *model.Claims) context.Context {
 }
 
 func setGinLogId(c *gin.Context) {
-	logId := GetLogId(c)
+	var logId int64
+	object, ok := c.Get(LogIdKey)
+	if object != nil && ok {
+		logId, _ = object.(int64)
+	}
 	if logId <= 0 {
 		logId = GenLogId()
 	}
