@@ -54,11 +54,7 @@ func SetClaims(ctx context.Context, claims *model.Claims) context.Context {
 }
 
 func setGinLogId(c *gin.Context) {
-	var logId int64
-	object, ok := c.Get(LogIdKey)
-	if object != nil && ok {
-		logId, _ = object.(int64)
-	}
+	logId := GetLogId(c)
 	if logId <= 0 {
 		logId = GenLogId()
 	}
@@ -84,7 +80,9 @@ func ClaimsHttp(c *gin.Context, secret string) {
 	}
 	var claims model.Claims
 	jwtToken, err := ParseJWT(c, token, secret, &claims)
-	c.Set(LogIdKey, claims.LogId)
+	if claims.LogId > 0 {
+		c.Set(LogIdKey, claims.LogId)
+	}
 	if err != nil {
 		return
 	}
@@ -147,7 +145,10 @@ func ValidateHttp(c *gin.Context, secret string) {
 		}
 	}
 	if claims.Uri != "" {
-		if claims.Uri != c.Request.RequestURI {
+		uri := c.Request.RequestURI
+		uri = strings.Split(uri, "#")[0]
+		uri = strings.Split(uri, "?")[0]
+		if claims.Uri != uri {
 			c.Abort()
 			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法uri", nil))
 			return
