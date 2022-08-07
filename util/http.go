@@ -159,7 +159,7 @@ func CreateHttpClient(timeout, sleep, maxSleep time.Duration, retry int, header 
 			if response != nil {
 				statusCode = response.StatusCode()
 			}
-			isRetry := statusCode >= 500 || err != nil
+			isRetry := statusCode >= 500 || err != nil && !CtxDone(ctx)
 			if isRetry {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "err": err}).Warn("HTTP请求异常，进行重试")
 			}
