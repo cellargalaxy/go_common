@@ -31,6 +31,37 @@ func initHttp(ctx context.Context) {
 	flushHttpIpAsync(ctx)
 }
 
+func DealHttpApiRequest(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(getDealHttpApiRequest(ctx, name, nil, "请求异常"))
+		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, err, "请求异常"))
+	}
+	if response == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(getDealHttpApiRequest(ctx, name, nil, "响应为空"))
+		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, nil, "响应为空"))
+	}
+	statusCode := response.StatusCode()
+	body := response.String()
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(getDealHttpApiRequest(ctx, name, nil, "响应"))
+	if statusCode != http.StatusOK {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(getDealHttpApiRequest(ctx, name, nil, "响应码失败"))
+		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, statusCode, "响应为空"))
+	}
+	return body, nil
+}
+func getDealHttpApiRequest(ctx context.Context, name string, value interface{}, texts ...string) string {
+	var str string
+	if len(texts) == 0 {
+		str = name
+	} else {
+		str = fmt.Sprintf("%s，%s", name, strings.Join(texts, "，"))
+	}
+	if value != nil {
+		str = fmt.Sprintf("%s: %+v", str, value)
+	}
+	return str
+}
+
 func GetIp() string {
 	return ip
 }
