@@ -45,7 +45,7 @@ func DealHttpApiRequest(ctx context.Context, name string, response *resty.Respon
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(getDealHttpApiRequest(ctx, name, nil, "响应"))
 	if statusCode != http.StatusOK {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(getDealHttpApiRequest(ctx, name, nil, "响应码失败"))
-		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, statusCode, "响应为空"))
+		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, statusCode, "响应码失败"))
 	}
 	return body, nil
 }
