@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	DefaultSqlLen = 64
+	DefaultSqlLen = 256
 )
 
 type GormLogHandle interface {
