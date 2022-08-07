@@ -39,3 +39,11 @@ func CtxDone(ctx context.Context) bool {
 		return false
 	}
 }
+
+func CopyCtx(old context.Context) context.Context {
+	ctx := GenCtx()
+	ctx = SetIgnoreErr(ctx, IsIgnoreErr(old))
+	ctx = SetCtxValue(ctx, LogIdKey, GetLogId(old))
+	ctx = SetCtxValue(ctx, ReqIdKey, GetReqId(old))
+	return ctx
+}
