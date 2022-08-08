@@ -15,19 +15,20 @@ import (
 
 const (
 	TimeoutDefault   = time.Second * 3
-	SleepDefault     = time.Second * 5
-	MaxSleepDefault  = time.Minute * 5
+	SleepDefault     = time.Second * 3
 	RetryDefault     = 3
 	UserAgentDefault = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 )
 
+var SpiderSleepsDefault []time.Duration
 var httpClient *resty.Client
 var httpClientOnce sync.Once
-var httpClientRetry *resty.Client
-var httpClientRetryOnce sync.Once
+var httpClientSpider *resty.Client
+var httpClientSpiderOnce sync.Once
 var ip string
 
 func initHttp(ctx context.Context) {
+	SpiderSleepsDefault = []time.Duration{time.Millisecond, time.Second * 2, time.Minute, time.Minute, time.Minute * 5, time.Minute * 15}
 	flushHttpIpAsync(ctx)
 }
 
@@ -118,35 +119,37 @@ func HttpGet(ctx context.Context, url string) string {
 
 func GetHttpClient() *resty.Client {
 	httpClientOnce.Do(func() {
-		httpClient = CreateNotRetryHttpClient(TimeoutDefault)
+		httpClient = CreateTimeoutHttpClient(TimeoutDefault)
 	})
 	return httpClient
 }
 
-func GetHttpClientRetry() *resty.Client {
-	httpClientRetryOnce.Do(func() {
-		httpClientRetry = CreateHttpClient(TimeoutDefault, SleepDefault, MaxSleepDefault, RetryDefault, map[string]string{"User-Agent": UserAgentDefault}, true)
+func GetHttpClientSpider() *resty.Client {
+	httpClientSpiderOnce.Do(func() {
+		httpClientSpider = CreateHttpClient(TimeoutDefault, RetryDefault, SpiderSleepsDefault, nil, true)
 	})
-	return httpClientRetry
+	return httpClientSpider
 }
 
-func CreateNotRetryHttpClient(timeout time.Duration) *resty.Client {
-	return CreateHttpClient(timeout, 0, 0, 0, nil, true)
+func CreateTimeoutHttpClient(timeout time.Duration) *resty.Client {
+	return CreateHttpClient(timeout, 0, nil, nil, true)
 }
 
-func CreateHttpClient(timeout, sleep, maxSleep time.Duration, retry int, header map[string]string, skipTls bool) *resty.Client {
+func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, header map[string]string, skipTls bool) *resty.Client {
 	client := resty.New()
 	if timeout > 0 {
 		client = client.SetTimeout(timeout)
 	}
+	if retry < len(sleeps) {
+		retry = len(sleeps)
+	}
 	if retry > 0 {
 		client = client.SetRetryCount(retry)
-		if sleep > 0 {
-			client = client.SetRetryWaitTime(sleep)
+		sleep := SleepDefault
+		if len(sleeps) > 0 {
+			sleep = sleeps[0]
 		}
-		if maxSleep > 0 {
-			client = client.SetRetryMaxWaitTime(maxSleep)
-		}
+		client = client.SetRetryWaitTime(sleep)
 		client = client.AddRetryCondition(func(response *resty.Response, err error) bool {
 			var ctx context.Context
 			if response != nil && response.Request != nil {
@@ -155,15 +158,22 @@ func CreateHttpClient(timeout, sleep, maxSleep time.Duration, retry int, header 
 			if ctx == nil || GetLogId(ctx) <= 0 {
 				ctx = GenCtx()
 			}
+			if CtxDone(ctx) {
+				return false
+			}
+			if err != nil {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Warn("HTTP请求异常，重试请求")
+				return true
+			}
 			var statusCode int
 			if response != nil {
 				statusCode = response.StatusCode()
 			}
-			isRetry := statusCode >= 500 || err != nil && !CtxDone(ctx)
-			if isRetry {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "err": err}).Warn("HTTP请求异常，进行重试")
+			if statusCode >= 500 {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Warn("HTTP请求异常，重试请求")
+				return true
 			}
-			return isRetry
+			return false
 		})
 		client = client.SetRetryAfter(func(client *resty.Client, response *resty.Response) (time.Duration, error) {
 			var ctx context.Context
@@ -173,29 +183,39 @@ func CreateHttpClient(timeout, sleep, maxSleep time.Duration, retry int, header 
 			if ctx == nil || GetLogId(ctx) <= 0 {
 				ctx = GenCtx()
 			}
+			if CtxDone(ctx) {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("HTTP请求异常，重试超时")
+				return 0, fmt.Errorf("HTTP请求异常，重试超时")
+			}
 			var attempt int
 			if response != nil && response.Request != nil {
 				attempt = response.Request.Attempt
 			}
-			if attempt > retry {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt}).Error("HTTP请求异常，超过最大重试次数")
-				return 0, fmt.Errorf("HTTP请求异常，超过最大重试次数")
+			if retry < attempt {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt}).Error("HTTP请求异常，重试超限")
+				return 0, fmt.Errorf("HTTP请求异常，重试超限")
 			}
 			wareSleep := sleep
-			for i := 0; i < attempt-1; i++ {
-				wareSleep *= 10
+			if 0 <= attempt && attempt < len(sleeps) {
+				wareSleep = sleeps[attempt]
+			} else if len(sleeps) > 0 {
+				wareSleep = sleeps[len(sleeps)-1]
 			}
 			wareSleep = WareDuration(wareSleep)
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt, "wareSleep": wareSleep}).Warn("HTTP请求异常，休眠重试")
 			return wareSleep, nil
 		})
 	}
+	if header == nil {
+		header = make(map[string]string, 1)
+	}
+	if header["User-Agent"] == "" {
+		header["User-Agent"] = UserAgentDefault
+	}
 	for key := range header {
 		client = client.SetHeader(key, header[key])
 	}
-	if skipTls {
-		client = client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-	}
+	client = client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: skipTls})
 	return client
 }
 

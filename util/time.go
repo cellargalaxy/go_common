@@ -41,11 +41,14 @@ func MsTs2Time(ts int64) time.Time {
 }
 
 func WareDuration(duration time.Duration) time.Duration {
-	rate := 1 - (rand.Float64() * rand.Float64())
-	rate = 0.9 + (0.2 * rate)
-	ns := int64(duration)
-	ns = int64(float64(ns) * rate)
-	return time.Duration(ns)
+	ns := float64(duration)
+	a := rand.Float64()
+	b := rand.Float64()
+	d := ns * 0.1 * a * b
+	if a < b {
+		return duration + time.Duration(d)
+	}
+	return duration - time.Duration(d)
 }
 
 func MinDuration(data ...time.Duration) time.Duration {
