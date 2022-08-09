@@ -144,7 +144,7 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 			if response != nil {
 				statusCode = response.StatusCode()
 			}
-			if 400 <= statusCode && statusCode < 500 {
+			if 400 <= statusCode && statusCode < 500 && statusCode != 404 {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，请求封禁")
 				if response.Request != nil {
 					setHttpBan(response.Request.URL, SleepDefault)
