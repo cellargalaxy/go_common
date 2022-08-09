@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/go-resty/resty/v2"
@@ -17,10 +18,11 @@ const (
 	TimeoutDefault   = time.Second * 3
 	SleepDefault     = time.Second * 3
 	RetryDefault     = 3
+	UserAgentKey     = "User-Agent"
 	UserAgentDefault = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 )
 
-var SpiderSleepsDefault []time.Duration
+var SpiderSleepsDefault = []time.Duration{time.Millisecond, time.Second * 2, time.Minute, time.Minute, time.Minute * 5, time.Minute * 15}
 var httpClient *resty.Client
 var httpClientOnce sync.Once
 var httpClientSpider *resty.Client
@@ -28,8 +30,11 @@ var httpClientSpiderOnce sync.Once
 var ip string
 
 func initHttp(ctx context.Context) {
-	SpiderSleepsDefault = []time.Duration{time.Millisecond, time.Second * 2, time.Minute, time.Minute, time.Minute * 5, time.Minute * 15}
-	flushHttpIpAsync(ctx)
+	var err error
+	_, err = NewForeverSingleGoPool(ctx, "HttpGetIp", time.Hour, flushHttpGetIp)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func DealHttpApiRequest(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
@@ -66,75 +71,43 @@ func getDealHttpApiRequest(ctx context.Context, name string, value interface{}, 
 func GetIp() string {
 	return ip
 }
-
-func flushHttpIpAsync(ctx context.Context) {
-	go func() {
-		defer Defer(func(err interface{}, stack string) {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Warn("异步刷新IP，退出")
-			flushHttpIpAsync(ctx)
-		})
-
-		for {
-			FlushHttpIp(ctx)
-			Sleep(ctx, time.Hour)
-		}
-	}()
-}
-
-func FlushHttpIp(ctx context.Context) {
-	for i := 0; i < 10; i++ {
-		object := GetHttpIp(ctx)
+func flushHttpGetIp(ctx context.Context, cancel func()) {
+	for {
+		object := HttpGetIp(ctx)
 		object = strings.TrimSpace(object)
-		if object == "" {
-			Sleep(ctx, time.Second)
-			continue
+		if object != "" {
+			ip = object
 		}
-		ip = object
-		return
+		Sleep(ctx, time.Hour)
+		if CtxDone(ctx) {
+			return
+		}
 	}
 }
-
-func GetHttpIp(ctx context.Context) string {
-	return HttpGet(ctx, "https://ifconfig.co/ip")
-}
-
-func HttpGet(ctx context.Context, url string) string {
-	response, err := GetHttpClient().R().SetContext(ctx).Get(url)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"url": url, "err": err}).Error("HttpGet，请求异常")
-		return ""
-	}
-	if response == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"url": url}).Error("HttpGet，响应为空")
-		return ""
-	}
-	statusCode := response.StatusCode()
-	body := response.String()
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "len(body)": len(body)}).Info("HttpGet，响应")
-	if statusCode != http.StatusOK {
-		return ""
-	}
+func HttpGetIp(ctx context.Context) string {
+	response, err := GetHttpSpiderRequest(ctx).Get("https://ifconfig.co/ip")
+	body, _ := DealHttpApiRequest(ctx, "HttpGetIp", response, err)
 	return body
 }
 
+func GetHttpSpiderRequest(ctx context.Context) *resty.Request {
+	return GetHttpClientSpider().R().SetContext(ctx)
+}
+func GetHttpRequest(ctx context.Context) *resty.Request {
+	return GetHttpClient().R().SetContext(ctx)
+}
 func GetHttpClient() *resty.Client {
 	httpClientOnce.Do(func() {
-		httpClient = CreateTimeoutHttpClient(TimeoutDefault)
+		httpClient = CreateHttpClient(TimeoutDefault, 0, nil, nil, true)
 	})
 	return httpClient
 }
-
 func GetHttpClientSpider() *resty.Client {
 	httpClientSpiderOnce.Do(func() {
-		httpClientSpider = CreateHttpClient(TimeoutDefault, RetryDefault, SpiderSleepsDefault, nil, true)
+		httpClientSpider = CreateHttpClient(TimeoutDefault, 0, SpiderSleepsDefault, nil, true)
 	})
 	return httpClientSpider
 }
-
-func CreateTimeoutHttpClient(timeout time.Duration) *resty.Client {
-	return CreateHttpClient(timeout, 0, nil, nil, true)
-}
-
 func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, header map[string]string, skipTls bool) *resty.Client {
 	client := resty.New()
 	if timeout > 0 {
@@ -145,20 +118,22 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 	}
 	if retry > 0 {
 		client = client.SetRetryCount(retry)
-		sleep := SleepDefault
-		if len(sleeps) > 0 {
-			sleep = sleeps[0]
-		}
-		client = client.SetRetryWaitTime(sleep)
+		client = client.SetRetryWaitTime(GetSleepTime(sleeps, 0))
+		client = client.SetRetryMaxWaitTime(GetSleepTime(sleeps, len(sleeps)))
 		client = client.AddRetryCondition(func(response *resty.Response, err error) bool {
 			var ctx context.Context
 			if response != nil && response.Request != nil {
 				ctx = response.Request.Context()
 			}
-			if ctx == nil || GetLogId(ctx) <= 0 {
+			if ctx == nil {
 				ctx = GenCtx()
 			}
+			ctx = SetLogId(ctx)
 			if CtxDone(ctx) {
+				return false
+			}
+			if errors.Is(err, HttpBan) {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("HTTP请求异常，请求封禁")
 				return false
 			}
 			if err != nil {
@@ -169,8 +144,15 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 			if response != nil {
 				statusCode = response.StatusCode()
 			}
+			if 400 <= statusCode && statusCode < 500 {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，请求封禁")
+				if response.Request != nil {
+					setHttpBan(response.Request.URL, SleepDefault)
+				}
+				return false
+			}
 			if statusCode >= 500 {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Warn("HTTP请求异常，重试请求")
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，重试请求")
 				return true
 			}
 			return false
@@ -180,9 +162,10 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 			if response != nil && response.Request != nil {
 				ctx = response.Request.Context()
 			}
-			if ctx == nil || GetLogId(ctx) <= 0 {
+			if ctx == nil {
 				ctx = GenCtx()
 			}
+			ctx = SetLogId(ctx)
 			if CtxDone(ctx) {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("HTTP请求异常，重试超时")
 				return 0, fmt.Errorf("HTTP请求异常，重试超时")
@@ -195,12 +178,7 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt}).Error("HTTP请求异常，重试超限")
 				return 0, fmt.Errorf("HTTP请求异常，重试超限")
 			}
-			wareSleep := sleep
-			if 0 <= attempt && attempt < len(sleeps) {
-				wareSleep = sleeps[attempt]
-			} else if len(sleeps) > 0 {
-				wareSleep = sleeps[len(sleeps)-1]
-			}
+			wareSleep := GetSleepTime(sleeps, attempt-1)
 			wareSleep = WareDuration(wareSleep)
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt, "wareSleep": wareSleep}).Warn("HTTP请求异常，休眠重试")
 			return wareSleep, nil
@@ -209,14 +187,39 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 	if header == nil {
 		header = make(map[string]string, 1)
 	}
-	if header["User-Agent"] == "" {
-		header["User-Agent"] = UserAgentDefault
+	if header[UserAgentKey] == "" {
+		header[UserAgentKey] = UserAgentDefault
 	}
 	for key := range header {
 		client = client.SetHeader(key, header[key])
 	}
 	client = client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: skipTls})
+	client = client.OnBeforeRequest(func(client *resty.Client, request *resty.Request) error {
+		var ctx context.Context
+		if request != nil {
+			ctx = request.Context()
+		}
+		if ctx == nil {
+			ctx = GenCtx()
+		}
+		ctx = SetLogId(ctx)
+		address := request.URL
+		if getHttpBan(address) {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"address": address}).Warn("HTTP请求异常，请求封禁")
+			return HttpBan
+		}
+		return nil
+	})
 	return client
+}
+func GetSleepTime(sleeps []time.Duration, index int) time.Duration {
+	if len(sleeps) == 0 {
+		return SleepDefault
+	}
+	if index < len(sleeps) {
+		return sleeps[index]
+	}
+	return sleeps[len(sleeps)-1]
 }
 
 func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error) {

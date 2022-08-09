@@ -151,7 +151,7 @@ func TestGenModel2Sql(t *testing.T) {
 
 func TestWareDuration(t *testing.T) {
 	rand.Seed(time.Now().Unix())
-	ns := -20
+	ns := time.Second
 	var object time.Duration
 	for i := 0; i < 100; i++ {
 		object = util.WareDuration(time.Duration(ns))
@@ -325,4 +325,29 @@ func TestForeverSingleGoPool(t *testing.T) {
 	time.Sleep(time.Second * 3)
 	fmt.Println("pool.Release() after", pool.IsClosed())
 	time.Sleep(time.Second * 3)
+}
+
+func TestHttpClientSpider(t *testing.T) {
+	ctx := util.GenCtx()
+	ctx = util.SetCtxValue(ctx, util.LogIdKey, 1)
+	//ctx, _ = context.WithTimeout(ctx, time.Second*7)
+	response, err := util.GetHttpSpiderRequest(ctx).Get("https://wstbd.dynv6.net/server_center/static/html/qq.html?ccc=ddd#eee")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	object, err := util.DealHttpApiRequest(ctx, "TestHttpClientSpider", response, err)
+	time.Sleep(time.Second * 1)
+
+	response, err = util.GetHttpSpiderRequest(ctx).Get("https://wstbd.dynv6.net/server_center/static/html/zz.html?ccc=ddd#eee")
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	object, err = util.DealHttpApiRequest(ctx, "TestHttpClientSpider", response, err)
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	t.Logf("object: %+v\n", object)
 }
