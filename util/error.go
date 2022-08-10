@@ -2,4 +2,4 @@ package util
 
 import "fmt"
 
-var HttpBan = fmt.Errorf("HttpBan")
+var HttpBan = fmt.Errorf("HTTP请求封禁")

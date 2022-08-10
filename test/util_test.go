@@ -6,6 +6,7 @@ import (
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/cellargalaxy/go_common/util"
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
 	"math/rand"
 	"testing"
@@ -336,7 +337,7 @@ func TestHttpClientSpider(t *testing.T) {
 		t.Errorf("err: %+v\n", err)
 		return
 	}
-	object, err := util.DealHttpApiRequest(ctx, "TestHttpClientSpider", response, err)
+	object, err := util.DealHttpResponse(ctx, "TestHttpClientSpider", response, err)
 	time.Sleep(time.Second * 1)
 
 	response, err = util.GetHttpSpiderRequest(ctx).Get("https://wstbd.dynv6.net/server_center/static/html/zz.html?ccc=ddd#eee")
@@ -344,10 +345,32 @@ func TestHttpClientSpider(t *testing.T) {
 		t.Errorf("err: %+v\n", err)
 		return
 	}
-	object, err = util.DealHttpApiRequest(ctx, "TestHttpClientSpider", response, err)
+	object, err = util.DealHttpResponse(ctx, "TestHttpClientSpider", response, err)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
 	}
 	t.Logf("object: %+v\n", object)
+}
+
+func TestHttpApiRetry(t *testing.T) {
+	ctx := util.GenCtx()
+	type Data struct {
+		Ts int64  `json:"ts"`
+		Sn string `json:"sn"`
+	}
+	type Response struct {
+		model.HttpResponse
+		Data Data `json:"data"`
+	}
+	var object Response
+	err := util.HttpApiRetry(ctx, "TestHttpApiRetry", 0, util.SpiderSleepsDefault, &object, func() (*resty.Response, error) {
+		return util.GetHttpSpiderRequest(ctx).Post("https://wstbd.dynv6.net/server_center/ping")
+	})
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	t.Logf("object: %+v\n", object)
+	t.Logf("object: %+v\n", util.ToJsonString(object))
 }

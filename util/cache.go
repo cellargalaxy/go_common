@@ -3,7 +3,7 @@ package util
 import (
 	"fmt"
 	"github.com/patrickmn/go-cache"
-	"net/url"
+	"strings"
 	"time"
 )
 
@@ -24,27 +24,15 @@ func existReqId(reqId string, duration time.Duration) bool {
 }
 
 func getHttpBan(address string) bool {
-	u, err := url.Parse(address)
-	if u == nil || err != nil {
-		return false
-	}
-	host := u.Host
-	if host == "" {
-		return false
-	}
-	key := fmt.Sprintf("httpBan-%s", host)
+	address = strings.Split(address, "#")[0]
+	address = strings.Split(address, "?")[0]
+	key := fmt.Sprintf("httpBan-%s", address)
 	_, ok := localCache.Get(key)
 	return ok
 }
 func setHttpBan(address string, duration time.Duration) {
-	u, err := url.Parse(address)
-	if u == nil || err != nil {
-		return
-	}
-	host := u.Host
-	if host == "" {
-		return
-	}
-	key := fmt.Sprintf("httpBan-%s", host)
+	address = strings.Split(address, "#")[0]
+	address = strings.Split(address, "?")[0]
+	key := fmt.Sprintf("httpBan-%s", address)
 	localCache.Set(key, "", duration)
 }

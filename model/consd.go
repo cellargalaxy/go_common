@@ -1,9 +1,10 @@
-package util
+package model
 
 const (
-	HttpSuccessCode   = 1
-	HttpFailCode      = 2
-	HttpReRequestCode = 3
+	HttpSuccessCode    = 1
+	HttpFailCode       = 2
+	HttpReRequestCode  = 3
+	HttpIllegalUriCode = 4
 )
 
 const (

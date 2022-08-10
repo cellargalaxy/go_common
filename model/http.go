@@ -1,6 +1,8 @@
 package model
 
 import (
+	"context"
+	"fmt"
 	"github.com/golang-jwt/jwt"
 	json "github.com/json-iterator/go"
 )
@@ -17,6 +19,25 @@ type Claims struct {
 func (this Claims) String() string {
 	data, _ := json.MarshalToString(this)
 	return data
+}
+
+type HttpResponse struct {
+	Code int         `json:"code"`
+	Msg  string      `json:"msg"`
+	Data interface{} `json:"data"`
+}
+
+func (this HttpResponse) String() string {
+	data, _ := json.MarshalToString(this)
+	return data
+}
+func (this *HttpResponse) Success(ctx context.Context) error {
+	switch this.Code {
+	case HttpSuccessCode, HttpReRequestCode:
+		return nil
+	default:
+		return fmt.Errorf("HTTP响应失败: %+v", this)
+	}
 }
 
 type HttpRequestParam struct {

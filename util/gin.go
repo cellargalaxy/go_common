@@ -16,29 +16,29 @@ const (
 	ClaimsKey        = "claims"
 )
 
-func CreateResponseByErr(err error) map[string]interface{} {
-	return CreateResponse(nil, err)
+func NewHttpResponseByErr(err error) model.HttpResponse {
+	return NewHttpResponse(nil, err)
 }
 
-func CreateFailResponse(message string) map[string]interface{} {
-	return createResponse(HttpFailCode, message, nil)
+func NewFailHttpResponse(message string) model.HttpResponse {
+	return newHttpResponse(model.HttpFailCode, message, nil)
 }
 
-func CreateResponse(data interface{}, err error) map[string]interface{} {
+func NewHttpResponse(data interface{}, err error) model.HttpResponse {
 	if err == nil {
-		return createResponse(HttpSuccessCode, "", data)
+		return newHttpResponse(model.HttpSuccessCode, "", data)
 	} else {
-		return createResponse(HttpFailCode, err.Error(), data)
+		return newHttpResponse(model.HttpFailCode, err.Error(), data)
 	}
 }
 
-func createResponse(code int, msg string, data interface{}) map[string]interface{} {
-	return gin.H{"code": code, "msg": msg, "data": data}
+func newHttpResponse(code int, msg string, data interface{}) model.HttpResponse {
+	return model.HttpResponse{Code: code, Msg: msg, Data: data}
 }
 
 func Ping(c *gin.Context) {
 	logrus.WithContext(c).WithFields(logrus.Fields{"claims": GetClaims(c)}).Info("Ping")
-	c.JSON(http.StatusOK, CreateResponse(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName()}, nil))
+	c.JSON(http.StatusOK, NewHttpResponse(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName()}, nil))
 }
 
 func GetClaims(ctx context.Context) *model.Claims {
@@ -109,24 +109,24 @@ func ValidateHttp(c *gin.Context, secret string) {
 	}
 	if token == "" {
 		c.Abort()
-		c.JSON(http.StatusOK, CreateFailResponse("Authorization非法"))
+		c.JSON(http.StatusOK, NewFailHttpResponse("Authorization非法"))
 		return
 	}
 	var claims model.Claims
 	jwtToken, err := ParseJWT(c, token, secret, &claims)
 	if err != nil {
 		c.Abort()
-		c.JSON(http.StatusOK, CreateResponseByErr(err))
+		c.JSON(http.StatusOK, NewHttpResponseByErr(err))
 		return
 	}
 	if jwtToken == nil {
 		c.Abort()
-		c.JSON(http.StatusOK, CreateFailResponse("jwtToken为空"))
+		c.JSON(http.StatusOK, NewFailHttpResponse("jwtToken为空"))
 		return
 	}
 	if !jwtToken.Valid {
 		c.Abort()
-		c.JSON(http.StatusOK, CreateFailResponse("jwtToken非法"))
+		c.JSON(http.StatusOK, NewFailHttpResponse("jwtToken非法"))
 		return
 	}
 
@@ -134,13 +134,13 @@ func ValidateHttp(c *gin.Context, secret string) {
 	duration := expiresAt.Sub(time.Now())
 	if duration.Nanoseconds() <= 0 {
 		c.Abort()
-		c.JSON(http.StatusOK, CreateFailResponse("jwtToken过期"))
+		c.JSON(http.StatusOK, NewFailHttpResponse("jwtToken过期"))
 		return
 	}
 	if claims.ReqId != "" {
 		if existReqId(claims.ReqId, duration) {
 			c.Abort()
-			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法重放", nil))
+			c.JSON(http.StatusOK, newHttpResponse(model.HttpReRequestCode, "请求非法重放", nil))
 			return
 		}
 	}
@@ -150,7 +150,7 @@ func ValidateHttp(c *gin.Context, secret string) {
 		uri = strings.Split(uri, "?")[0]
 		if claims.Uri != uri {
 			c.Abort()
-			c.JSON(http.StatusOK, createResponse(HttpReRequestCode, "请求非法uri", nil))
+			c.JSON(http.StatusOK, newHttpResponse(model.HttpIllegalUriCode, "请求非法uri", nil))
 			return
 		}
 	}

@@ -84,13 +84,11 @@ func GetEnvBool(key string, defaultValue bool) bool {
 https://mojotv.cn/2019/01/17/golang-signal-restart-deamom
 https://bytedance.feishu.cn/wiki/wikcnaJLXgEn5xeJWF7VSUY0qNg#xbNNDs
 */
-func ExitSignal(fun func(ctx context.Context, signal os.Signal)) {
+func ExitSignal(fun func(signal os.Signal)) {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGKILL)
 	go func() {
-		s := <-signalChan
-		ctx := GenCtx()
-		fun(ctx, s)
+		fun(<-signalChan)
 		os.Exit(0)
 	}()
 }
@@ -101,17 +99,17 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
 	}
 	err = cmd.Start()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
 	}
 
@@ -121,8 +119,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 	go func() {
 		defer Defer(func(err interface{}, stack string) {
 			if err != nil {
-				logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
-				return
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 			}
 		})
 
@@ -131,8 +128,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 	go func() {
 		defer Defer(func(err interface{}, stack string) {
 			if err != nil {
-				logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
-				return
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 			}
 		})
 
@@ -141,7 +137,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 
 	err = cmd.Wait()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 		return stdoutLines, stderrLines, fmt.Errorf("执行命令，异常: %+v", err)
 	}
 

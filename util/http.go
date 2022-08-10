@@ -37,25 +37,60 @@ func initHttp(ctx context.Context) {
 	}
 }
 
-func DealHttpApiRequest(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
+type HttpResponseInter interface {
+	Success(ctx context.Context) error
+}
+
+func HttpApiRetry(ctx context.Context, name string, retry int, sleeps []time.Duration, response HttpResponseInter, newResponse func() (*resty.Response, error)) error {
+	if retry < len(sleeps) {
+		retry = len(sleeps)
+	}
+	var err error
+	for i := 0; i < retry; i++ {
+		err = HttpApi(ctx, name, response, newResponse)
+		if err == nil {
+			return nil
+		}
+		wareSleep := WareDuration(GetSleepTime(sleeps, i))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "wareSleep": wareSleep}).Error(genHttpText(ctx, name, nil, "异常", "重试请求"))
+		Sleep(ctx, wareSleep)
+	}
+	return err
+}
+func HttpApi(ctx context.Context, name string, response HttpResponseInter, newResponse func() (*resty.Response, error)) error {
+	resp, err := newResponse()
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(getDealHttpApiRequest(ctx, name, nil, "请求异常"))
-		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, err, "请求异常"))
+		return err
+	}
+	body, err := DealHttpResponse(ctx, name, resp, err)
+	if err != nil {
+		return err
+	}
+	err = UnmarshalJsonString(body, response)
+	if err != nil {
+		return err
+	}
+	return response.Success(ctx)
+}
+func DealHttpResponse(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(genHttpText(ctx, name, nil, "请求异常"))
+		return "", fmt.Errorf(genHttpText(ctx, name, err, "请求异常"))
 	}
 	if response == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(getDealHttpApiRequest(ctx, name, nil, "响应为空"))
-		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, nil, "响应为空"))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(genHttpText(ctx, name, nil, "响应为空"))
+		return "", fmt.Errorf(genHttpText(ctx, name, nil, "响应为空"))
 	}
 	statusCode := response.StatusCode()
 	body := response.String()
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(getDealHttpApiRequest(ctx, name, nil, "响应"))
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(genHttpText(ctx, name, nil, "响应"))
 	if statusCode != http.StatusOK {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(getDealHttpApiRequest(ctx, name, nil, "响应码失败"))
-		return "", fmt.Errorf(getDealHttpApiRequest(ctx, name, statusCode, "响应码失败"))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(genHttpText(ctx, name, nil, "响应码失败"))
+		return "", fmt.Errorf(genHttpText(ctx, name, statusCode, "响应码失败"))
 	}
 	return body, nil
 }
-func getDealHttpApiRequest(ctx context.Context, name string, value interface{}, texts ...string) string {
+func genHttpText(ctx context.Context, name string, value interface{}, texts ...string) string {
 	var str string
 	if len(texts) == 0 {
 		str = name
@@ -86,7 +121,7 @@ func flushHttpGetIp(ctx context.Context, cancel func()) {
 }
 func HttpGetIp(ctx context.Context) string {
 	response, err := GetHttpSpiderRequest(ctx).Get("https://ifconfig.co/ip")
-	body, _ := DealHttpApiRequest(ctx, "HttpGetIp", response, err)
+	body, _ := DealHttpResponse(ctx, "HttpGetIp", response, err)
 	return body
 }
 
@@ -144,6 +179,10 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 			if response != nil {
 				statusCode = response.StatusCode()
 			}
+			if statusCode == 404 {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，请求404")
+				return false
+			}
 			if 400 <= statusCode && statusCode < 500 && statusCode != 404 {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，请求封禁")
 				if response.Request != nil {
@@ -151,7 +190,7 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 				}
 				return false
 			}
-			if statusCode >= 500 {
+			if 500 <= statusCode {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，重试请求")
 				return true
 			}
@@ -184,16 +223,6 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 			return wareSleep, nil
 		})
 	}
-	if header == nil {
-		header = make(map[string]string, 1)
-	}
-	if header[UserAgentKey] == "" {
-		header[UserAgentKey] = UserAgentDefault
-	}
-	for key := range header {
-		client = client.SetHeader(key, header[key])
-	}
-	client = client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: skipTls})
 	client = client.OnBeforeRequest(func(client *resty.Client, request *resty.Request) error {
 		var ctx context.Context
 		if request != nil {
@@ -210,6 +239,16 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 		}
 		return nil
 	})
+	if header == nil {
+		header = make(map[string]string, 1)
+	}
+	if header[UserAgentKey] == "" {
+		header[UserAgentKey] = UserAgentDefault
+	}
+	for key := range header {
+		client = client.SetHeader(key, header[key])
+	}
+	client = client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: skipTls})
 	return client
 }
 func GetSleepTime(sleeps []time.Duration, index int) time.Duration {
