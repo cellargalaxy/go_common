@@ -31,7 +31,7 @@ func (this HttpResponse) String() string {
 	data, _ := json.MarshalToString(this)
 	return data
 }
-func (this *HttpResponse) Success(ctx context.Context) error {
+func (this *HttpResponse) HttpSuccess(ctx context.Context) error {
 	switch this.Code {
 	case HttpSuccessCode, HttpReRequestCode:
 		return nil

@@ -17,12 +17,12 @@ import (
 const (
 	TimeoutDefault   = time.Second * 3
 	SleepDefault     = time.Second * 3
-	RetryDefault     = 3
+	TryDefault       = 3
 	UserAgentKey     = "User-Agent"
 	UserAgentDefault = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 )
 
-var SpiderSleepsDefault = []time.Duration{time.Millisecond, time.Second * 2, time.Minute, time.Minute, time.Minute * 5, time.Minute * 15}
+var SpiderSleepsDefault = []time.Duration{0, time.Second * 2, time.Minute, time.Minute, time.Minute * 5, time.Minute * 15}
 var httpClient *resty.Client
 var httpClientOnce sync.Once
 var httpClientSpider *resty.Client
@@ -38,15 +38,15 @@ func initHttp(ctx context.Context) {
 }
 
 type HttpResponseInter interface {
-	Success(ctx context.Context) error
+	HttpSuccess(ctx context.Context) error
 }
 
-func HttpApiRetry(ctx context.Context, name string, retry int, sleeps []time.Duration, response HttpResponseInter, newResponse func() (*resty.Response, error)) error {
-	if retry < len(sleeps) {
-		retry = len(sleeps)
+func HttpApiWithTry(ctx context.Context, name string, try int, sleeps []time.Duration, response HttpResponseInter, newResponse func() (*resty.Response, error)) error {
+	if try < len(sleeps)+1 {
+		try = len(sleeps) + 1
 	}
 	var err error
-	for i := 0; i < retry; i++ {
+	for i := 0; i < try; i++ {
 		err = HttpApi(ctx, name, response, newResponse)
 		if err == nil {
 			return nil
@@ -70,7 +70,7 @@ func HttpApi(ctx context.Context, name string, response HttpResponseInter, newRe
 	if err != nil {
 		return err
 	}
-	return response.Success(ctx)
+	return response.HttpSuccess(ctx)
 }
 func DealHttpResponse(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
 	if err != nil {
@@ -107,7 +107,12 @@ func GetIp() string {
 	return ip
 }
 func flushHttpGetIp(ctx context.Context, cancel func()) {
+	defer Defer(func(err interface{}, stack string) {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
+	})
+
 	for {
+		ctx := ResetLogId(ctx)
 		object := HttpGetIp(ctx)
 		object = strings.TrimSpace(object)
 		if object != "" {
@@ -143,16 +148,16 @@ func GetHttpClientSpider() *resty.Client {
 	})
 	return httpClientSpider
 }
-func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, header map[string]string, skipTls bool) *resty.Client {
+func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, header map[string]string, skipTls bool) *resty.Client {
 	client := resty.New()
 	if timeout > 0 {
 		client = client.SetTimeout(timeout)
 	}
-	if retry < len(sleeps) {
-		retry = len(sleeps)
+	if try < len(sleeps)+1 {
+		try = len(sleeps) + 1
 	}
-	if retry > 0 {
-		client = client.SetRetryCount(retry)
+	if try > 1 {
+		client = client.SetRetryCount(try - 1)
 		client = client.SetRetryWaitTime(GetSleepTime(sleeps, 0))
 		client = client.SetRetryMaxWaitTime(GetSleepTime(sleeps, len(sleeps)))
 		client = client.AddRetryCondition(func(response *resty.Response, err error) bool {
@@ -213,7 +218,7 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 			if response != nil && response.Request != nil {
 				attempt = response.Request.Attempt
 			}
-			if retry < attempt {
+			if try <= attempt {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt}).Error("HTTP请求异常，重试超限")
 				return 0, fmt.Errorf("HTTP请求异常，重试超限")
 			}
