@@ -364,7 +364,7 @@ func TestHttpApiRetry(t *testing.T) {
 		Data Data `json:"data"`
 	}
 	var object Response
-	err := util.HttpApiRetry(ctx, "TestHttpApiRetry", 0, util.SpiderSleepsDefault, &object, func() (*resty.Response, error) {
+	err := util.HttpApiWithTry(ctx, "TestHttpApiRetry", 0, util.SpiderSleepsDefault, &object, func() (*resty.Response, error) {
 		return util.GetHttpSpiderRequest(ctx).Post("https://wstbd.dynv6.net/server_center/ping")
 	})
 	if err != nil {
