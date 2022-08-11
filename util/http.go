@@ -255,10 +255,14 @@ func GetSleepTime(sleeps []time.Duration, index int) time.Duration {
 	if len(sleeps) == 0 {
 		return SleepDefault
 	}
+	sleep := sleeps[len(sleeps)-1]
 	if index < len(sleeps) {
-		return sleeps[index]
+		sleep = sleeps[index]
 	}
-	return sleeps[len(sleeps)-1]
+	if sleep <= 0 {
+		sleep = 1
+	}
+	return sleep
 }
 
 func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error) {
