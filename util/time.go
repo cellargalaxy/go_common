@@ -78,6 +78,9 @@ func MaxDuration(data ...time.Duration) time.Duration {
 }
 
 func Sleep(ctx context.Context, sleep time.Duration) {
+	if sleep <= 0 {
+		return
+	}
 	select {
 	case <-time.After(sleep):
 	case <-ctx.Done():
