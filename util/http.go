@@ -253,7 +253,7 @@ func CreateHttpClient(timeout time.Duration, retry int, sleeps []time.Duration, 
 }
 func GetSleepTime(sleeps []time.Duration, index int) time.Duration {
 	if len(sleeps) == 0 {
-		return SleepDefault
+		return 1
 	}
 	sleep := sleeps[len(sleeps)-1]
 	if index < len(sleeps) {
