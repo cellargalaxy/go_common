@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/golang-jwt/jwt"
 	json "github.com/json-iterator/go"
+	"github.com/sirupsen/logrus"
 )
 
 type Claims struct {
@@ -36,6 +37,7 @@ func (this *HttpResponse) HttpSuccess(ctx context.Context) error {
 	case HttpSuccessCode, HttpReRequestCode:
 		return nil
 	default:
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"this": this}).Error("HTTP响应失败")
 		return fmt.Errorf("HTTP响应失败: %+v", this)
 	}
 }
