@@ -22,7 +22,7 @@ const (
 	UserAgentDefault = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 )
 
-var SpiderSleepsDefault = []time.Duration{0, time.Second * 2, time.Minute, time.Minute, time.Minute * 5, time.Minute * 15}
+var SpiderSleepsDefault = []time.Duration{0, time.Second * 2, time.Second * 10, time.Minute, time.Minute * 5, time.Minute * 15}
 var httpClient *resty.Client
 var httpClientOnce sync.Once
 var httpClientSpider *resty.Client

@@ -14,22 +14,31 @@ const DateLayout_2006_01_02_15_04_05 = "2006-01-02 15:04:05"
 const DateLayout_060102150405_0000000 = "060102150405.000000"
 
 var MaxTime = time.Unix(253402271999, 0)
-var beijingLoc = time.FixedZone("GMT", 8*3600)
+var E8Loc = time.FixedZone("GMT", 8*3600)
+var UTCLoc = time.UTC
 
-func Parse2BeijingTime(ctx context.Context, layout, value string) (time.Time, error) {
-	date, err := time.ParseInLocation(layout, value, beijingLoc)
+func ParseStr2Time(ctx context.Context, layout, value string, loc *time.Location) (time.Time, error) {
+	date, err := time.ParseInLocation(layout, value, loc)
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("解析北京时间字符串异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("解析时间字符串异常")
 	}
 	return date, err
 }
 
-func Parse2BeijingTs(ctx context.Context, layout, value string) (int64, error) {
-	date, err := Parse2BeijingTime(ctx, layout, value)
+func ParseStr2Ts(ctx context.Context, layout, value string, loc *time.Location) (int64, error) {
+	date, err := ParseStr2Time(ctx, layout, value, loc)
 	if err != nil {
 		return 0, err
 	}
 	return date.Unix(), err
+}
+
+func ParseStr2MsTs(ctx context.Context, layout, value string, loc *time.Location) (int64, error) {
+	date, err := ParseStr2Time(ctx, layout, value, loc)
+	if err != nil {
+		return 0, err
+	}
+	return Time2MsTs(date), err
 }
 
 func Time2MsTs(date time.Time) int64 {
