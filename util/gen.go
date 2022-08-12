@@ -35,7 +35,7 @@ func ParseStringId(ctx context.Context, id string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("解析ID，非法长度ID")
 	}
 	id = id[:12] + "." + id[12:]
-	return Parse2BeijingTime(ctx, DateLayout_060102150405_0000000, id)
+	return ParseStr2Time(ctx, DateLayout_060102150405_0000000, id, E8Loc)
 }
 
 func GenGoLabel(ctx context.Context, code string, labels ...string) string {
