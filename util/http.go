@@ -59,9 +59,6 @@ func HttpApiWithTry(ctx context.Context, name string, try int, sleeps []time.Dur
 }
 func HttpApi(ctx context.Context, name string, response HttpResponseInter, newResponse func() (*resty.Response, error)) error {
 	resp, err := newResponse()
-	if err != nil {
-		return err
-	}
 	body, err := DealHttpResponse(ctx, name, resp, err)
 	if err != nil {
 		return err
