@@ -41,9 +41,9 @@ func TestFindNum(t *testing.T) {
 	t.Logf("object: %+v\n", object)
 }
 
-func TestParseBeijingTime(t *testing.T) {
+func TestParseStr2Time(t *testing.T) {
 	ctx := context.Background()
-	object, err := util.Parse2BeijingTime(ctx, util.DateLayout_2006_01_02, "2021-03-21")
+	object, err := util.ParseStr2Time(ctx, util.DateLayout_2006_01_02, "2021-03-21", util.UTCLoc)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
