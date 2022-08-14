@@ -12,6 +12,16 @@ const (
 	BoolNo  = 2
 )
 
+func Bool2Const(value bool) int {
+	if value {
+		return BoolYes
+	}
+	return BoolNo
+}
+func Const2Bool(value int) bool {
+	return value == BoolYes
+}
+
 const (
 	PingPath   = "/ping"
 	StaticPath = "/static"
