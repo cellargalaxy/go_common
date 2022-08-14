@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
 	"github.com/wumansgy/goEncrypt"
+	"hash/crc32"
 	"time"
 )
 
@@ -32,10 +33,7 @@ func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (st
 	return GenJWT(ctx, secret, claims)
 }
 func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, error) {
-	secretByte, err := EnSha256(ctx, []byte(secret))
-	if err != nil {
-		return "", err
-	}
+	secretByte := EnSha256(ctx, []byte(secret))
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token, err := jwtToken.SignedString(secretByte)
 	if err != nil {
@@ -45,10 +43,8 @@ func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, erro
 	return token, nil
 }
 func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.Token, error) {
-	secretByte, err := EnSha256(ctx, []byte(secret))
-	if err != nil {
-		return nil, err
-	}
+	var err error
+	secretByte := EnSha256(ctx, []byte(secret))
 
 	var jwtToken *jwt.Token
 	if claims != nil {
@@ -89,14 +85,8 @@ func EnAesCbcString(ctx context.Context, text, secret string) (string, error) {
 }
 
 func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
-	secret, err := EnSha256(ctx, secret)
-	if err != nil {
-		return nil, err
-	}
-	ivAes, err := EnMd5(ctx, secret)
-	if err != nil {
-		return nil, err
-	}
+	secret = EnSha256(ctx, secret)
+	ivAes := EnMd5(ctx, secret)
 	de, err := goEncrypt.AesCbcDecrypt(data, secret, ivAes)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("AesCbc解密异常")
@@ -105,14 +95,8 @@ func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	return de, nil
 }
 func EnAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
-	secret, err := EnSha256(ctx, secret)
-	if err != nil {
-		return nil, err
-	}
-	ivAes, err := EnMd5(ctx, secret)
-	if err != nil {
-		return nil, err
-	}
+	secret = EnSha256(ctx, secret)
+	ivAes := EnMd5(ctx, secret)
 	en, err := goEncrypt.AesCbcEncrypt(data, secret, ivAes)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("AesCbc加密异常")
@@ -134,15 +118,28 @@ func DeBase64(ctx context.Context, text string) ([]byte, error) {
 }
 
 //256
-func EnSha256(ctx context.Context, data []byte) ([]byte, error) {
+func EnSha256(ctx context.Context, data []byte) []byte {
 	hash := sha256.New()
 	hash.Write(data)
-	return hash.Sum(nil), nil
+	return hash.Sum(nil)
+}
+func EnSha256Hex(ctx context.Context, data string) string {
+	return fmt.Sprintf("%x", EnSha256(ctx, []byte(data)))
 }
 
 //128
-func EnMd5(ctx context.Context, data []byte) ([]byte, error) {
+func EnMd5(ctx context.Context, data []byte) []byte {
 	hash := md5.New()
 	hash.Write(data)
-	return hash.Sum(nil), nil
+	return hash.Sum(nil)
+}
+func EnMd5Hex(ctx context.Context, data string) string {
+	return fmt.Sprintf("%x", EnMd5(ctx, []byte(data)))
+}
+
+func EnCrc32(ctx context.Context, data []byte) uint32 {
+	return crc32.ChecksumIEEE(data)
+}
+func EnCrc32Hex(ctx context.Context, data string) string {
+	return fmt.Sprintf("%x", EnCrc32(ctx, []byte(data)))
 }
