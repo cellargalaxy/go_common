@@ -7,18 +7,20 @@ const (
 	HttpIllegalUriCode = 4
 )
 
+type Bool int
+
 const (
-	BoolYes = 1
-	BoolNo  = 2
+	BoolYes Bool = 1
+	BoolNo  Bool = 2
 )
 
-func Bool2Const(value bool) int {
+func Bool2Const(value bool) Bool {
 	if value {
 		return BoolYes
 	}
 	return BoolNo
 }
-func Const2Bool(value int) bool {
+func Const2Bool(value Bool) bool {
 	return value == BoolYes
 }
 
