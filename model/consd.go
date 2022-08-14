@@ -8,10 +8,17 @@ const (
 )
 
 const (
+	BoolYes = 1
+	BoolNo  = 2
+)
+
+const (
 	PingPath   = "/ping"
 	StaticPath = "/static"
 	DebugPath  = "/debug"
 	PprofPath  = "/pprof"
 )
 
-const DbMaxBatchAddLength = 1000
+const (
+	DbMaxBatchAddLength = 1000
+)
