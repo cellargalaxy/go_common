@@ -188,7 +188,7 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 			if 400 <= statusCode && statusCode < 500 && statusCode != 404 {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，请求封禁")
 				if response.Request != nil {
-					setHttpBan(response.Request.URL, SleepDefault)
+					setHttpBan(ctx, response.Request.URL, SleepDefault)
 				}
 				return false
 			}
@@ -235,7 +235,7 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 		}
 		ctx = SetLogId(ctx)
 		address := request.URL
-		if getHttpBan(address) {
+		if getHttpBan(ctx, address) {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"address": address}).Warn("HTTP请求异常，请求封禁")
 			return HttpBan
 		}

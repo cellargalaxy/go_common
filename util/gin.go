@@ -138,7 +138,7 @@ func ValidateHttp(c *gin.Context, secret string) {
 		return
 	}
 	if claims.ReqId != "" {
-		if existReqId(claims.ReqId, duration) {
+		if existReqId(c, claims.ReqId, duration) {
 			c.Abort()
 			c.JSON(http.StatusOK, newHttpResponse(model.HttpReRequestCode, "请求非法重放", nil))
 			return
