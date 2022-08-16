@@ -98,3 +98,23 @@ func (this *LocalCache) GetWithTimeout(ctx context.Context, key string, duration
 	this.Set(ctx, key, Object{object: object, cacheTime: time.Now()}, MaxTime.Sub(time.Now()))
 	return object, nil
 }
+
+//true:拿到锁；false:拿不到锁
+func (this *LocalCache) TryLock(ctx context.Context, key string, duration time.Duration) bool {
+	this.lock.Lock()
+	defer this.lock.Unlock()
+
+	_, ok := this.Get(ctx, key)
+	if ok {
+		return false
+	}
+
+	this.Set(ctx, key, struct{}{}, duration)
+	return true
+}
+func (this *LocalCache) UnLock(ctx context.Context, key string) {
+	this.lock.Lock()
+	defer this.lock.Unlock()
+
+	this.Del(ctx, key)
+}
