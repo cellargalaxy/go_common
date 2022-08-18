@@ -95,7 +95,7 @@ func (this *LocalCache) GetWithTimeout(ctx context.Context, key string, duration
 		return obj.object, nil
 	}
 
-	this.Set(ctx, key, Object{object: object, cacheTime: time.Now()}, MaxTime.Sub(time.Now()))
+	this.Set(ctx, key, Object{object: object, cacheTime: time.Now()}, DurationMax)
 	return object, nil
 }
 
