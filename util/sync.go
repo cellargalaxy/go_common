@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+func ReleasePool(pools ...*ants.Pool) {
+	for i := range pools {
+		if pools[i] == nil {
+			continue
+		}
+		pools[i].Release()
+	}
+}
+
 func NewForeverSingleGoPool(ctx context.Context, name string, sleep time.Duration, task func(ctx context.Context, cancel func())) (*ants.Pool, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	pool, err := ants.NewPool(1, ants.WithMaxBlockingTasks(1))
@@ -18,7 +27,7 @@ func NewForeverSingleGoPool(ctx context.Context, name string, sleep time.Duratio
 	}
 	if err != nil {
 		cancel()
-		pool.Release()
+		ReleasePool(pool)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name, "err": err}).Error("创建常驻单协程池，异常")
 		return nil, fmt.Errorf("创建常驻单协程池，异常: %+v", err)
 	}
@@ -30,7 +39,7 @@ func NewForeverSingleGoPool(ctx context.Context, name string, sleep time.Duratio
 			go func() {
 				Sleep(ctx, sleep)
 				if CtxDone(ctx) {
-					pool.Release()
+					ReleasePool(pool)
 					logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Info("常驻单协程池，结束")
 					return
 				}
@@ -53,7 +62,7 @@ func NewForeverSingleGoPool(ctx context.Context, name string, sleep time.Duratio
 	err = pool.Submit(submit)
 	if err != nil {
 		cancel()
-		pool.Release()
+		ReleasePool(pool)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name, "err": err}).Error("创建常驻单协程池，添加任务异常")
 		return nil, fmt.Errorf("创建常驻单协程池，添加任务异常: %+v", err)
 	}
