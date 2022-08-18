@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+func Cancel(cancels ...func()) {
+	for i := range cancels {
+		if cancels[i] == nil {
+			continue
+		}
+		cancels[i]()
+	}
+}
+
 func ReleasePool(pools ...*ants.Pool) {
 	for i := range pools {
 		if pools[i] == nil {
