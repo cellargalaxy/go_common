@@ -9,19 +9,20 @@ const (
 
 type Bool int
 
+func (this Bool) Bool() bool {
+	return this == BoolYes
+}
+
 const (
 	BoolYes Bool = 1
 	BoolNo  Bool = 2
 )
 
-func Bool2Const(value bool) Bool {
+func NewBool(value bool) Bool {
 	if value {
 		return BoolYes
 	}
 	return BoolNo
-}
-func Const2Bool(value Bool) bool {
-	return value == BoolYes
 }
 
 const (
