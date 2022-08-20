@@ -22,7 +22,7 @@ func String2Int(value string) int {
 }
 
 func Float642String(value float64) string {
-	return strconv.FormatFloat(value, 'f', 16, 64)
+	return fmt.Sprint(value)
 }
 
 func Int642String(value int64) string {
