@@ -22,7 +22,14 @@ func String2Int(value string) int {
 }
 
 func Float642String(value float64) string {
-	return fmt.Sprint(value)
+	str := fmt.Sprint(value)
+	if !strings.Contains(str, "e") {
+		return str
+	}
+	str = strconv.FormatFloat(value, 'f', 16, 64)
+	str = strings.TrimRight(str, "0")
+	str = strings.TrimRight(str, ".")
+	return str
 }
 
 func Int642String(value int64) string {
