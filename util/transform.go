@@ -7,6 +7,10 @@ import (
 )
 
 func String2Float64(value string) float64 {
+	if strings.Contains(value, ".") {
+		value = strings.TrimRight(value, "0")
+		value = strings.TrimRight(value, ".")
+	}
 	data, _ := strconv.ParseFloat(value, 64)
 	return data
 }
@@ -22,11 +26,40 @@ func String2Int(value string) int {
 }
 
 func Float642String(value float64) string {
-	str := fmt.Sprint(value)
-	if !strings.Contains(str, "e") {
+	var str string
+	//str = fmt.Sprint(value)
+	//if !strings.Contains(str, "e") {
+	//	if strings.Contains(str, ".") {
+	//		str = strings.TrimRight(str, "0")
+	//		str = strings.TrimRight(str, ".")
+	//	}
+	//	ss := strings.Split(str, ".")
+	//	if len(ss) == 2 && len(ss[1]) < 16 {
+	//		return str
+	//	}
+	//}
+
+	str = strconv.FormatFloat(value, 'f', 16, 64)
+	str = strings.TrimRight(str, "0")
+	str = strings.TrimRight(str, ".")
+	ss := strings.Split(str, ".")
+	if len(ss) != 2 {
 		return str
 	}
-	str = strconv.FormatFloat(value, 'f', 16, 64)
+	list := strings.Split(ss[1], "")
+	if len(list) < 16 {
+		return str
+	}
+	list = list[:len(list)-1]
+	for i := len(list) - 1; i >= 0; i-- {
+		if list[i] == "9" {
+			list[i] = "0"
+		} else {
+			list[i] = Int2String(String2Int(list[i]) + 1)
+			break
+		}
+	}
+	str = fmt.Sprintf("%s.%s", ss[0], strings.Join(list, ""))
 	str = strings.TrimRight(str, "0")
 	str = strings.TrimRight(str, ".")
 	return str
