@@ -51,11 +51,16 @@ func Float642String(value float64) string {
 		return str
 	}
 	list = list[:len(list)-1]
-	for i := len(list) - 1; i >= 0; i-- {
-		if list[i] == "9" {
-			list[i] = "0"
-		} else {
+	for i := len(list) - 2; i >= 0; i-- {
+		if list[i] != "9" && list[i+1] == "9" {
 			list[i] = Int2String(String2Int(list[i]) + 1)
+			list = list[:i+1]
+			break
+		}
+	}
+	for i := len(list) - 2; i >= 0; i-- {
+		if list[i] != "0" && list[i+1] == "0" {
+			list = list[:i+1]
 			break
 		}
 	}
