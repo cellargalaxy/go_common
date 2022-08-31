@@ -64,11 +64,7 @@ func TestMsTs2Time(t *testing.T) {
 
 func TestEnSHa256(t *testing.T) {
 	ctx := context.Background()
-	data, err := util.EnSha256(ctx, []byte("aa"))
-	if err != nil {
-		t.Errorf("err: %+v\n", err)
-		return
-	}
+	data := util.EnSha256(ctx, []byte("aa"))
 	t.Logf("data: %+v\n", data)
 }
 
@@ -292,20 +288,21 @@ func TestSleep(t *testing.T) {
 
 func TestForeverSingleGoPool(t *testing.T) {
 	ctx := util.GenCtx()
-	//ctx, cancel := context.WithCancel(ctx)
-	pool, err := util.NewForeverSingleGoPool(ctx, "test", time.Millisecond*500, func(ctx context.Context, cancel func()) {
+	//ctx, _ = context.WithTimeout(ctx, time.Second*7)
+	var err error
+	_, err = util.NewForeverSingleGoPool(ctx, "test", time.Millisecond*500, func(ctx context.Context, pool *util.SingleGoPool) {
 		defer util.Defer(func(err interface{}, stack string) {
 			if err != nil {
 				fmt.Println("err", err)
 			}
 		})
 		//time.Sleep(time.Minute * 500)
-		util.Sleep(ctx, time.Millisecond*500)
+		//util.Sleep(ctx, time.Millisecond*500)
 		now := time.Now()
 		fmt.Println("Now", now)
-		if now.Unix()%5 == 0 {
-			fmt.Println("cancel")
-			cancel()
+		if now.Unix()%15 == 0 {
+			//fmt.Println("cancel")
+			//pool.Cancel(ctx)
 			return
 		}
 		//fmt.Println("/", 1/(now.Unix()%2))
@@ -318,14 +315,8 @@ func TestForeverSingleGoPool(t *testing.T) {
 		t.Errorf("err: %+v\n", err)
 		return
 	}
-	time.Sleep(time.Second * 10)
-	fmt.Println("pool.Release() start", pool.IsClosed())
-	//cancel()
-	//pool.Release()
-	fmt.Println("pool.Release() end", pool.IsClosed())
-	time.Sleep(time.Second * 3)
-	fmt.Println("pool.Release() after", pool.IsClosed())
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 60)
+
 }
 
 func TestHttpClientSpider(t *testing.T) {

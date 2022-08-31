@@ -103,7 +103,7 @@ func genHttpText(ctx context.Context, name string, value interface{}, texts ...s
 func GetIp() string {
 	return ip
 }
-func flushHttpGetIp(ctx context.Context, cancel func()) {
+func flushHttpGetIp(ctx context.Context, pool *SingleGoPool) {
 	defer Defer(func(err interface{}, stack string) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
 	})
