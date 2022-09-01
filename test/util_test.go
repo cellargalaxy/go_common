@@ -286,11 +286,54 @@ func TestSleep(t *testing.T) {
 	fmt.Println(time.Now().Sub(start))
 }
 
-func TestForeverSingleGoPool(t *testing.T) {
+func TestOnceSingleGoPool(t *testing.T) {
 	ctx := util.GenCtx()
 	//ctx, _ = context.WithTimeout(ctx, time.Second*7)
-	var err error
-	_, err = util.NewForeverSingleGoPool(ctx, "test", time.Millisecond*500, func(ctx context.Context, pool *util.SingleGoPool) {
+	pool, err := util.NewOnceSingleGoPool(ctx, "test", func(ctx context.Context, pool *util.SingleGoPool) {
+		defer util.Defer(func(err interface{}, stack string) {
+			if err != nil {
+				fmt.Println("err", err)
+			}
+		})
+		//time.Sleep(time.Minute * 500)
+		//util.Sleep(ctx, time.Millisecond*500)
+		now := time.Now()
+		fmt.Println("Now", now)
+		if now.Unix()%15 == 0 {
+			//fmt.Println("cancel")
+			//pool.Cancel(ctx)
+			return
+		}
+		//fmt.Println("/", 1/(now.Unix()%2))
+		//var object []string
+		//fmt.Println("object[0]", object[0])
+		//var object map[string]string
+		//object[""] = ""
+	})
+	time.Sleep(time.Second * 2)
+	pool.AddOnceTask(ctx, "test", func(ctx context.Context, pool *util.SingleGoPool) {
+		defer util.Defer(func(err interface{}, stack string) {
+			if err != nil {
+				fmt.Println("err", err)
+			}
+		})
+		//time.Sleep(time.Minute * 500)
+		//util.Sleep(ctx, time.Millisecond*500)
+		now := time.Now()
+		fmt.Println("Now", now)
+		if now.Unix()%15 == 0 {
+			//fmt.Println("cancel")
+			//pool.Cancel(ctx)
+			return
+		}
+		//fmt.Println("/", 1/(now.Unix()%2))
+		//var object []string
+		//fmt.Println("object[0]", object[0])
+		//var object map[string]string
+		//object[""] = ""
+	})
+	time.Sleep(time.Second * 2)
+	pool.AddOnceTask(ctx, "test", func(ctx context.Context, pool *util.SingleGoPool) {
 		defer util.Defer(func(err interface{}, stack string) {
 			if err != nil {
 				fmt.Println("err", err)
@@ -316,7 +359,38 @@ func TestForeverSingleGoPool(t *testing.T) {
 		return
 	}
 	time.Sleep(time.Second * 60)
+}
 
+func TestDaemonSingleGoPool(t *testing.T) {
+	ctx := util.GenCtx()
+	//ctx, _ = context.WithTimeout(ctx, time.Second*7)
+	var err error
+	_, err = util.NewDaemonSingleGoPool(ctx, "test", time.Millisecond*500, func(ctx context.Context, pool *util.SingleGoPool) {
+		defer util.Defer(func(err interface{}, stack string) {
+			if err != nil {
+				fmt.Println("err", err)
+			}
+		})
+		//time.Sleep(time.Minute * 500)
+		//util.Sleep(ctx, time.Millisecond*500)
+		now := time.Now()
+		fmt.Println("Now", now)
+		if now.Unix()%15 == 0 {
+			//fmt.Println("cancel")
+			//pool.Cancel(ctx)
+			return
+		}
+		//fmt.Println("/", 1/(now.Unix()%2))
+		//var object []string
+		//fmt.Println("object[0]", object[0])
+		//var object map[string]string
+		//object[""] = ""
+	})
+	if err != nil {
+		t.Errorf("err: %+v\n", err)
+		return
+	}
+	time.Sleep(time.Second * 60)
 }
 
 func TestHttpClientSpider(t *testing.T) {

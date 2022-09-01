@@ -31,7 +31,7 @@ var ip string
 
 func initHttp(ctx context.Context) {
 	var err error
-	_, err = NewForeverSingleGoPool(ctx, "HttpGetIp", time.Hour, flushHttpGetIp)
+	_, err = NewDaemonSingleGoPool(ctx, "HttpGetIp", time.Hour, flushHttpGetIp)
 	if err != nil {
 		panic(err)
 	}
