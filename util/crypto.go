@@ -24,7 +24,7 @@ func GenAuthorizationJWT(ctx context.Context, expire time.Duration, secret strin
 func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (string, error) {
 	now := time.Now()
 	var claims model.Claims
-	claims.IssuedAt = now.Unix()
+	claims.IssuedAt = now.Add(-expire).Unix()
 	claims.ExpiresAt = now.Add(expire).Unix()
 	claims.Ip = GetIp()
 	claims.ServerName = GetServerName()
