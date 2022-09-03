@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/cellargalaxy/go_common/util"
 	"github.com/sirupsen/logrus"
+	"sort"
 	"strings"
 )
 
@@ -37,10 +38,24 @@ func Log2Csv(ctx context.Context, logPath, csvPath string) error {
 		text := strings.Split(params[len(params)-1], "] ")[1]
 		params[len(params)-1] = strings.Split(params[len(params)-1], "] ")[0]
 		object := []string{date, params[0], params[1], params[2], params[3], params[4], text}
-		for j := 5; j < len(params); j++ {
-			object = append(object, params[j])
-		}
+		params = params[5:]
+		sort.Sort(logs(params))
+		object = append(object, params...)
 		list = append(list, object)
 	}
 	return util.WriteCsv2DataByFile(ctx, list, csvPath)
+}
+
+type logs []string
+
+func (this logs) Len() int {
+	return len(this)
+}
+
+func (this logs) Swap(i, j int) {
+	this[i], this[j] = this[j], this[i]
+}
+
+func (this logs) Less(i, j int) bool {
+	return len(this[i]) < len(this[j])
 }

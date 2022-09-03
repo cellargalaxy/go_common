@@ -69,5 +69,5 @@ func TestBookmarkCsv2Xml(t *testing.T) {
 
 func TestLog2Csv(t *testing.T) {
 	ctx := util.GenCtx()
-	tool.Log2Csv(ctx, "log/go_common/log.log", "log.csv")
+	tool.Log2Csv(ctx, "/home/meltsprout/code/mmm/test/log/mmm/log.log", "log.csv")
 }
