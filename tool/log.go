@@ -10,14 +10,18 @@ import (
 )
 
 func Log2Csv(ctx context.Context, logPath, csvPath string) error {
-	fileInfo := util.GetFileInfo(ctx, logPath)
-	if fileInfo == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"logPath": logPath}).Error("转换日志，文件不存在")
-		return fmt.Errorf("转换日志，文件不存在")
-	}
-	content, err := util.ReadFileWithString(ctx, logPath, "")
-	if err != nil {
-		return err
+	var err error
+	content := logPath
+	if strings.HasSuffix(logPath, "log") {
+		fileInfo := util.GetFileInfo(ctx, logPath)
+		if fileInfo == nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"logPath": logPath}).Error("转换日志，文件不存在")
+			return fmt.Errorf("转换日志，文件不存在")
+		}
+		content, err = util.ReadFileWithString(ctx, logPath, "")
+		if err != nil {
+			return err
+		}
 	}
 	lines := strings.Split(content, "\n")
 	list := make([][]string, 0, len(lines))
