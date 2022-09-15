@@ -198,6 +198,9 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, task func(ctx context
 
 	return nil
 }
+func (this *SingleGoPool) Doing(ctx context.Context) bool {
+	return this.taskName != ""
+}
 func (this *SingleGoPool) IsClosed(ctx context.Context) bool {
 	isClosed := this.pool.IsClosed()
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "isClosed": isClosed}).Info("单协程池")

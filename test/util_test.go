@@ -295,19 +295,22 @@ func TestOnceSingleGoPool(t *testing.T) {
 				fmt.Println("err", err)
 			}
 		})
-		fmt.Println("Sleep")
-		util.Sleep(ctx, time.Minute*500)
-		if util.CtxDone(ctx) {
-			fmt.Println("CtxDone")
-			return
-		}
+		//fmt.Println("Sleep")
+		//util.Sleep(ctx, time.Minute*500)
+		//if util.CtxDone(ctx) {
+		//	fmt.Println("CtxDone")
+		//	return
+		//}
 		//util.Sleep(ctx, time.Millisecond*500)
-		now := time.Now()
-		fmt.Println("Now", now)
-		if now.Unix()%15 == 0 {
-			//fmt.Println("cancel")
-			//pool.Cancel(ctx)
-			return
+		for {
+			now := time.Now()
+			fmt.Println("Now", now)
+			if now.Unix()%15 == 0 {
+				fmt.Println("cancel")
+				//pool.Cancel(ctx)
+				return
+			}
+			time.Sleep(time.Millisecond * 500)
 		}
 		//fmt.Println("/", 1/(now.Unix()%2))
 		//var object []string
@@ -315,7 +318,10 @@ func TestOnceSingleGoPool(t *testing.T) {
 		//var object map[string]string
 		//object[""] = ""
 	})
-	time.Sleep(time.Second * 2)
+	fmt.Println("doing", pool.Doing(ctx))
+	time.Sleep(time.Second * 20)
+	fmt.Println("doing", pool.Doing(ctx))
+	time.Sleep(time.Second * 60)
 	pool.AddOnceTask(ctx, "???", func(ctx context.Context, pool *util.SingleGoPool) {
 		defer util.Defer(func(err interface{}, stack string) {
 			if err != nil {
@@ -349,7 +355,7 @@ func TestDaemonSingleGoPool(t *testing.T) {
 	ctx := util.GenCtx()
 	//ctx, _ = context.WithTimeout(ctx, time.Second*7)
 	var err error
-	_, err = util.NewDaemonSingleGoPool(ctx, "test", time.Millisecond*500, func(ctx context.Context, pool *util.SingleGoPool) {
+	pool, err := util.NewDaemonSingleGoPool(ctx, "test", time.Millisecond*500, func(ctx context.Context, pool *util.SingleGoPool) {
 		defer util.Defer(func(err interface{}, stack string) {
 			if err != nil {
 				fmt.Println("err", err)
@@ -374,6 +380,9 @@ func TestDaemonSingleGoPool(t *testing.T) {
 		t.Errorf("err: %+v\n", err)
 		return
 	}
+	fmt.Println("doing", pool.Doing(ctx))
+	time.Sleep(time.Second * 20)
+	fmt.Println("doing", pool.Doing(ctx))
 	time.Sleep(time.Second * 60)
 }
 
