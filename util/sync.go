@@ -96,6 +96,11 @@ type SingleGoPool struct {
 }
 
 func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
+	if name == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Error("单协程池，守护任务名称为空")
+		return fmt.Errorf("单协程池，守护任务名称为空")
+	}
+
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
@@ -154,6 +159,11 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 	return nil
 }
 func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
+	if name == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Error("单协程池，单次任务名称为空")
+		return fmt.Errorf("单协程池，单次任务名称为空")
+	}
+
 	this.lock.Lock()
 	defer this.lock.Unlock()
 

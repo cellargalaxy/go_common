@@ -329,7 +329,7 @@ func TestOnceSingleGoPool(t *testing.T) {
 	time.Sleep(time.Second * 3)
 	//fmt.Println("doing", pool.Doing(ctx))
 	//time.Sleep(time.Second * 60)
-	pool.AddOnceTask(ctx, "???", func(ctx context.Context, pool *util.SingleGoPool) {
+	pool.AddOnceTask(ctx, "test", func(ctx context.Context, pool *util.SingleGoPool) {
 		defer util.Defer(func(err interface{}, stack string) {
 			if err != nil {
 				fmt.Println("err", err)
