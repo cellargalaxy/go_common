@@ -105,7 +105,7 @@ func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep 
 	defer this.lock.Unlock()
 
 	if this.taskName == name {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Info("单协程池，守护任务已添加")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，守护任务已添加")
 		return nil
 	}
 
@@ -168,7 +168,7 @@ func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task fun
 	defer this.lock.Unlock()
 
 	if this.taskName == name {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Info("单协程池，单次任务已添加")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，单次任务已添加")
 		return nil
 	}
 
