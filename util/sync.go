@@ -110,7 +110,6 @@ func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep 
 	}
 
 	CancelPool(ctx, this)
-	this.taskName = name
 	ctx, this.cancel = context.WithCancel(ctx)
 
 	var err error
@@ -119,6 +118,7 @@ func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep 
 		CancelPool(ctx, this)
 		return err
 	}
+	this.taskName = name
 
 	return nil
 }
@@ -130,7 +130,11 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 			} else {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err, "stack": stack}).Error("单协程池，退出")
 			}
-			this.taskName = ""
+			this.lock.Lock()
+			defer this.lock.Unlock()
+			if this.taskName == name {
+				this.taskName = ""
+			}
 
 			go func() {
 				Sleep(ctx, sleep)
@@ -173,19 +177,19 @@ func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task fun
 	}
 
 	CancelPool(ctx, this)
-	this.taskName = name
 	ctx, this.cancel = context.WithCancel(ctx)
 
 	var err error
-	err = this.addOnceTask(ctx, task)
+	err = this.addOnceTask(ctx, name, task)
 	if err != nil {
 		CancelPool(ctx, this)
 		return err
 	}
+	this.taskName = name
 
 	return nil
 }
-func (this *SingleGoPool) addOnceTask(ctx context.Context, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
+func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
 		defer Defer(func(err interface{}, stack string) {
 			if err == nil {
@@ -193,7 +197,11 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, task func(cancelCtx c
 			} else {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err, "stack": stack}).Error("单协程池，退出")
 			}
-			this.taskName = ""
+			this.lock.Lock()
+			defer this.lock.Unlock()
+			if this.taskName == name {
+				this.taskName = ""
+			}
 		})
 
 		task(ctx, this)

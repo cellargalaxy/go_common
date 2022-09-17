@@ -39,8 +39,11 @@ func Log2Csv(ctx context.Context, logPath, csvPath string) error {
 		date := lines[i][:25]
 		lines[i] = lines[i][27:]
 		params := strings.Split(lines[i], "] [")
-		text := strings.Split(params[len(params)-1], "] ")[1]
-		params[len(params)-1] = strings.Split(params[len(params)-1], "] ")[0]
+		var text string
+		if len(strings.Split(params[len(params)-1], "]")) > 1 {
+			text = strings.Split(params[len(params)-1], "]")[1]
+		}
+		params[len(params)-1] = strings.Split(params[len(params)-1], "]")[0]
 		object := []string{date, params[0], params[1], params[2], params[3], params[4], text}
 		params = params[5:]
 		sort.Sort(logs(params))

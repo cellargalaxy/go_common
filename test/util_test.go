@@ -305,18 +305,18 @@ func TestOnceSingleGoPool(t *testing.T) {
 		for {
 			now := time.Now()
 			fmt.Println("Now1", now)
-			fmt.Println("CtxDone", util.CtxDone(ctx))
-			fmt.Println(ctx.Deadline())
-			fmt.Println()
+			//fmt.Println("CtxDone", util.CtxDone(ctx))
+			//fmt.Println(ctx.Deadline())
+			//fmt.Println()
 			if now.Unix()%15 == 0 {
-				//fmt.Println("cancel")
+				fmt.Println("cancel 1")
 				//pool.Cancel(ctx)
-				//return
-			}
-			if util.CtxDone(ctx) {
-				fmt.Println("util.CtxDone(ctx), return")
 				return
 			}
+			//if util.CtxDone(ctx) {
+			//	fmt.Println("util.CtxDone(ctx), return 1")
+			//	return
+			//}
 			time.Sleep(time.Millisecond * 500)
 		}
 		//fmt.Println("/", 1/(now.Unix()%2))
@@ -340,18 +340,18 @@ func TestOnceSingleGoPool(t *testing.T) {
 		for {
 			now := time.Now()
 			fmt.Println("Now2", now)
-			fmt.Println("CtxDone", util.CtxDone(ctx))
-			fmt.Println(ctx.Deadline())
-			fmt.Println()
+			//fmt.Println("CtxDone", util.CtxDone(ctx))
+			//fmt.Println(ctx.Deadline())
+			//fmt.Println()
 			if now.Unix()%15 == 0 {
-				//fmt.Println("cancel")
-				//pool.Cancel(ctx)
-				//return
-			}
-			if util.CtxDone(ctx) {
-				fmt.Println("util.CtxDone(ctx), return")
+				fmt.Println("cancel 2")
+				pool.Cancel(ctx)
 				return
 			}
+			//if util.CtxDone(ctx) {
+			//	fmt.Println("util.CtxDone(ctx), return 2")
+			//	return
+			//}
 			time.Sleep(time.Millisecond * 500)
 		}
 		//fmt.Println("/", 1/(now.Unix()%2))
@@ -359,6 +359,19 @@ func TestOnceSingleGoPool(t *testing.T) {
 		//fmt.Println("object[0]", object[0])
 		//var object map[string]string
 		//object[""] = ""
+	})
+	time.Sleep(time.Second * 3)
+	pool.AddOnceTask(ctx, "???", func(ctx context.Context, pool *util.SingleGoPool) {
+		defer util.Defer(func(err interface{}, stack string) {
+			if err != nil {
+				fmt.Println("err", err)
+			}
+		})
+		for {
+			now := time.Now()
+			fmt.Println("Now3", now)
+			time.Sleep(time.Millisecond * 500)
+		}
 	})
 
 	if err != nil {
