@@ -345,7 +345,7 @@ func TestOnceSingleGoPool(t *testing.T) {
 			//fmt.Println()
 			if now.Unix()%15 == 0 {
 				fmt.Println("cancel 2")
-				pool.Cancel(ctx)
+				//pool.Cancel(ctx)
 				return
 			}
 			//if util.CtxDone(ctx) {

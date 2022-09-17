@@ -130,13 +130,14 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 			} else {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err, "stack": stack}).Error("单协程池，退出")
 			}
-			this.lock.Lock()
-			defer this.lock.Unlock()
-			if this.taskName == name {
-				this.taskName = ""
-			}
 
 			go func() {
+				this.lock.Lock()
+				if this.taskName == name {
+					this.taskName = ""
+				}
+				this.lock.Unlock()
+
 				Sleep(ctx, sleep)
 				if CtxDone(ctx) {
 					logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，已取消")
@@ -197,11 +198,14 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task fun
 			} else {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err, "stack": stack}).Error("单协程池，退出")
 			}
-			this.lock.Lock()
-			defer this.lock.Unlock()
-			if this.taskName == name {
-				this.taskName = ""
-			}
+
+			go func() {
+				this.lock.Lock()
+				if this.taskName == name {
+					this.taskName = ""
+				}
+				this.lock.Unlock()
+			}()
 		})
 
 		task(ctx, this)
