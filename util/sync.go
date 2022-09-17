@@ -45,7 +45,7 @@ func ReleasePool(ctx context.Context, pools ...*SingleGoPool) {
 	}
 }
 
-func NewOnceSingleGoPool(ctx context.Context, name string, task func(ctx context.Context, pool *SingleGoPool)) (*SingleGoPool, error) {
+func NewOnceSingleGoPool(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) (*SingleGoPool, error) {
 	pool, err := NewSingleGoPool(ctx, "")
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func NewOnceSingleGoPool(ctx context.Context, name string, task func(ctx context
 	return pool, nil
 }
 
-func NewDaemonSingleGoPool(ctx context.Context, name string, sleep time.Duration, task func(ctx context.Context, pool *SingleGoPool)) (*SingleGoPool, error) {
+func NewDaemonSingleGoPool(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) (*SingleGoPool, error) {
 	pool, err := NewSingleGoPool(ctx, "")
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ type SingleGoPool struct {
 	cancel   func()
 }
 
-func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(ctx context.Context, pool *SingleGoPool)) error {
+func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
@@ -117,7 +117,7 @@ func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep 
 
 	return nil
 }
-func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(ctx context.Context, pool *SingleGoPool)) error {
+func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
 		defer Defer(func(err interface{}, stack string) {
 			if err == nil {
@@ -153,7 +153,7 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 
 	return nil
 }
-func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task func(ctx context.Context, pool *SingleGoPool)) error {
+func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
@@ -175,7 +175,7 @@ func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task fun
 
 	return nil
 }
-func (this *SingleGoPool) addOnceTask(ctx context.Context, task func(ctx context.Context, pool *SingleGoPool)) error {
+func (this *SingleGoPool) addOnceTask(ctx context.Context, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
 		defer Defer(func(err interface{}, stack string) {
 			if err == nil {
