@@ -64,11 +64,7 @@ func TestMsTs2Time(t *testing.T) {
 
 func TestEnSHa256(t *testing.T) {
 	ctx := context.Background()
-	data, err := util.EnSha256(ctx, []byte("aa"))
-	if err != nil {
-		t.Errorf("err: %+v\n", err)
-		return
-	}
+	data := util.EnSha256(ctx, []byte("aa"))
 	t.Logf("data: %+v\n", data)
 }
 

@@ -31,7 +31,7 @@ var ip string
 
 func initHttp(ctx context.Context) {
 	var err error
-	_, err = NewForeverSingleGoPool(ctx, "HttpGetIp", time.Hour, flushHttpGetIp)
+	_, err = NewDaemonSingleGoPool(ctx, "HttpGetIp", time.Hour, flushHttpGetIp)
 	if err != nil {
 		panic(err)
 	}
@@ -65,6 +65,7 @@ func HttpApi(ctx context.Context, name string, response HttpResponseInter, newRe
 	}
 	err = UnmarshalJsonString(body, response)
 	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"body": body}).Error(genHttpText(ctx, name, nil, "反序列化异常"))
 		return err
 	}
 	return response.HttpSuccess(ctx)
@@ -103,7 +104,7 @@ func genHttpText(ctx context.Context, name string, value interface{}, texts ...s
 func GetIp() string {
 	return ip
 }
-func flushHttpGetIp(ctx context.Context, cancel func()) {
+func flushHttpGetIp(ctx context.Context, pool *SingleGoPool) {
 	defer Defer(func(err interface{}, stack string) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
 	})

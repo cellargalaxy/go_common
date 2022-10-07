@@ -66,3 +66,8 @@ func TestBookmarkCsv2Xml(t *testing.T) {
 	ctx := util.GenCtx()
 	tool.BookmarkCsv2Xml(ctx, "bookmark_back.csv", "bookmark.html")
 }
+
+func TestLog2Csv(t *testing.T) {
+	ctx := util.GenCtx()
+	tool.Log2Csv(ctx, `/home/meltsprout/code/mmm/log/mmm_job/tmp.log`, "log.csv")
+}

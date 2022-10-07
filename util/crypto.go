@@ -24,7 +24,7 @@ func GenAuthorizationJWT(ctx context.Context, expire time.Duration, secret strin
 func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (string, error) {
 	now := time.Now()
 	var claims model.Claims
-	claims.IssuedAt = now.Unix()
+	claims.IssuedAt = now.Add(-expire).Unix()
 	claims.ExpiresAt = now.Add(expire).Unix()
 	claims.Ip = GetIp()
 	claims.ServerName = GetServerName()
@@ -117,7 +117,7 @@ func DeBase64(ctx context.Context, text string) ([]byte, error) {
 	return data, nil
 }
 
-//256
+// 256
 func EnSha256(ctx context.Context, data []byte) []byte {
 	hash := sha256.New()
 	hash.Write(data)
@@ -127,7 +127,7 @@ func EnSha256Hex(ctx context.Context, data string) string {
 	return fmt.Sprintf("%x", EnSha256(ctx, []byte(data)))
 }
 
-//128
+// 128
 func EnMd5(ctx context.Context, data []byte) []byte {
 	hash := md5.New()
 	hash.Write(data)
