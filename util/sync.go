@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/panjf2000/ants/v2"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
@@ -75,12 +76,12 @@ func NewSingleGoPool(ctx context.Context, name string) (*SingleGoPool, error) {
 	pool, err := ants.NewPool(1, ants.WithMaxBlockingTasks(1))
 	if pool == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Error("创建单协程池，为空")
-		return nil, fmt.Errorf("创建单协程池，为空")
+		return nil, errors.Errorf("创建单协程池，为空")
 	}
 	if err != nil {
 		Release(pool)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name, "err": err}).Error("创建单协程池，异常")
-		return nil, fmt.Errorf("创建单协程池，异常: %+v", err)
+		return nil, errors.Errorf("创建单协程池，异常: %+v", err)
 	}
 
 	return &SingleGoPool{poolName: name, pool: pool}, nil
@@ -98,7 +99,7 @@ type SingleGoPool struct {
 func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	if name == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Error("单协程池，守护任务名称为空")
-		return fmt.Errorf("单协程池，守护任务名称为空")
+		return errors.Errorf("单协程池，守护任务名称为空")
 	}
 
 	this.lock.Lock()
@@ -158,7 +159,7 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 	if err != nil {
 		CancelPool(ctx, this)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err}).Error("单协程池，添加守护任务异常")
-		return fmt.Errorf("单协程池，添加守护任务异常: %+v", err)
+		return errors.Errorf("单协程池，添加守护任务异常: %+v", err)
 	}
 
 	return nil
@@ -166,7 +167,7 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	if name == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Error("单协程池，单次任务名称为空")
-		return fmt.Errorf("单协程池，单次任务名称为空")
+		return errors.Errorf("单协程池，单次任务名称为空")
 	}
 
 	this.lock.Lock()
@@ -215,7 +216,7 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task fun
 	if err != nil {
 		CancelPool(ctx, this)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err}).Error("单协程池，添加单次任务异常")
-		return fmt.Errorf("单协程池，添加单次任务异常: %+v", err)
+		return errors.Errorf("单协程池，添加单次任务异常: %+v", err)
 	}
 
 	return nil

@@ -2,9 +2,9 @@ package model
 
 import (
 	"context"
-	"fmt"
 	"github.com/golang-jwt/jwt"
 	json "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -38,7 +38,7 @@ func (this *HttpResponse) HttpSuccess(ctx context.Context) error {
 		return nil
 	default:
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"this": this}).Error("HTTP响应失败")
-		return fmt.Errorf("HTTP响应失败: %+v", this)
+		return errors.Errorf("HTTP响应失败: %+v", this)
 	}
 }
 

@@ -16,7 +16,7 @@ func IsNanInf(value float64) bool {
 	return math.IsNaN(value) || math.IsInf(value, 0)
 }
 
-//斜率,截距
+// 斜率,截距
 func LeastSquare(points [][]float64) (float64, float64) {
 	if len(points) <= 1 {
 		return 0, 0
@@ -34,7 +34,7 @@ func LeastSquare(points [][]float64) (float64, float64) {
 	return k, a
 }
 
-//max,min
+// max,min
 func MaxAndMins(data []float64) (float64, float64) {
 	if len(data) == 0 {
 		return 0, 0
@@ -53,7 +53,7 @@ func MaxAndMins(data []float64) (float64, float64) {
 	return max, min
 }
 
-//max,min
+// max,min
 func MaxAndMin(data ...float64) (float64, float64) {
 	return MaxAndMins(data)
 }
@@ -163,4 +163,9 @@ func SameTickFloat64(ctx context.Context, value1, value2, tick float64) bool {
 
 func SameTickFloat32(ctx context.Context, value1, value2, tick float32) bool {
 	return SameTickFloat64(ctx, float64(value1), float64(value2), float64(tick))
+}
+
+// 四舍五入
+func Float64RoundInt64(value float64) int64 {
+	return int64(math.Floor(value + 0.5))
 }

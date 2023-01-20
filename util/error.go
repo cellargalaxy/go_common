@@ -1,5 +1,5 @@
 package util
 
-import "fmt"
+import "github.com/pkg/errors"
 
-var HttpBan = fmt.Errorf("HTTP请求封禁")
+var HttpBan = errors.Errorf("HTTP请求封禁")

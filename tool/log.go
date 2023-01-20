@@ -2,8 +2,8 @@ package tool
 
 import (
 	"context"
-	"fmt"
 	"github.com/cellargalaxy/go_common/util"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sort"
 	"strings"
@@ -16,7 +16,7 @@ func Log2Csv(ctx context.Context, logPath, csvPath string) error {
 		fileInfo := util.GetFileInfo(ctx, logPath)
 		if fileInfo == nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"logPath": logPath}).Error("转换日志，文件不存在")
-			return fmt.Errorf("转换日志，文件不存在")
+			return errors.Errorf("转换日志，文件不存在")
 		}
 		content, err = util.ReadFileWithString(ctx, logPath, "")
 		if err != nil {

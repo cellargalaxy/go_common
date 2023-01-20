@@ -1,15 +1,15 @@
 package util
 
 import (
-	"fmt"
 	json "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 func ToJson(x interface{}) []byte {
 	bytes, err := json.Marshal(x)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("序列化json异常")
+		logrus.WithFields(logrus.Fields{"x": x, "err": errors.WithStack(err)}).Error("序列化json异常")
 	}
 	return bytes
 }
@@ -17,7 +17,7 @@ func ToJson(x interface{}) []byte {
 func ToJsonIndent(x interface{}) []byte {
 	bytes, err := json.MarshalIndent(x, "", "  ")
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("序列化json异常")
+		logrus.WithFields(logrus.Fields{"x": x, "err": errors.WithStack(err)}).Error("序列化json异常")
 	}
 	return bytes
 }
@@ -35,8 +35,8 @@ func ToJsonIndentString(x interface{}) string {
 func UnmarshalJson(data []byte, v interface{}) error {
 	err := json.Unmarshal(data, v)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("反序列化json异常")
-		return fmt.Errorf("反序列化json异常: %+v", err)
+		logrus.WithFields(logrus.Fields{"data": string(data), "err": errors.WithStack(err)}).Error("反序列化json异常")
+		return errors.Errorf("反序列化json异常: %+v", err)
 	}
 	return nil
 }

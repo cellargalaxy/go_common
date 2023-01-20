@@ -7,6 +7,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/cellargalaxy/go_common/util"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"net/url"
 	"path"
@@ -111,7 +112,7 @@ func BookmarkCsv2Xml(ctx context.Context, csvPath, xmlPath string) error {
 	fileInfo := util.GetFileInfo(ctx, csvPath)
 	if fileInfo == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"csvPath": csvPath}).Error("转换书签，文件不存在")
-		return fmt.Errorf("转换书签，文件不存在")
+		return errors.Errorf("转换书签，文件不存在")
 	}
 	var list []model.Bookmark
 	err := util.ReadCsvWithFile2Struct(ctx, csvPath, &list)
@@ -122,7 +123,7 @@ func BookmarkCsv2Xml(ctx context.Context, csvPath, xmlPath string) error {
 	data, err := xml.MarshalIndent(root.Dl, "", "    ")
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("转换书签，xml序列号异常")
-		return fmt.Errorf("转换书签，xml序列号异常")
+		return errors.Errorf("转换书签，xml序列号异常")
 	}
 	err = util.WriteFileWithData(ctx, xmlPath, data)
 	if err != nil {
@@ -213,7 +214,7 @@ func ParseBookmarkFile(ctx context.Context, filePath string) ([]model.Bookmark, 
 	fileInfo := util.GetFileInfo(ctx, filePath)
 	if fileInfo == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("解析书签，文件不存在")
-		return nil, fmt.Errorf("解析书签，文件不存在")
+		return nil, errors.Errorf("解析书签，文件不存在")
 	}
 	data, err := util.ReadFileWithString(ctx, filePath, "")
 	if err != nil {
@@ -240,13 +241,13 @@ func ParseBookmark(ctx context.Context, data string) ([]model.Bookmark, error) {
 		u, err := url.Parse(list[i].Url)
 		if err != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("解析书签，Url非法")
-			return nil, fmt.Errorf("解析书签，Url非法")
+			return nil, errors.Errorf("解析书签，Url非法")
 		}
 		host := u.Host
 		paths := strings.SplitN(list[i].Url, host, 2)
 		if len(paths) != 2 {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"url": list[i].Url}).Error("解析书签，Url非法")
-			return nil, fmt.Errorf("解析书签，Url非法")
+			return nil, errors.Errorf("解析书签，Url非法")
 		}
 		host = util.ReverseString(host)
 		list[i].Key = host + list[i].Sort + paths[1]

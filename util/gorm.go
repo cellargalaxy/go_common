@@ -2,7 +2,7 @@ package util
 
 import (
 	"context"
-	"errors"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

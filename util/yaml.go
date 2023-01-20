@@ -1,7 +1,7 @@
 package util
 
 import (
-	"fmt"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -9,7 +9,7 @@ import (
 func ToYaml(x interface{}) []byte {
 	bytes, err := yaml.Marshal(x)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("序列化yaml异常")
+		logrus.WithFields(logrus.Fields{"x": x, "err": errors.WithStack(err)}).Error("序列化yaml异常")
 	}
 	return bytes
 }
@@ -22,8 +22,8 @@ func ToYamlString(x interface{}) string {
 func UnmarshalYaml(data []byte, v interface{}) error {
 	err := yaml.Unmarshal(data, v)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("反序列化yaml异常")
-		return fmt.Errorf("反序列化yaml异常: %+v", err)
+		logrus.WithFields(logrus.Fields{"data": string(data), "err": errors.WithStack(err)}).Error("反序列化yaml异常")
+		return errors.Errorf("反序列化yaml异常: %+v", err)
 	}
 	return nil
 }

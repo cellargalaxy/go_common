@@ -3,7 +3,7 @@ package util
 import (
 	"bufio"
 	"context"
-	"fmt"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
@@ -80,7 +80,8 @@ func GetEnvBool(key string, defaultValue bool) bool {
 	}
 }
 
-/**
+/*
+*
 https://mojotv.cn/2019/01/17/golang-signal-restart-deamom
 https://bytedance.feishu.cn/wiki/wikcnaJLXgEn5xeJWF7VSUY0qNg#xbNNDs
 */
@@ -100,17 +101,17 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
-		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
+		return nil, nil, errors.Errorf("执行命令，异常: %+v", err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
-		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
+		return nil, nil, errors.Errorf("执行命令，异常: %+v", err)
 	}
 	err = cmd.Start()
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
-		return nil, nil, fmt.Errorf("执行命令，异常: %+v", err)
+		return nil, nil, errors.Errorf("执行命令，异常: %+v", err)
 	}
 
 	stdoutReader := bufio.NewReader(stdout)
@@ -138,7 +139,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 	err = cmd.Wait()
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
-		return stdoutLines, stderrLines, fmt.Errorf("执行命令，异常: %+v", err)
+		return stdoutLines, stderrLines, errors.Errorf("执行命令，异常: %+v", err)
 	}
 
 	return stdoutLines, stderrLines, nil

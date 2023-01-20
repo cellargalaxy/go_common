@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/patrickmn/go-cache"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
@@ -46,11 +47,11 @@ func NewDefaultLocalCache(ctx context.Context) (*LocalCache, error) {
 func NewLocalCache(ctx context.Context, cache *cache.Cache, lock *sync.Mutex) (*LocalCache, error) {
 	if cache == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("创建LocalCache，cache为空")
-		return nil, fmt.Errorf("创建LocalCache，cache为空")
+		return nil, errors.Errorf("创建LocalCache，cache为空")
 	}
 	if lock == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("创建LocalCache，lock为空")
-		return nil, fmt.Errorf("创建LocalCache，lock为空")
+		return nil, errors.Errorf("创建LocalCache，lock为空")
 	}
 	return &LocalCache{cache: cache, lock: lock}, nil
 }
@@ -99,7 +100,7 @@ func (this *LocalCache) GetWithTimeout(ctx context.Context, key string, duration
 	return object, nil
 }
 
-//true:拿到锁；false:拿不到锁
+// true:拿到锁；false:拿不到锁
 func (this *LocalCache) TryLock(ctx context.Context, key string, duration time.Duration) bool {
 	this.lock.Lock()
 	defer this.lock.Unlock()

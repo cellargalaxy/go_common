@@ -3,10 +3,10 @@ package util
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/go-resty/resty/v2"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
@@ -73,18 +73,18 @@ func HttpApi(ctx context.Context, name string, response HttpResponseInter, newRe
 func DealHttpResponse(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(genHttpText(ctx, name, nil, "请求异常"))
-		return "", fmt.Errorf(genHttpText(ctx, name, err, "请求异常"))
+		return "", errors.Errorf(genHttpText(ctx, name, err, "请求异常"))
 	}
 	if response == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(genHttpText(ctx, name, nil, "响应为空"))
-		return "", fmt.Errorf(genHttpText(ctx, name, nil, "响应为空"))
+		return "", errors.Errorf(genHttpText(ctx, name, nil, "响应为空"))
 	}
 	statusCode := response.StatusCode()
 	body := response.String()
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(genHttpText(ctx, name, nil, "响应"))
 	if statusCode != http.StatusOK {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(genHttpText(ctx, name, nil, "响应码失败"))
-		return "", fmt.Errorf(genHttpText(ctx, name, statusCode, "响应码失败"))
+		return "", errors.Errorf(genHttpText(ctx, name, statusCode, "响应码失败"))
 	}
 	return body, nil
 }
@@ -210,7 +210,7 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 			ctx = SetLogId(ctx)
 			if CtxDone(ctx) {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("HTTP请求异常，重试超时")
-				return 0, fmt.Errorf("HTTP请求异常，重试超时")
+				return 0, errors.Errorf("HTTP请求异常，重试超时")
 			}
 			var attempt int
 			if response != nil && response.Request != nil {
@@ -218,7 +218,7 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 			}
 			if try <= attempt {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt}).Error("HTTP请求异常，重试超限")
-				return 0, fmt.Errorf("HTTP请求异常，重试超限")
+				return 0, errors.Errorf("HTTP请求异常，重试超限")
 			}
 			wareSleep := GetSleepTime(sleeps, attempt-1)
 			wareSleep = WareDuration(wareSleep)
