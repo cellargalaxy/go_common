@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+/*
+1. 下载浏览器书签 -> bookmark.html
+2. bookmark.html -> bookmark_new.csv
+
+3. 拉取github的bookmark_en.txt
+4. bookmark_en.txt -> bookmark_back.csv
+
+5. 比较bookmark_new.csv和bookmark_back.csv
+
+6. bookmark_back.csv -> bookmark.html
+7. 上传到浏览器里
+
+8. bookmark_back.csv -> bookmark_en.txt
+9. bookmark_en.txt推到github
+*/
+
+// 2. bookmark.html -> bookmark_new.csv
+func TestBookmark(t *testing.T) {
+	ctx := util.GenCtx()
+	err := tool.BookmarkFile2Csv(ctx, "bookmark_new.csv",
+		"bookmark.html",
+	)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// 4. bookmark_en.txt -> bookmark_back.csv
 func TestDeAesCbcBookmark(t *testing.T) {
 	ctx := util.GenCtx()
 	secret, err := util.ReadFileWithString(ctx, "bookmark_secret.txt", "")
@@ -29,16 +57,13 @@ func TestDeAesCbcBookmark(t *testing.T) {
 	}
 }
 
-func TestBookmark(t *testing.T) {
+// 6. bookmark_back.csv -> bookmark.html
+func TestBookmarkCsv2Xml(t *testing.T) {
 	ctx := util.GenCtx()
-	err := tool.BookmarkFile2Csv(ctx, "bookmark_new.csv",
-		"bookmark.html",
-	)
-	if err != nil {
-		panic(err)
-	}
+	tool.BookmarkCsv2Xml(ctx, "bookmark_back.csv", "bookmark.html")
 }
 
+// 8. bookmark_back.csv -> bookmark_en.txt
 func TestEnAesCbcBookmark(t *testing.T) {
 	ctx := util.GenCtx()
 	secret, err := util.ReadFileWithString(ctx, "bookmark_secret.txt", "")
@@ -60,11 +85,6 @@ func TestEnAesCbcBookmark(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func TestBookmarkCsv2Xml(t *testing.T) {
-	ctx := util.GenCtx()
-	tool.BookmarkCsv2Xml(ctx, "bookmark_back.csv", "bookmark.html")
 }
 
 func TestLog2Csv(t *testing.T) {
