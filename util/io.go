@@ -20,6 +20,24 @@ func ClearPath(ctx context.Context, fileOrFolderPath string) string {
 	return path.Clean(fileOrFolderPath)
 }
 
+func ListFile(ctx context.Context, folderPath string) ([]fs.FileInfo, error) {
+	fileInfo := GetPathInfo(ctx, folderPath)
+	if fileInfo == nil {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，文件夹不存在")
+		return nil, nil
+	}
+	if !fileInfo.IsDir() {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，不是文件夹")
+		return nil, nil
+	}
+	files, err := ioutil.ReadDir(folderPath)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("罗列文件，读取文件夹异常")
+		return nil, errors.Errorf("罗列文件，读取文件夹异常: %+v", err)
+	}
+	return files, nil
+}
+
 func GetPathInfo(ctx context.Context, path string) os.FileInfo {
 	fileInfo, err := os.Stat(path)
 	if fileInfo == nil {
@@ -86,7 +104,7 @@ func openReadFile(ctx context.Context, filePath string) (*os.File, error) {
 	}
 	return file, nil
 }
-func GetReadFile(ctx context.Context, filePath string) (*os.File, error) {
+func OpenReadFile(ctx context.Context, filePath string) (*os.File, error) {
 	fileInfo := GetPathInfo(ctx, filePath)
 	if fileInfo == nil {
 		return createFile(ctx, filePath)
@@ -106,7 +124,7 @@ func openWriteFile(ctx context.Context, filePath string) (*os.File, error) {
 	}
 	return file, nil
 }
-func GetWriteFile(ctx context.Context, filePath string) (*os.File, error) {
+func OpenWriteFile(ctx context.Context, filePath string) (*os.File, error) {
 	fileInfo := GetPathInfo(ctx, filePath)
 	if fileInfo == nil {
 		return createFile(ctx, filePath)
@@ -119,7 +137,7 @@ func GetWriteFile(ctx context.Context, filePath string) (*os.File, error) {
 }
 
 func WriteData2File(ctx context.Context, data []byte, filePath string) error {
-	file, err := GetWriteFile(ctx, filePath)
+	file, err := OpenWriteFile(ctx, filePath)
 	if err != nil {
 		return err
 	}
@@ -142,7 +160,7 @@ func WriteString2File(ctx context.Context, text string, filePath string) error {
 	return WriteData2File(ctx, []byte(text), filePath)
 }
 func WriteReader2File(ctx context.Context, reader io.Reader, filePath string) error {
-	file, err := GetWriteFile(ctx, filePath)
+	file, err := OpenWriteFile(ctx, filePath)
 	if err != nil {
 		return err
 	}
@@ -163,7 +181,7 @@ func WriteReader2File(ctx context.Context, reader io.Reader, filePath string) er
 }
 
 func ReadFile2Data(ctx context.Context, filePath string, defaultData []byte) ([]byte, error) {
-	file, err := GetReadFile(ctx, filePath)
+	file, err := OpenReadFile(ctx, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +211,7 @@ func ReadFile2String(ctx context.Context, filePath string, defaultText string) (
 	return string(data), nil
 }
 func ReadFile2Writer(ctx context.Context, filePath string, writer io.Writer, defaultData []byte) error {
-	file, err := GetReadFile(ctx, filePath)
+	file, err := OpenReadFile(ctx, filePath)
 	if err != nil {
 		return err
 	}
@@ -226,7 +244,7 @@ func ReadFile2Writer(ctx context.Context, filePath string, writer io.Writer, def
 }
 
 func GetFileMd5(ctx context.Context, filePath string) (string, error) {
-	file, err := GetReadFile(ctx, filePath)
+	file, err := OpenReadFile(ctx, filePath)
 	if err != nil {
 		return "", err
 	}
@@ -270,25 +288,7 @@ func RemoveFile(ctx context.Context, filePath string) error {
 	return nil
 }
 
-func ListFile(ctx context.Context, folderPath string) ([]fs.FileInfo, error) {
-	fileInfo := GetPathInfo(ctx, folderPath)
-	if fileInfo == nil {
-		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，文件夹不存在")
-		return nil, nil
-	}
-	if !fileInfo.IsDir() {
-		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，不是文件夹")
-		return nil, nil
-	}
-	files, err := ioutil.ReadDir(folderPath)
-	if err != nil {
-		logrus.WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("罗列文件，读取文件夹异常")
-		return nil, errors.Errorf("罗列文件，读取文件夹异常: %+v", err)
-	}
-	return files, nil
-}
-
-func Read2LogByReader(ctx context.Context, save bool, reader *bufio.Reader) ([]string, error) {
+func Read2LogByReader(ctx context.Context, reader *bufio.Reader, save bool) ([]string, error) {
 	var lines []string
 	for {
 		line, err := reader.ReadString('\n')

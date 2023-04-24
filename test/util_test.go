@@ -213,7 +213,7 @@ func TestParseId(t *testing.T) {
 
 func TestGetReadFile(t *testing.T) {
 	ctx := context.Background()
-	file, err := util.GetReadFile(ctx, "test.go")
+	file, err := util.OpenReadFile(ctx, "test.go")
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -223,7 +223,7 @@ func TestGetReadFile(t *testing.T) {
 
 func TestGetWriteFile(t *testing.T) {
 	ctx := context.Background()
-	file, err := util.GetWriteFile(ctx, "test.go")
+	file, err := util.OpenWriteFile(ctx, "test.go")
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
