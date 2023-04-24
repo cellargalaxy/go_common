@@ -79,7 +79,7 @@ func ClaimsHttp(c *gin.Context, secret string) {
 		return
 	}
 	var claims model.Claims
-	jwtToken, err := ParseJWT(c, token, secret, &claims)
+	jwtToken, err := DeJwt(c, token, secret, &claims)
 	if claims.LogId > 0 {
 		c.Set(LogIdKey, claims.LogId)
 	}
@@ -113,7 +113,7 @@ func ValidateHttp(c *gin.Context, secret string) {
 		return
 	}
 	var claims model.Claims
-	jwtToken, err := ParseJWT(c, token, secret, &claims)
+	jwtToken, err := DeJwt(c, token, secret, &claims)
 	if err != nil {
 		c.Abort()
 		c.JSON(http.StatusOK, NewHttpResponseByErr(err))

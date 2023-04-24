@@ -16,20 +16,16 @@ func GenIdByTime(time time.Time) int64 {
 	logId, _ := strconv.ParseInt(str, 10, 64)
 	return logId
 }
-
 func GenId() int64 {
 	return GenIdByTime(time.Now())
 }
-
 func GenStringId() string {
 	return strconv.FormatInt(GenId(), 10)
 }
-
 func ParseId(ctx context.Context, id int64) (time.Time, error) {
 	str := strconv.FormatInt(id, 10)
 	return ParseStringId(ctx, str)
 }
-
 func ParseStringId(ctx context.Context, id string) (time.Time, error) {
 	if len(id) != 18 {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("解析ID，非法长度ID")
@@ -96,7 +92,6 @@ func GenGoLabel(ctx context.Context, code string, labels ...string) string {
 	code = strings.Join(lines, "\n")
 	return code
 }
-
 func GenModel2Sql(ctx context.Context, code string) string {
 	if code == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("空代码片段")
@@ -169,7 +164,6 @@ func GenModel2Sql(ctx context.Context, code string) string {
 	code = strings.Join(lines, "\n")
 	return code
 }
-
 func getBdType(goType string) string {
 	switch goType {
 	case "int":

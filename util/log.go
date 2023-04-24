@@ -25,10 +25,6 @@ func InitDefaultLog() {
 	InitLog(GetServerName(), "", 1, 100, 30, logrus.InfoLevel)
 }
 
-func CreateDefaultLog(filename string) *logrus.Logger {
-	return CreateLog(GetServerName(), filename, 1, 100, 30, logrus.InfoLevel)
-}
-
 func InitLog(serverName, filename string, maxSize, maxBackups, maxAge int, level logrus.Level) {
 	if serverName == "" {
 		serverName = "log"
@@ -58,6 +54,10 @@ func InitLog(serverName, filename string, maxSize, maxBackups, maxAge int, level
 	var hook paramHook
 	hook.serverName = serverName
 	logrus.AddHook(&hook)
+}
+
+func CreateDefaultLog(filename string) *logrus.Logger {
+	return CreateLog(GetServerName(), filename, 1, 100, 30, logrus.InfoLevel)
 }
 
 func CreateLog(serverName, filename string, maxSize, maxBackups, maxAge int, level logrus.Level) *logrus.Logger {
@@ -167,7 +167,7 @@ func SetLogId(ctx context.Context) context.Context {
 	return SetCtxValue(ctx, LogIdKey, GenLogId())
 }
 
-//Deprecated: Watch out for memory leaks.
+// Deprecated: Watch out for memory leaks.
 func ResetLogId(ctx context.Context) context.Context {
 	return SetCtxValue(ctx, LogIdKey, GenLogId())
 }
@@ -197,14 +197,14 @@ func SetReqId(ctx context.Context) context.Context {
 	return SetCtxValue(ctx, ReqIdKey, GenReqId())
 }
 
-//Deprecated: Watch out for memory leaks.
+// Deprecated: Watch out for memory leaks.
 func ResetReqId(ctx context.Context) context.Context {
 	id := GenReqId()
 	ctx = SetCtxValue(ctx, ReqIdKey, id)
 	return ctx
 }
 
-//Deprecated: Watch out for memory leaks.
+// Deprecated: Watch out for memory leaks.
 func RmReqId(ctx context.Context) context.Context {
 	ctx = SetCtxValue(ctx, ReqIdKey, 0)
 	return ctx

@@ -63,7 +63,7 @@ func HttpApi(ctx context.Context, name string, response HttpResponseInter, newRe
 	if err != nil {
 		return err
 	}
-	err = UnmarshalJsonString(body, response)
+	err = JsonString2Struct(body, response)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"body": body}).Error(genHttpText(ctx, name, nil, "反序列化异常"))
 		return err

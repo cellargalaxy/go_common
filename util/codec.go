@@ -1,10 +1,16 @@
 package util
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto"
 	"crypto/md5"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/golang-jwt/jwt"
@@ -15,14 +21,59 @@ import (
 	"time"
 )
 
+func EnGzip(ctx context.Context, data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	_, err := writer.Write(data)
+	if err != nil {
+		writer.Close()
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("GZIP压缩，异常")
+		return nil, errors.Errorf("GZIP压缩，异常: %+v", err)
+	}
+	err = writer.Close()
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("GZIP压缩，异常")
+		return nil, errors.Errorf("GZIP压缩，异常: %+v", err)
+	}
+	return buf.Bytes(), nil
+}
+func DeGzip(ctx context.Context, data []byte) ([]byte, error) {
+	reader, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("GZIP解压，异常")
+		return nil, errors.Errorf("GZIP解压，异常: %+v", err)
+	}
+	defer reader.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = buf.ReadFrom(reader)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("GZIP解压，异常")
+		return nil, errors.Errorf("GZIP解压，异常: %+v", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func EnBase64(ctx context.Context, data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
+}
+func DeBase64(ctx context.Context, text string) ([]byte, error) {
+	data, err := base64.StdEncoding.DecodeString(text)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("Base64解码异常")
+		return nil, errors.Errorf("Base64解码异常")
+	}
+	return data, nil
+}
+
 func GenAuthorizationHeader(ctx context.Context, token string) (string, string) {
 	return AuthorizationKey, fmt.Sprintf("%s %s", BearerKey, token)
 }
-func GenAuthorizationJWT(ctx context.Context, expire time.Duration, secret string) (string, string) {
-	token, _ := GenDefaultJWT(ctx, expire, secret)
+func EnAuthorizationJwt(ctx context.Context, expire time.Duration, secret string) (string, string) {
+	token, _ := EnDefaultJwt(ctx, expire, secret)
 	return GenAuthorizationHeader(ctx, token)
 }
-func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (string, error) {
+func EnDefaultJwt(ctx context.Context, expire time.Duration, secret string) (string, error) {
 	now := time.Now()
 	var claims model.Claims
 	claims.IssuedAt = now.Add(-expire).Unix()
@@ -31,9 +82,9 @@ func GenDefaultJWT(ctx context.Context, expire time.Duration, secret string) (st
 	claims.ServerName = GetServerName()
 	claims.LogId = GetLogId(ctx)
 	claims.ReqId = GetOrGenReqIdString(ctx)
-	return GenJWT(ctx, secret, claims)
+	return EnJwt(ctx, secret, claims)
 }
-func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, error) {
+func EnJwt(ctx context.Context, secret string, claims jwt.Claims) (string, error) {
 	secretByte := EnSha256(ctx, []byte(secret))
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token, err := jwtToken.SignedString(secretByte)
@@ -43,7 +94,7 @@ func GenJWT(ctx context.Context, secret string, claims jwt.Claims) (string, erro
 	}
 	return token, nil
 }
-func ParseJWT(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.Token, error) {
+func DeJwt(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.Token, error) {
 	var err error
 	secretByte := EnSha256(ctx, []byte(secret))
 
@@ -106,18 +157,6 @@ func EnAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	return en, nil
 }
 
-func EnBase64(ctx context.Context, data []byte) string {
-	return base64.StdEncoding.EncodeToString(data)
-}
-func DeBase64(ctx context.Context, text string) ([]byte, error) {
-	data, err := base64.StdEncoding.DecodeString(text)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("Base64解码异常")
-		return nil, errors.Errorf("Base64解码异常")
-	}
-	return data, nil
-}
-
 // 256
 func EnSha256(ctx context.Context, data []byte) []byte {
 	hash := sha256.New()
@@ -143,4 +182,39 @@ func EnCrc32(ctx context.Context, data []byte) uint32 {
 }
 func EnCrc32Hex(ctx context.Context, data string) string {
 	return fmt.Sprintf("%x", EnCrc32(ctx, []byte(data)))
+}
+
+func RsaVerify(ctx context.Context, data, sign, publicKey string) (bool, error) {
+	block, _ := pem.Decode([]byte(publicKey))
+	if block == nil || block.Type != "PUBLIC KEY" {
+		logrus.WithFields(logrus.Fields{}).Error("rsa校验，非法公钥")
+		return false, errors.Errorf("rsa校验，非法公钥")
+	}
+
+	public, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{}).Error("rsa校验，公钥解析异常")
+		return false, errors.Errorf("rsa校验，公钥解析异常")
+	}
+
+	pubRsaKey, ok := public.(*rsa.PublicKey)
+	if !ok {
+		logrus.WithFields(logrus.Fields{}).Error("rsa校验，公钥转型失败")
+		return false, errors.Errorf("rsa校验，公钥转型失败")
+	}
+
+	dataHash := md5.Sum([]byte(data))
+	signData, err := base64.StdEncoding.DecodeString(sign)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": err}).Error("rsa校验，签名解析异常")
+		return false, errors.Errorf("rsa校验，签名解析异常: %+v", err)
+	}
+
+	err = rsa.VerifyPKCS1v15(pubRsaKey, crypto.MD5, dataHash[:], signData)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": err}).Error("rsa校验，签名校验异常")
+		return false, errors.Errorf("rsa校验，签名校验异常: %+v", err)
+	}
+
+	return true, nil
 }

@@ -71,7 +71,7 @@ func TestEnSHa256(t *testing.T) {
 func TestGenDefaultJWT(t *testing.T) {
 	ctx := util.GenCtx()
 	time.Sleep(time.Second * 3)
-	token, err := util.GenDefaultJWT(ctx, time.Minute, jwtSecret)
+	token, err := util.EnDefaultJwt(ctx, time.Minute, jwtSecret)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -88,7 +88,7 @@ func TestGenJWT(t *testing.T) {
 	claims.LogId = 123456789
 	claims.ReqId = "ReqId"
 	claims.ExpiresAt = time.Now().Unix() + 1000
-	token, err := util.GenJWT(ctx, jwtSecret, &claims)
+	token, err := util.EnJwt(ctx, jwtSecret, &claims)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return
@@ -99,7 +99,7 @@ func TestGenJWT(t *testing.T) {
 func TestParseJWT(t *testing.T) {
 	ctx := context.Background()
 	var claims model.Claims
-	token, err := util.ParseJWT(ctx, "", jwtSecret, &claims)
+	token, err := util.DeJwt(ctx, "", jwtSecret, &claims)
 	if err != nil {
 		t.Errorf("err: %+v\n", err)
 		return

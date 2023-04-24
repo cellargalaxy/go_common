@@ -6,7 +6,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func ToYaml(x interface{}) []byte {
+func YamlStruct2Data(x interface{}) []byte {
 	bytes, err := yaml.Marshal(x)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"x": x, "err": errors.WithStack(err)}).Error("序列化yaml异常")
@@ -14,12 +14,12 @@ func ToYaml(x interface{}) []byte {
 	return bytes
 }
 
-func ToYamlString(x interface{}) string {
-	bytes := ToYaml(x)
+func YamlStruct2String(x interface{}) string {
+	bytes := YamlStruct2Data(x)
 	return string(bytes)
 }
 
-func UnmarshalYaml(data []byte, v interface{}) error {
+func YamlData2Struct(data []byte, v interface{}) error {
 	err := yaml.Unmarshal(data, v)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"data": string(data), "err": errors.WithStack(err)}).Error("反序列化yaml异常")
@@ -28,6 +28,6 @@ func UnmarshalYaml(data []byte, v interface{}) error {
 	return nil
 }
 
-func UnmarshalYamlString(data string, v interface{}) error {
-	return UnmarshalYaml([]byte(data), v)
+func YamlString2Struct(data string, v interface{}) error {
+	return YamlData2Struct([]byte(data), v)
 }

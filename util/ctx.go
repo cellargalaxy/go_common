@@ -7,7 +7,6 @@ const ignoreErrKey = "ignoreErr"
 func GetCtxValue(ctx context.Context, key string) interface{} {
 	return ctx.Value(key)
 }
-
 func SetCtxValue(ctx context.Context, key string, value interface{}) context.Context {
 	return context.WithValue(ctx, key, value)
 }
@@ -17,7 +16,6 @@ func IsIgnoreErr(ctx context.Context) bool {
 	isIgnore, ok := isIgnoreP.(bool)
 	return isIgnore && ok
 }
-
 func SetIgnoreErr(ctx context.Context, isIgnoreErr bool) context.Context {
 	if IsIgnoreErr(ctx) == isIgnoreErr {
 		return ctx
@@ -30,6 +28,13 @@ func GenCtx() context.Context {
 	ctx = SetLogId(ctx)
 	return ctx
 }
+func CopyCtx(old context.Context) context.Context {
+	ctx := GenCtx()
+	ctx = SetIgnoreErr(ctx, IsIgnoreErr(old))
+	ctx = SetCtxValue(ctx, LogIdKey, GetLogId(old))
+	ctx = SetCtxValue(ctx, ReqIdKey, GetReqId(old))
+	return ctx
+}
 
 func CtxDone(ctx context.Context) bool {
 	select {
@@ -38,12 +43,4 @@ func CtxDone(ctx context.Context) bool {
 	default:
 		return false
 	}
-}
-
-func CopyCtx(old context.Context) context.Context {
-	ctx := GenCtx()
-	ctx = SetIgnoreErr(ctx, IsIgnoreErr(old))
-	ctx = SetCtxValue(ctx, LogIdKey, GetLogId(old))
-	ctx = SetCtxValue(ctx, ReqIdKey, GetReqId(old))
-	return ctx
 }

@@ -7,20 +7,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func ToQuery(ctx context.Context, x interface{}) []byte {
+func QueryStruct2Data(ctx context.Context, x interface{}) []byte {
 	bytes, err := urlquery.Marshal(x)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"x": x, "err": errors.WithStack(err)}).Error("序列化query异常")
 	}
 	return bytes
 }
-
-func ToQueryString(ctx context.Context, x interface{}) string {
-	bytes := ToQuery(ctx, x)
+func QueryStruct2String(ctx context.Context, x interface{}) string {
+	bytes := QueryStruct2Data(ctx, x)
 	return string(bytes)
 }
 
-func UnmarshalQuery(ctx context.Context, data []byte, v interface{}) error {
+func QueryData2Struct(ctx context.Context, data []byte, v interface{}) error {
 	err := urlquery.Unmarshal(data, v)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"data": string(data), "err": errors.WithStack(err)}).Error("反序列化query异常")
@@ -28,7 +27,6 @@ func UnmarshalQuery(ctx context.Context, data []byte, v interface{}) error {
 	}
 	return nil
 }
-
-func UnmarshalQueryString(ctx context.Context, data string, v interface{}) error {
-	return UnmarshalQuery(ctx, []byte(data), v)
+func QueryString2Struct(ctx context.Context, data string, v interface{}) error {
+	return QueryData2Struct(ctx, []byte(data), v)
 }
