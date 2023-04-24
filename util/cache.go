@@ -4,22 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/patrickmn/go-cache"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
 	"time"
 )
 
-var localCache *LocalCache
-
-func initCache(ctx context.Context) {
-	var err error
-	localCache, err = NewDefaultLocalCache(ctx)
-	if err != nil {
-		panic(err)
-	}
-}
+var localCache = NewLocalCache()
 
 func existReqId(ctx context.Context, reqId string, duration time.Duration) bool {
 	key := fmt.Sprintf("reqId-%s", reqId)
@@ -41,19 +31,8 @@ func setHttpBan(ctx context.Context, address string, duration time.Duration) {
 	localCache.Set(ctx, key, "", duration)
 }
 
-func NewDefaultLocalCache(ctx context.Context) (*LocalCache, error) {
-	return NewLocalCache(ctx, cache.New(time.Minute, time.Minute), &sync.Mutex{})
-}
-func NewLocalCache(ctx context.Context, cache *cache.Cache, lock *sync.Mutex) (*LocalCache, error) {
-	if cache == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("创建LocalCache，cache为空")
-		return nil, errors.Errorf("创建LocalCache，cache为空")
-	}
-	if lock == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("创建LocalCache，lock为空")
-		return nil, errors.Errorf("创建LocalCache，lock为空")
-	}
-	return &LocalCache{cache: cache, lock: lock}, nil
+func NewLocalCache() *LocalCache {
+	return &LocalCache{cache: cache.New(time.Minute, time.Minute), lock: &sync.Mutex{}}
 }
 
 type LocalCache struct {

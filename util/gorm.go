@@ -11,19 +11,18 @@ import (
 )
 
 const (
-	DefaultSqlLen = 256
+	DefaultSqlLen = 512
 )
 
-type GormLogHandle interface {
-	Handle(ctx context.Context, begin time.Time, sql string, err error)
+func NewDefaultGormLog() logger.Interface {
+	return GormLog{handlers: []GormLogHandler{NewGormLogHandler()}}
 }
-
-func NewGormLog(handles ...GormLogHandle) logger.Interface {
-	return GormLog{handles: handles}
+func NewGormLog(handlers ...GormLogHandler) logger.Interface {
+	return GormLog{handlers: handlers}
 }
 
 type GormLog struct {
-	handles []GormLogHandle
+	handlers []GormLogHandler
 }
 
 func (this GormLog) LogMode(logger.LogLevel) logger.Interface {
@@ -40,23 +39,27 @@ func (this GormLog) Error(ctx context.Context, s string, args ...interface{}) {
 }
 func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	sql, _ := fc()
-	for i := range this.handles {
-		if this.handles[i] == nil {
+	for i := range this.handlers {
+		if this.handlers[i] == nil {
 			continue
 		}
-		this.handles[i].Handle(ctx, begin, sql, err)
+		this.handlers[i].Handler(ctx, begin, sql, err)
 	}
 }
 
-func NewDefaultGormSqlHandle() GormLogHandle {
-	return NewGormSqlHandle([]error{gorm.ErrRecordNotFound}, DefaultSqlLen, false, true, true, false, true)
+func NewGormLogHandler() GormLogHandler {
+	return NewGormSqlHandler([]error{gorm.ErrRecordNotFound}, DefaultSqlLen, false, true, true, false, true)
 }
 
-func NewGormSqlHandle(ignoreErrs []error, sqlLen int, insertShow, deleteShow, selectShow, updateShow, otherShow bool) GormLogHandle {
-	return GormSqlHandle{IgnoreErrs: ignoreErrs, SqlLen: sqlLen, InsertShow: insertShow, DeleteShow: deleteShow, SelectShow: selectShow, UpdateShow: updateShow, OtherShow: otherShow}
+type GormLogHandler interface {
+	Handler(ctx context.Context, begin time.Time, sql string, err error)
 }
 
-type GormSqlHandle struct {
+func NewGormSqlHandler(ignoreErrs []error, sqlLen int, insertShow, deleteShow, selectShow, updateShow, otherShow bool) GormSqlHandler {
+	return GormSqlHandler{IgnoreErrs: ignoreErrs, SqlLen: sqlLen, InsertShow: insertShow, DeleteShow: deleteShow, SelectShow: selectShow, UpdateShow: updateShow, OtherShow: otherShow}
+}
+
+type GormSqlHandler struct {
 	IgnoreErrs []error
 	SqlLen     int
 	InsertShow bool
@@ -66,7 +69,7 @@ type GormSqlHandle struct {
 	OtherShow  bool
 }
 
-func (this GormSqlHandle) Handle(ctx context.Context, begin time.Time, sql string, err error) {
+func (this GormSqlHandler) Handler(ctx context.Context, begin time.Time, sql string, err error) {
 	elapsed := time.Since(begin)
 	if this.SqlLen > 0 && this.SqlLen < len(sql) {
 		sql = sql[:this.SqlLen]

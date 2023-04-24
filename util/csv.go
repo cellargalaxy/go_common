@@ -118,6 +118,17 @@ func CsvStrings2File(ctx context.Context, lines [][]string, filePath string) err
 	}
 	return WriteData2File(ctx, data, filePath)
 }
+func CsvStrings2Writer(ctx context.Context, lines [][]string, writer io.Writer) error {
+	data, err := CsvStrings2Data(ctx, lines)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func CsvStrings2Struct(ctx context.Context, lines [][]string, list interface{}) error {
 	data, err := CsvStrings2Data(ctx, lines)
 	if err != nil {

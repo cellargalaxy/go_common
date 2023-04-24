@@ -37,11 +37,11 @@ func initHttp(ctx context.Context) {
 	}
 }
 
-type HttpResponseInter interface {
+type HttpResponse interface {
 	HttpSuccess(ctx context.Context) error
 }
 
-func HttpApiWithTry(ctx context.Context, name string, try int, sleeps []time.Duration, response HttpResponseInter, newResponse func() (*resty.Response, error)) error {
+func HttpApiWithTry(ctx context.Context, name string, try int, sleeps []time.Duration, response HttpResponse, newResponse func() (*resty.Response, error)) error {
 	if try < len(sleeps)+1 {
 		try = len(sleeps) + 1
 	}
@@ -57,7 +57,7 @@ func HttpApiWithTry(ctx context.Context, name string, try int, sleeps []time.Dur
 	}
 	return err
 }
-func HttpApi(ctx context.Context, name string, response HttpResponseInter, newResponse func() (*resty.Response, error)) error {
+func HttpApi(ctx context.Context, name string, response HttpResponse, newResponse func() (*resty.Response, error)) error {
 	resp, err := newResponse()
 	body, err := DealHttpResponse(ctx, name, resp, err)
 	if err != nil {
@@ -123,7 +123,7 @@ func flushHttpGetIp(ctx context.Context, pool *SingleGoPool) {
 	}
 }
 func HttpGetIp(ctx context.Context) string {
-	response, err := GetHttpSpiderRequest(ctx).Get("https://ifconfig.co/ip")
+	response, err := GetHttpSpiderRequest(ctx).Get("http://ipv4.duia.ro/")
 	body, _ := DealHttpResponse(ctx, "HttpGetIp", response, err)
 	return body
 }

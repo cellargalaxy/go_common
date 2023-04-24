@@ -127,15 +127,6 @@ func DeAesCbcString(ctx context.Context, text, secret string) (string, error) {
 	}
 	return string(de), nil
 }
-func EnAesCbcString(ctx context.Context, text, secret string) (string, error) {
-	en, err := EnAesCbc(ctx, []byte(text), []byte(secret))
-	if err != nil {
-		return "", err
-	}
-	text = EnBase64(ctx, en)
-	return text, nil
-}
-
 func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	secret = EnSha256(ctx, secret)
 	ivAes := EnMd5(ctx, secret)
@@ -145,6 +136,14 @@ func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 		return nil, errors.Errorf("AesCbc解密异常")
 	}
 	return de, nil
+}
+func EnAesCbcString(ctx context.Context, text, secret string) (string, error) {
+	en, err := EnAesCbc(ctx, []byte(text), []byte(secret))
+	if err != nil {
+		return "", err
+	}
+	text = EnBase64(ctx, en)
+	return text, nil
 }
 func EnAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	secret = EnSha256(ctx, secret)
