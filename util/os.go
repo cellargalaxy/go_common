@@ -5,6 +5,7 @@ import (
 	"context"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/constraints"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -14,12 +15,55 @@ import (
 	"syscall"
 )
 
-const serverNameEnvKey = "server_name"
+const serverNameKey = "server_name"
 
 var defaultServerName string
 
 func InitOs(serverName string) {
 	defaultServerName = serverName
+}
+
+func GetServerName() string {
+	return GetEnvString(serverNameKey, defaultServerName)
+}
+
+func GetEnv(key string) string {
+	return os.Getenv(key)
+}
+func GetEnvString(key, defaultValue string) string {
+	value := GetEnv(key)
+	if value == "" {
+		value = defaultValue
+	}
+	return value
+}
+func GetEnvInt[T constraints.Integer](key string, defaultValue T) T {
+	value := GetEnv(key)
+	data, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return T(data)
+}
+func GetEnvFloat[T constraints.Float](key string, defaultValue T) T {
+	value := GetEnv(key)
+	data, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return defaultValue
+	}
+	return T(data)
+}
+func GetEnvBool(key string, defaultValue bool) bool {
+	value := GetEnv(key)
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "true":
+		return true
+	case "false":
+		return false
+	default:
+		return defaultValue
+	}
 }
 
 func Defer(callback func(err interface{}, stack string)) {
@@ -31,53 +75,6 @@ func Defer(callback func(err interface{}, stack string)) {
 		stack = string(buf[:n])
 	}
 	callback(err, stack)
-}
-
-func GetServerName() string {
-	return GetEnvString(serverNameEnvKey, defaultServerName)
-}
-
-func GetEnv(key string) string {
-	return os.Getenv(key)
-}
-
-func GetEnvString(key, defaultValue string) string {
-	value := GetEnv(key)
-	if value == "" {
-		value = defaultValue
-	}
-	return value
-}
-
-func GetEnvInt(key string, defaultValue int) int {
-	value := GetEnv(key)
-	data, err := strconv.Atoi(value)
-	if err != nil {
-		return defaultValue
-	}
-	return data
-}
-
-func GetEnvFloat64(key string, defaultValue float64) float64 {
-	value := GetEnv(key)
-	data, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return defaultValue
-	}
-	return data
-}
-
-func GetEnvBool(key string, defaultValue bool) bool {
-	value := GetEnv(key)
-	value = strings.ToLower(value)
-	switch value {
-	case "true":
-		return true
-	case "false":
-		return false
-	default:
-		return defaultValue
-	}
 }
 
 /*
@@ -124,7 +121,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 			}
 		})
 
-		stdoutLines, _ = Read2LogByReader(ctx, true, stdoutReader)
+		stdoutLines, _ = Read2LogByReader(ctx, stdoutReader, true)
 	}()
 	go func() {
 		defer Defer(func(err interface{}, stack string) {
@@ -133,7 +130,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 			}
 		})
 
-		stderrLines, _ = Read2LogByReader(ctx, true, stderrReader)
+		stderrLines, _ = Read2LogByReader(ctx, stderrReader, true)
 	}()
 
 	err = cmd.Wait()

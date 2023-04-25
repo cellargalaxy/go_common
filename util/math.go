@@ -5,79 +5,64 @@ import (
 	"github.com/shopspring/decimal"
 	"golang.org/x/exp/constraints"
 	"math"
+	"math/rand"
 )
 
-func ResetNanInf(value float64) float64 {
+func IsNanInf[T constraints.Float](value T) bool {
+	val := float64(value)
+	return math.IsNaN(val) || math.IsInf(val, 0)
+}
+func ResetNanInf[T constraints.Float](value T) T {
+	var result T
 	if IsNanInf(value) {
-		return 0
+		return result
 	}
-	return value
-}
-func IsNanInf(value float64) bool {
-	return math.IsNaN(value) || math.IsInf(value, 0)
-}
-
-// 斜率,截距
-func LeastSquare(points [][]float64) (float64, float64) {
-	if len(points) <= 1 {
-		return 0, 0
-	}
-	var xi, x2, yi, xy float64
-	for i := 0; i < len(points); i++ {
-		xi += points[i][0]
-		x2 += points[i][0] * points[i][0]
-		yi += points[i][1]
-		xy += points[i][0] * points[i][1]
-	}
-	length := float64(len(points))
-	k := (yi*xi - xy*length) / (xi*xi - x2*length) //斜率
-	a := (yi*x2 - xy*xi) / (x2*length - xi*xi)     //截距
-	return k, a
+	result = value
+	return result
 }
 
 // max,min
-func MaxAndMin[T constraints.Ordered](data ...T) (T, T) {
+func MaxAndMin[T constraints.Ordered](list ...T) (T, T) {
 	var min, max T
-	if len(data) == 0 {
+	if len(list) == 0 {
 		return max, min
 	}
-	max = data[0]
-	min = data[0]
-	for i := range data {
-		value := data[i]
-		if max < value {
-			max = value
+	max = list[0]
+	min = list[0]
+	for i := range list {
+		if max < list[i] {
+			max = list[i]
 		}
-		if value < min {
-			min = value
+		if list[i] < min {
+			min = list[i]
 		}
 	}
 	return max, min
 }
 
-func Max[T constraints.Ordered](data ...T) T {
+func Max[T constraints.Ordered](list ...T) T {
 	var max T
-	if len(data) == 0 {
+	if len(list) == 0 {
 		return max
 	}
-	max = data[0]
-	for i := range data {
-		if max < data[i] {
-			max = data[i]
+	max = list[0]
+	for i := range list {
+		if max < list[i] {
+			max = list[i]
 		}
 	}
 	return max
 }
 
-func Min[T constraints.Ordered](data ...T) T {
+func Min[T constraints.Ordered](list ...T) T {
 	var min T
-	if len(data) == 0 {
+	if len(list) == 0 {
 		return min
 	}
-	min = data[0]
-	for i := range data {
-		if data[i] < min {
-			min = data[i]
+	min = list[0]
+	for i := range list {
+		if list[i] < min {
+			min = list[i]
 		}
 	}
 	return min
@@ -90,37 +75,66 @@ func Abs[T constraints.Integer | constraints.Float](value T) T {
 	return value
 }
 
-func Sum[T constraints.Integer | constraints.Float](data ...T) T {
+func Sum[T constraints.Integer | constraints.Float](list ...T) T {
 	var sum T
-	for i := range data {
-		sum += data[i]
+	for i := range list {
+		sum += list[i]
 	}
 	return sum
 }
 
-func Avg[T constraints.Integer | constraints.Float](data ...T) T {
-	avg := Sum(data...)
-	return avg / T(len(data))
+func Avg[T constraints.Integer | constraints.Float](list ...T) T {
+	avg := Sum(list...)
+	return avg / T(len(list))
 }
 
-func AvgAndSVar(data []float64) (float64, float64) {
-	avg, variance := AvgAndVar(data)
-	return avg, math.Pow(variance, 0.5)
+func WareNumber[T constraints.Integer | constraints.Float](value T) T {
+	ns := float64(value)
+	a := rand.Float64()
+	b := rand.Float64()
+	d := ns * 0.1 * a * b
+	if a < b {
+		return value + T(d)
+	}
+	return value - T(d)
 }
-func AvgAndVar(data []float64) (float64, float64) {
-	if len(data) <= 0 {
+
+// 斜率,截距
+func LeastSquare[T constraints.Integer | constraints.Float](list ...[2]T) (float64, float64) {
+	if len(list) <= 1 {
 		return 0, 0
 	}
-	avg := Avg(data...)
-	var variance float64
-	for i := range data {
-		variance += math.Pow(data[i]-avg, 2)
+	var xi, x2, yi, xy T
+	for i := 0; i < len(list); i++ {
+		xi += list[i][0]
+		x2 += list[i][0] * list[i][0]
+		yi += list[i][1]
+		xy += list[i][0] * list[i][1]
 	}
-	variance /= float64(len(data))
-	return avg, variance
+	length := T(len(list))
+	k := (yi*xi - xy*length) / (xi*xi - x2*length) //斜率
+	a := (yi*x2 - xy*xi) / (x2*length - xi*xi)     //截距
+	return float64(k), float64(a)
 }
 
-func SameTickFloat64(ctx context.Context, value1, value2, tick float64) bool {
+func AvgAndSVar[T constraints.Integer | constraints.Float](data ...T) (float64, float64) {
+	avg, variance := AvgAndVar(data...)
+	return avg, math.Pow(variance, 0.5)
+}
+func AvgAndVar[T constraints.Integer | constraints.Float](list ...T) (float64, float64) {
+	if len(list) <= 0 {
+		return 0, 0
+	}
+	avg := Avg(list...)
+	var variance float64
+	for i := range list {
+		variance += math.Pow(float64(list[i]-avg), 2)
+	}
+	variance /= float64(len(list))
+	return float64(avg), variance
+}
+
+func SameTick[T constraints.Integer | constraints.Float](ctx context.Context, value1, value2, tick T) bool {
 	if value1 < value2 {
 		value1 += tick
 		return value2 < value1
@@ -132,29 +146,26 @@ func SameTickFloat64(ctx context.Context, value1, value2, tick float64) bool {
 	return true
 }
 
-func SameTickFloat32(ctx context.Context, value1, value2, tick float32) bool {
-	return SameTickFloat64(ctx, float64(value1), float64(value2), float64(tick))
-}
-
 /*
 四舍五入保留round位小数，再乘round个10倍取整
 
 123.456 -> 123.46 -> 12346
 */
-func Float64RoundInt64(value float64, round int) int64 {
-	mul := int64(1)
-	for i := 0; i < round; i++ {
+func FloatRoundInt[Integer constraints.Integer, Float constraints.Float](value Float, round Integer) Integer {
+	mul := Integer(1)
+	for i := Integer(0); i < round; i++ {
 		mul *= 10
 	}
-	return decimal.NewFromFloat(value).Round(int32(round)).Mul(decimal.NewFromInt(mul)).IntPart()
+	result := decimal.NewFromFloat(float64(value)).Round(int32(round)).Mul(decimal.NewFromInt(int64(mul))).IntPart()
+	return Integer(result)
 }
 
 /*
-除以div，再转成浮点
+转成浮点，除以div
 
 12346 -> 123.46
 */
-func Int64DivFloat64(value int64, div float64) float64 {
-	f64, _ := decimal.NewFromInt(value).Div(decimal.NewFromFloat(div)).Float64()
-	return f64
+func IntDivFloat[Integer constraints.Integer, Float constraints.Float](value Integer, div Float) Float {
+	result, _ := decimal.NewFromInt(int64(value)).Div(decimal.NewFromFloat(float64(div))).Float64()
+	return Float(result)
 }

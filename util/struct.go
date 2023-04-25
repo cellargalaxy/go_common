@@ -33,7 +33,7 @@ func DifferenceSet[T constraints.Ordered](ctx context.Context, a, b []T) []T {
 
 func Distinct[T constraints.Ordered](ctx context.Context, list ...T) []T {
 	listMap := List2Map(ctx, list...)
-	list = make([]T, 0, len(list))
+	list = make([]T, 0, len(listMap))
 	for i := range listMap {
 		list = append(list, i)
 	}

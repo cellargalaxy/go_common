@@ -91,7 +91,7 @@ type SingleGoPool struct {
 	poolName string
 	pool     *ants.Pool
 
-	lock     sync.Mutex
+	lock     *sync.Mutex
 	taskName string
 	cancel   func()
 }

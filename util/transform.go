@@ -40,7 +40,6 @@ func Interface2String(value interface{}) string {
 	}
 	return fmt.Sprint(value)
 }
-
 func Interface2Strings(value ...interface{}) []string {
 	list := make([]string, 0, len(value))
 	for i := range value {
@@ -79,7 +78,6 @@ func Interface2Float64(value interface{}) float64 {
 	}
 	return String2Float64(Interface2String(value))
 }
-
 func Interface2Float64s(value ...interface{}) []float64 {
 	list := make([]float64, 0, len(value))
 	for i := range value {
@@ -118,7 +116,6 @@ func Interface2Int(value interface{}) int {
 	}
 	return String2Int(Interface2String(value))
 }
-
 func Interface2Ints(value ...interface{}) []int {
 	list := make([]int, 0, len(value))
 	for i := range value {
@@ -157,7 +154,6 @@ func Interface2Int64(value interface{}) int64 {
 	}
 	return String2Int64(Interface2String(value))
 }
-
 func Interface2Int64s(value ...interface{}) []int64 {
 	list := make([]int64, 0, len(value))
 	for i := range value {
@@ -174,7 +170,6 @@ func String2Float64(value string) float64 {
 	data, _ := strconv.ParseFloat(value, 64)
 	return data
 }
-
 func String2Float64s(value ...string) []float64 {
 	list := make([]float64, 0, len(value))
 	for i := range value {
@@ -187,7 +182,6 @@ func String2Int64(value string) int64 {
 	data, _ := strconv.ParseInt(value, 10, 64)
 	return data
 }
-
 func String2Int64s(value ...string) []int64 {
 	list := make([]int64, 0, len(value))
 	for i := range value {
@@ -200,7 +194,6 @@ func String2Int(value string) int {
 	data, _ := strconv.Atoi(value)
 	return data
 }
-
 func String2Ints(value ...string) []int {
 	list := make([]int, 0, len(value))
 	for i := range value {
@@ -241,7 +234,6 @@ func Float642String(value float64) string {
 	str = strings.TrimRight(str, ".")
 	return str
 }
-
 func Float642Strings(value ...float64) []string {
 	list := make([]string, 0, len(value))
 	for i := range value {
@@ -253,7 +245,6 @@ func Float642Strings(value ...float64) []string {
 func Int642String(value int64) string {
 	return strconv.FormatInt(value, 10)
 }
-
 func Int642Strings(value ...int64) []string {
 	list := make([]string, 0, len(value))
 	for i := range value {
@@ -265,7 +256,6 @@ func Int642Strings(value ...int64) []string {
 func Int2String(value int) string {
 	return strconv.Itoa(value)
 }
-
 func Int2Strings(value ...int) []string {
 	list := make([]string, 0, len(value))
 	for i := range value {

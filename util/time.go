@@ -3,7 +3,6 @@ package util
 import (
 	"context"
 	"github.com/sirupsen/logrus"
-	"math/rand"
 	"time"
 )
 
@@ -50,53 +49,16 @@ func MsTs2Time(ts int64) time.Time {
 	return time.Unix(0, ts*1e6)
 }
 
-func WareDuration(duration time.Duration) time.Duration {
-	ns := float64(duration)
-	a := rand.Float64()
-	b := rand.Float64()
-	d := ns * 0.1 * a * b
-	if a < b {
-		return duration + time.Duration(d)
-	}
-	return duration - time.Duration(d)
-}
-
-func MinDuration(data ...time.Duration) time.Duration {
-	if len(data) == 0 {
-		return 0
-	}
-	min := data[0]
-	for i := range data {
-		if data[i] < min {
-			min = data[i]
-		}
-	}
-	return min
-}
-
-func MaxDuration(data ...time.Duration) time.Duration {
-	if len(data) == 0 {
-		return 0
-	}
-	max := data[0]
-	for i := range data {
-		if max < data[i] {
-			max = data[i]
-		}
-	}
-	return max
-}
-
-func Sleep(ctx context.Context, sleep time.Duration) {
-	if sleep <= 0 {
+func Sleep(ctx context.Context, duration time.Duration) {
+	if duration <= 0 {
 		return
 	}
 	select {
-	case <-time.After(sleep):
+	case <-time.After(duration):
 	case <-ctx.Done():
 	}
 }
 
-func SleepWare(ctx context.Context, sleep time.Duration) {
-	Sleep(ctx, WareDuration(sleep))
+func SleepWare(ctx context.Context, duration time.Duration) {
+	Sleep(ctx, WareNumber(duration))
 }

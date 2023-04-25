@@ -2,7 +2,6 @@ package util
 
 func init() {
 	ctx := GenCtx()
-	initCache(ctx)
 	initRegexp()
 	initHttp(ctx)
 }
