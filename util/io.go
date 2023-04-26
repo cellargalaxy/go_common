@@ -15,6 +15,18 @@ import (
 	"strings"
 )
 
+func CloseIo(ctx context.Context, list ...io.Closer) {
+	for i := range list {
+		if list[i] == nil {
+			continue
+		}
+		err := list[i].Close()
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("IO流关闭异常")
+		}
+	}
+}
+
 func ClearPath(ctx context.Context, fileOrFolderPath string) string {
 	fileOrFolderPath = strings.ReplaceAll(fileOrFolderPath, "\\", "/")
 	return path.Clean(fileOrFolderPath)

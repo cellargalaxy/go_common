@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-var localCache = NewLocalCache[string]()
+var localCache = NewLocalCache[int]()
 
 func existReqId(ctx context.Context, reqId string, duration time.Duration) bool {
 	key := fmt.Sprintf("reqId-%s", reqId)
 	_, ok := localCache.Get(ctx, key)
-	localCache.Set(ctx, key, "", duration)
+	localCache.Set(ctx, key, 0, duration)
 	return ok
 }
 func getHttpBan(ctx context.Context, address string) bool {
@@ -28,11 +28,11 @@ func setHttpBan(ctx context.Context, address string, duration time.Duration) {
 	address = strings.Split(address, "#")[0]
 	address = strings.Split(address, "?")[0]
 	key := fmt.Sprintf("httpBan-%s", address)
-	localCache.Set(ctx, key, "", duration)
+	localCache.Set(ctx, key, 0, duration)
 }
 
 func NewLocalCache[T any]() LocalCache[T] {
-	return LocalCache[T]{lock: &sync.Mutex{}, cache: cache.New(time.Minute, time.Minute)}
+	return LocalCache[T]{lock: &sync.Mutex{}, cache: cache.New(time.Minute, time.Minute), timeMap: make(map[string]time.Time)}
 }
 
 type LocalCache[T any] struct {
@@ -71,8 +71,8 @@ func (this *LocalCache[T]) GetWithTimeout(ctx context.Context, key string, durat
 		return object, err
 	}
 
-	this.Set(ctx, key, object, DurationMax)
 	this.timeMap[key] = time.Now()
+	this.Set(ctx, key, object, DurationMax)
 
 	return object, nil
 }

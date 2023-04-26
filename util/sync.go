@@ -84,7 +84,7 @@ func NewSingleGoPool(ctx context.Context, name string) (*SingleGoPool, error) {
 		return nil, errors.Errorf("创建单协程池，异常: %+v", err)
 	}
 
-	return &SingleGoPool{poolName: name, pool: pool}, nil
+	return &SingleGoPool{poolName: name, pool: pool, lock: &sync.Mutex{}}, nil
 }
 
 type SingleGoPool struct {

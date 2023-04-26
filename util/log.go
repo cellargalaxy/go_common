@@ -153,9 +153,7 @@ func GenLogId() int64 {
 	return GenId()
 }
 func GetLogId(ctx context.Context) int64 {
-	idP := GetCtxValue(ctx, LogIdKey)
-	id, _ := idP.(int64)
-	return id
+	return GetCtxValue[int64](ctx, LogIdKey)
 }
 func GetLogIdString(ctx context.Context) string {
 	return Int642String(GetLogId(ctx))
@@ -176,9 +174,7 @@ func GenReqId() int64 {
 	return GenId()
 }
 func GetReqId(ctx context.Context) int64 {
-	idP := GetCtxValue(ctx, ReqIdKey)
-	id, _ := idP.(int64)
-	return id
+	return GetCtxValue[int64](ctx, ReqIdKey)
 }
 func GetOrGenReqId(ctx context.Context) int64 {
 	id := GetReqId(ctx)

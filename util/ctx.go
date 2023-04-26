@@ -4,17 +4,17 @@ import "context"
 
 const ignoreErrKey = "ignoreErr"
 
-func GetCtxValue(ctx context.Context, key string) interface{} {
-	return ctx.Value(key)
+func GetCtxValue[T any](ctx context.Context, key string) T {
+	value := ctx.Value(key)
+	object, _ := value.(T)
+	return object
 }
 func SetCtxValue(ctx context.Context, key string, value interface{}) context.Context {
 	return context.WithValue(ctx, key, value)
 }
 
 func IsIgnoreErr(ctx context.Context) bool {
-	isIgnoreP := GetCtxValue(ctx, ignoreErrKey)
-	isIgnore, ok := isIgnoreP.(bool)
-	return isIgnore && ok
+	return GetCtxValue[bool](ctx, ignoreErrKey)
 }
 func SetIgnoreErr(ctx context.Context, isIgnoreErr bool) context.Context {
 	if IsIgnoreErr(ctx) == isIgnoreErr {

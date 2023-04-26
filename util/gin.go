@@ -42,9 +42,7 @@ func Ping(c *gin.Context) {
 }
 
 func GetClaims(ctx context.Context) *model.Claims {
-	object := GetCtxValue(ctx, ClaimsKey)
-	claims, _ := object.(*model.Claims)
-	return claims
+	return GetCtxValue[*model.Claims](ctx, ClaimsKey)
 }
 func SetClaims(ctx context.Context, claims *model.Claims) context.Context {
 	if claims == nil {

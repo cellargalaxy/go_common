@@ -83,7 +83,7 @@ func CsvFile2Struct(ctx context.Context, filePath string, list interface{}) erro
 
 func CsvStrings2Data(ctx context.Context, lines [][]string) ([]byte, error) {
 	var buffer bytes.Buffer
-	_, err := buffer.WriteString("\xEF\xBB\xBF")
+	_, err := buffer.WriteString("") //"\xEF\xBB\xBF"
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("序列化CSV异常")
 		return nil, errors.Errorf("序列化CSV异常: %+v", err)
