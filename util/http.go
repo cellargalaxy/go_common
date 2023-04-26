@@ -51,7 +51,7 @@ func HttpApiWithTry(ctx context.Context, name string, try int, sleeps []time.Dur
 		if err == nil {
 			return nil
 		}
-		wareSleep := WareDuration(GetSleepTime(sleeps, i))
+		wareSleep := WareNumber(GetSleepTime(sleeps, i))
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "wareSleep": wareSleep}).Error(genHttpText(ctx, name, nil, "异常", "重试请求"))
 		Sleep(ctx, wareSleep)
 	}
@@ -221,7 +221,7 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 				return 0, errors.Errorf("HTTP请求异常，重试超限")
 			}
 			wareSleep := GetSleepTime(sleeps, attempt-1)
-			wareSleep = WareDuration(wareSleep)
+			wareSleep = WareNumber(wareSleep)
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt, "wareSleep": wareSleep}).Warn("HTTP请求异常，休眠重试")
 			return wareSleep, nil
 		})

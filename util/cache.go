@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-var localCache = NewLocalCache()
+var localCache = NewLocalCache[string]()
 
 func existReqId(ctx context.Context, reqId string, duration time.Duration) bool {
 	key := fmt.Sprintf("reqId-%s", reqId)
 	_, ok := localCache.Get(ctx, key)
-	localCache.Set(ctx, key, "", duration)
+	localCache.Set(ctx, key, nil, duration)
 	return ok
 }
 func getHttpBan(ctx context.Context, address string) bool {
@@ -31,56 +31,54 @@ func setHttpBan(ctx context.Context, address string, duration time.Duration) {
 	localCache.Set(ctx, key, "", duration)
 }
 
-func NewLocalCache() *LocalCache {
-	return &LocalCache{cache: cache.New(time.Minute, time.Minute), lock: &sync.Mutex{}}
+func NewLocalCache[T any]() LocalCache {
+	return LocalCache{lock: &sync.Mutex{}, cache: cache.New(time.Minute, time.Minute)}
 }
 
-type LocalCache struct {
-	cache *cache.Cache
-	lock  *sync.Mutex
+type LocalCache[T any] struct {
+	lock    *sync.Mutex
+	cache   *cache.Cache
+	timeMap map[string]time.Time
 }
 
-func (this *LocalCache) Get(ctx context.Context, key string) (interface{}, bool) {
-	return this.cache.Get(key)
+func (this *LocalCache[T]) Get(ctx context.Context, key string) (T, bool) {
+	var value T
+	object, ok := this.cache.Get(key)
+	if !ok {
+		return value, false
+	}
+	value, ok = object.(T)
+	return value, ok
 }
-func (this *LocalCache) Set(ctx context.Context, key string, object interface{}, duration time.Duration) {
+func (this *LocalCache[T]) Set(ctx context.Context, key string, object T, duration time.Duration) {
 	this.cache.Set(key, object, duration)
 }
-func (this *LocalCache) Del(ctx context.Context, key string) {
+func (this *LocalCache[T]) Del(ctx context.Context, key string) {
 	this.cache.Delete(key)
 }
-func (this *LocalCache) GetWithTimeout(ctx context.Context, key string, duration time.Duration, get func() (interface{}, error)) (interface{}, error) {
+func (this *LocalCache[T]) GetWithTimeout(ctx context.Context, key string, duration time.Duration, get func() (T, error)) (T, error) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	type Object struct {
-		object    interface{}
-		cacheTime time.Time
-	}
-
-	var obj Object
 	object, ok := this.Get(ctx, key)
-	if object != nil && ok {
-		obj, ok = object.(Object)
-		if ok && time.Now().Sub(obj.cacheTime) <= duration {
-			return obj.object, nil
-		}
+	cacheTime := this.timeMap[key]
+	if ok && time.Now().Sub(cacheTime) <= duration {
+		return object, nil
 	}
 
 	object, err := get()
 	if err != nil {
-		return obj.object, err
-	}
-	if object == nil {
-		return obj.object, nil
+		return object, err
 	}
 
-	this.Set(ctx, key, Object{object: object, cacheTime: time.Now()}, DurationMax)
+	this.Set(ctx, key, object, DurationMax)
+	this.timeMap[key] = time.Now()
+
 	return object, nil
 }
 
 // true:拿到锁；false:拿不到锁
-func (this *LocalCache) TryLock(ctx context.Context, key string, duration time.Duration) bool {
+func (this *LocalCache[T]) TryLock(ctx context.Context, key string, duration time.Duration) bool {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
@@ -89,10 +87,11 @@ func (this *LocalCache) TryLock(ctx context.Context, key string, duration time.D
 		return false
 	}
 
-	this.Set(ctx, key, struct{}{}, duration)
+	var object T
+	this.Set(ctx, key, object, duration)
 	return true
 }
-func (this *LocalCache) UnLock(ctx context.Context, key string) {
+func (this *LocalCache[T]) UnLock(ctx context.Context, key string) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
