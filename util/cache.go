@@ -14,7 +14,7 @@ var localCache = NewLocalCache[string]()
 func existReqId(ctx context.Context, reqId string, duration time.Duration) bool {
 	key := fmt.Sprintf("reqId-%s", reqId)
 	_, ok := localCache.Get(ctx, key)
-	localCache.Set(ctx, key, nil, duration)
+	localCache.Set(ctx, key, "", duration)
 	return ok
 }
 func getHttpBan(ctx context.Context, address string) bool {
@@ -31,8 +31,8 @@ func setHttpBan(ctx context.Context, address string, duration time.Duration) {
 	localCache.Set(ctx, key, "", duration)
 }
 
-func NewLocalCache[T any]() LocalCache {
-	return LocalCache{lock: &sync.Mutex{}, cache: cache.New(time.Minute, time.Minute)}
+func NewLocalCache[T any]() LocalCache[T] {
+	return LocalCache[T]{lock: &sync.Mutex{}, cache: cache.New(time.Minute, time.Minute)}
 }
 
 type LocalCache[T any] struct {
