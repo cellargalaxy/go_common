@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -13,18 +12,16 @@ import (
 func GenIdByTime(time time.Time) int64 {
 	str := time.Format(DateLayout_060102150405_0000000)
 	str = str[:12] + str[13:]
-	logId, _ := strconv.ParseInt(str, 10, 64)
-	return logId
+	return String2Int64(str)
 }
 func GenId() int64 {
 	return GenIdByTime(time.Now())
 }
 func GenStringId() string {
-	return strconv.FormatInt(GenId(), 10)
+	return Int642String(GenId())
 }
 func ParseId(ctx context.Context, id int64) (time.Time, error) {
-	str := strconv.FormatInt(id, 10)
-	return ParseStringId(ctx, str)
+	return ParseStringId(ctx, Int642String(id))
 }
 func ParseStringId(ctx context.Context, id string) (time.Time, error) {
 	if len(id) != 18 {
