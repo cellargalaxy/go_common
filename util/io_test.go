@@ -45,6 +45,11 @@ func TestIO(t *testing.T) {
 		t.Errorf("%+v", err)
 		return
 	}
+	err = RemoveFile(ctx, folder)
+	if err != nil {
+		t.Errorf("%+v", err)
+		return
+	}
 	fol := GetPathInfo(ctx, folder)
 	if fol != nil {
 		t.Errorf(`if fol != nil {`)

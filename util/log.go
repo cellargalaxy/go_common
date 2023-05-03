@@ -27,12 +27,11 @@ func InitDefaultLog() {
 
 func InitLog(serverName, filename string, maxSize, maxBackups, maxAge int, level logrus.Level) {
 	if serverName == "" {
-		serverName = "log"
+		serverName = GenStringId()
 	}
 	if filename == "" {
 		filename = "log.log"
 	}
-	logrus.SetLevel(level)
 	filename = fmt.Sprintf("log/%s/%s", serverName, filename)
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   filename,   //日志文件的位置
@@ -42,6 +41,8 @@ func InitLog(serverName, filename string, maxSize, maxBackups, maxAge int, level
 		Compress:   false,      //是否压缩/归档旧文件
 	}
 	multiWriter := io.MultiWriter(os.Stdout, lumberJackLogger)
+
+	logrus.SetLevel(level)
 	logrus.SetOutput(multiWriter)
 	logrus.SetFormatter(&nested.Formatter{
 		HideKeys:        false, //显示 [fieldValue] 而不是 [fieldKey:fieldValue]
@@ -51,6 +52,7 @@ func InitLog(serverName, filename string, maxSize, maxBackups, maxAge int, level
 		TimestampFormat: time.RFC3339,
 		FieldsOrder:     []string{LogIdKey, ServerNameKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
+
 	var hook paramHook
 	hook.serverName = serverName
 	logrus.AddHook(&hook)
@@ -62,22 +64,23 @@ func CreateDefaultLog(filename string) *logrus.Logger {
 
 func CreateLog(serverName, filename string, maxSize, maxBackups, maxAge int, level logrus.Level) *logrus.Logger {
 	if serverName == "" {
-		serverName = "log"
+		serverName = GenStringId()
 	}
 	if filename == "" {
-		filename = fmt.Sprintf("%s.log", GenStringId())
+		filename = "log.log"
 	}
-	log := logrus.New()
-	log.SetLevel(level)
-	filename = fmt.Sprintf("log/%s/%s", serverName, filename)
+	filePath := fmt.Sprintf("log/%s/%s", serverName, filename)
 	lumberJackLogger := &lumberjack.Logger{
-		Filename:   filename,   //日志文件的位置
+		Filename:   filePath,   //日志文件的位置
 		MaxSize:    maxSize,    //在进行切割之前，日志文件的最大大小（以MB为单位）
 		MaxBackups: maxBackups, //保留旧文件的最大个数
 		MaxAge:     maxAge,     //保留旧文件的最大天数
 		Compress:   false,      //是否压缩/归档旧文件
 	}
 	multiWriter := io.MultiWriter(os.Stdout, lumberJackLogger)
+
+	log := logrus.New()
+	log.SetLevel(level)
 	log.SetOutput(multiWriter)
 	log.SetFormatter(&nested.Formatter{
 		HideKeys:        false, //显示 [fieldValue] 而不是 [fieldKey:fieldValue]
@@ -87,9 +90,11 @@ func CreateLog(serverName, filename string, maxSize, maxBackups, maxAge int, lev
 		TimestampFormat: time.RFC3339,
 		FieldsOrder:     []string{LogIdKey, ServerNameKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
+
 	var hook paramHook
 	hook.serverName = serverName
 	log.AddHook(&hook)
+
 	return log
 }
 
@@ -141,11 +146,11 @@ func GinLog(c *gin.Context) {
 	uri := c.Request.RequestURI
 	status := c.Writer.Status()
 	if status == http.StatusOK {
-		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Info("gin")
+		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Info()
 	} else if status >= 500 {
-		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Error("gin")
+		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Error()
 	} else {
-		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Warn("gin")
+		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Warn()
 	}
 }
 
