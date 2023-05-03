@@ -115,7 +115,7 @@ func BookmarkCsv2Xml(ctx context.Context, csvPath, xmlPath string) error {
 		return errors.Errorf("转换书签，文件不存在")
 	}
 	var list []model.Bookmark
-	err := util.ReadCsvWithFile2Struct(ctx, csvPath, &list)
+	err := util.CsvFile2Struct(ctx, csvPath, &list)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func BookmarkCsv2Xml(ctx context.Context, csvPath, xmlPath string) error {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("转换书签，xml序列号异常")
 		return errors.Errorf("转换书签，xml序列号异常")
 	}
-	err = util.WriteFileWithData(ctx, xmlPath, data)
+	err = util.WriteData2File(ctx, data, xmlPath)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func BookmarkFile2Csv(ctx context.Context, filePath string, filePaths ...string)
 	if err != nil {
 		return err
 	}
-	err = util.WriteCsv2FileByStruct(ctx, list, filePath)
+	err = util.CsvStruct2File(ctx, list, filePath)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func ParseBookmarkFile(ctx context.Context, filePath string) ([]model.Bookmark, 
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("解析书签，文件不存在")
 		return nil, errors.Errorf("解析书签，文件不存在")
 	}
-	data, err := util.ReadFileWithString(ctx, filePath, "")
+	data, err := util.ReadFile2String(ctx, filePath, "")
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@ func Log2Csv(ctx context.Context, logPath, csvPath string) error {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"logPath": logPath}).Error("转换日志，文件不存在")
 			return errors.Errorf("转换日志，文件不存在")
 		}
-		content, err = util.ReadFileWithString(ctx, logPath, "")
+		content, err = util.ReadFile2String(ctx, logPath, "")
 		if err != nil {
 			return err
 		}
@@ -50,7 +50,7 @@ func Log2Csv(ctx context.Context, logPath, csvPath string) error {
 		object = append(object, params...)
 		list = append(list, object)
 	}
-	return util.WriteCsv2DataByFile(ctx, list, csvPath)
+	return util.CsvStrings2File(ctx, list, csvPath)
 }
 
 type logs []string
