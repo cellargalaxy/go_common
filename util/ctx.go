@@ -36,6 +36,14 @@ func CopyCtx(old context.Context) context.Context {
 	return ctx
 }
 
+func CancelCtx(cancels ...func()) {
+	for i := range cancels {
+		if cancels[i] == nil {
+			continue
+		}
+		cancels[i]()
+	}
+}
 func CtxDone(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():
