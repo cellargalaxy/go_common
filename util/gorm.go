@@ -14,15 +14,21 @@ const (
 	DefaultSqlLen = 512
 )
 
-func NewDefaultGormLog() logger.Interface {
-	return GormLog{handlers: []GormLogHandler{NewGormLogHandler()}}
+func NewDefaultGormLog() GormLog {
+	return NewGormLog([]error{gorm.ErrRecordNotFound}, DefaultSqlLen, false, true, true, false, true)
 }
-func NewGormLog(handlers ...GormLogHandler) logger.Interface {
-	return GormLog{handlers: handlers}
+func NewGormLog(ignoreErrs []error, sqlLen int, insertShow, deleteShow, selectShow, updateShow, otherShow bool) GormLog {
+	return GormLog{IgnoreErrs: ignoreErrs, SqlLen: sqlLen, InsertShow: insertShow, DeleteShow: deleteShow, SelectShow: selectShow, UpdateShow: updateShow, OtherShow: otherShow}
 }
 
 type GormLog struct {
-	handlers []GormLogHandler
+	IgnoreErrs []error
+	SqlLen     int
+	InsertShow bool
+	DeleteShow bool
+	SelectShow bool
+	UpdateShow bool
+	OtherShow  bool
 }
 
 func (this GormLog) LogMode(logger.LogLevel) logger.Interface {
@@ -39,37 +45,6 @@ func (this GormLog) Error(ctx context.Context, s string, args ...interface{}) {
 }
 func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	sql, _ := fc()
-	for i := range this.handlers {
-		if this.handlers[i] == nil {
-			continue
-		}
-		this.handlers[i].Handler(ctx, begin, sql, err)
-	}
-}
-
-func NewGormLogHandler() GormLogHandler {
-	return NewGormSqlHandler([]error{gorm.ErrRecordNotFound}, DefaultSqlLen, false, true, true, false, true)
-}
-
-type GormLogHandler interface {
-	Handler(ctx context.Context, begin time.Time, sql string, err error)
-}
-
-func NewGormSqlHandler(ignoreErrs []error, sqlLen int, insertShow, deleteShow, selectShow, updateShow, otherShow bool) GormSqlHandler {
-	return GormSqlHandler{IgnoreErrs: ignoreErrs, SqlLen: sqlLen, InsertShow: insertShow, DeleteShow: deleteShow, SelectShow: selectShow, UpdateShow: updateShow, OtherShow: otherShow}
-}
-
-type GormSqlHandler struct {
-	IgnoreErrs []error
-	SqlLen     int
-	InsertShow bool
-	DeleteShow bool
-	SelectShow bool
-	UpdateShow bool
-	OtherShow  bool
-}
-
-func (this GormSqlHandler) Handler(ctx context.Context, begin time.Time, sql string, err error) {
 	elapsed := time.Since(begin)
 	if this.SqlLen > 0 && this.SqlLen < len(sql) {
 		sql = sql[:this.SqlLen]

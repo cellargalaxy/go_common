@@ -16,29 +16,27 @@ const (
 	ClaimsKey        = "claims"
 )
 
-func NewHttpResponseByErr(err error) model.HttpResponse {
-	return NewHttpResponse(nil, err)
+func NewHttpRespByErr(data interface{}, err error) model.HttpResponse {
+	var msg string
+	if err != nil {
+		msg = err.Error()
+	}
+	return NewHttpRespByMsg(data, msg)
 }
-
-func NewFailHttpResponse(message string) model.HttpResponse {
-	return newHttpResponse(model.HttpFailCode, message, nil)
-}
-
-func NewHttpResponse(data interface{}, err error) model.HttpResponse {
-	if err == nil {
-		return newHttpResponse(model.HttpSuccessCode, "", data)
+func NewHttpRespByMsg(data interface{}, msg string) model.HttpResponse {
+	if msg == "" {
+		return NewHttpResp(model.HttpSuccessCode, "", data)
 	} else {
-		return newHttpResponse(model.HttpFailCode, err.Error(), data)
+		return NewHttpResp(model.HttpFailCode, msg, data)
 	}
 }
-
-func newHttpResponse(code int, msg string, data interface{}) model.HttpResponse {
+func NewHttpResp(code int, msg string, data interface{}) model.HttpResponse {
 	return model.HttpResponse{Code: code, Msg: msg, Data: data}
 }
 
 func Ping(c *gin.Context) {
 	logrus.WithContext(c).WithFields(logrus.Fields{"claims": GetClaims(c)}).Info("Ping")
-	c.JSON(http.StatusOK, NewHttpResponse(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName()}, nil))
+	c.JSON(http.StatusOK, NewHttpRespByErr(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName()}, nil))
 }
 
 func GetClaims(ctx context.Context) *model.Claims {
@@ -59,8 +57,7 @@ func setGinLogId(c *gin.Context) {
 	c.Set(LogIdKey, logId)
 	c.Header(LogIdKey, Int642String(logId))
 }
-
-func ClaimsHttp(c *gin.Context, secret string) {
+func ClaimsGin(c *gin.Context, secret string) {
 	setGinLogId(c)
 	defer c.Next()
 
@@ -92,8 +89,7 @@ func ClaimsHttp(c *gin.Context, secret string) {
 	}
 	c.Set(ClaimsKey, &claims)
 }
-
-func ValidateHttp(c *gin.Context, secret string) {
+func ValidateGin(c *gin.Context, secret string) {
 	setGinLogId(c)
 
 	var token string
@@ -107,24 +103,24 @@ func ValidateHttp(c *gin.Context, secret string) {
 	}
 	if token == "" {
 		c.Abort()
-		c.JSON(http.StatusOK, NewFailHttpResponse("Authorization非法"))
+		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "Authorization非法"))
 		return
 	}
 	var claims model.Claims
 	jwtToken, err := DeJwt(c, token, secret, &claims)
 	if err != nil {
 		c.Abort()
-		c.JSON(http.StatusOK, NewHttpResponseByErr(err))
+		c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
 		return
 	}
 	if jwtToken == nil {
 		c.Abort()
-		c.JSON(http.StatusOK, NewFailHttpResponse("jwtToken为空"))
+		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "jwtToken为空"))
 		return
 	}
 	if !jwtToken.Valid {
 		c.Abort()
-		c.JSON(http.StatusOK, NewFailHttpResponse("jwtToken非法"))
+		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "jwtToken非法"))
 		return
 	}
 
@@ -132,13 +128,13 @@ func ValidateHttp(c *gin.Context, secret string) {
 	duration := expiresAt.Sub(time.Now())
 	if duration.Nanoseconds() <= 0 {
 		c.Abort()
-		c.JSON(http.StatusOK, NewFailHttpResponse("jwtToken过期"))
+		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "jwtToken过期"))
 		return
 	}
 	if claims.ReqId != "" {
 		if existReqId(c, claims.ReqId, duration) {
 			c.Abort()
-			c.JSON(http.StatusOK, newHttpResponse(model.HttpReRequestCode, "请求非法重放", nil))
+			c.JSON(http.StatusOK, NewHttpResp(model.HttpReRequestCode, "请求非法重放", nil))
 			return
 		}
 	}
@@ -148,7 +144,7 @@ func ValidateHttp(c *gin.Context, secret string) {
 		uri = strings.Split(uri, "?")[0]
 		if claims.Uri != uri {
 			c.Abort()
-			c.JSON(http.StatusOK, newHttpResponse(model.HttpIllegalUriCode, "请求非法uri", nil))
+			c.JSON(http.StatusOK, NewHttpResp(model.HttpIllegalUriCode, "请求非法uri", nil))
 			return
 		}
 	}

@@ -22,7 +22,7 @@ const (
 	UserAgentDefault = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 )
 
-var SpiderSleepsDefault = []time.Duration{0, time.Second * 2, time.Second * 2}
+var SpiderSleepDefault = []time.Duration{0, time.Second * 2, time.Second * 2}
 var httpClient *resty.Client
 var httpClientOnce sync.Once
 var httpClientSpider *resty.Client
@@ -41,7 +41,7 @@ type HttpResponse interface {
 	HttpSuccess(ctx context.Context) error
 }
 
-func HttpApiWithTry(ctx context.Context, name string, try int, sleeps []time.Duration, response HttpResponse, newResponse func() (*resty.Response, error)) error {
+func HttpApiTry(ctx context.Context, name string, try int, sleeps []time.Duration, response HttpResponse, newResponse func() (*resty.Response, error)) error {
 	if try < len(sleeps)+1 {
 		try = len(sleeps) + 1
 	}
@@ -142,7 +142,7 @@ func GetHttpClient() *resty.Client {
 }
 func GetHttpClientSpider() *resty.Client {
 	httpClientSpiderOnce.Do(func() {
-		httpClientSpider = CreateHttpClient(TimeoutDefault, 0, SpiderSleepsDefault, nil, true)
+		httpClientSpider = CreateHttpClient(TimeoutDefault, 0, SpiderSleepDefault, nil, true)
 	})
 	return httpClientSpider
 }

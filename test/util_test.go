@@ -249,7 +249,7 @@ func TestGetIp(t *testing.T) {
 }
 
 func claims(ctx *gin.Context) {
-	util.ClaimsHttp(ctx, jwtSecret)
+	util.ClaimsGin(ctx, jwtSecret)
 }
 func TestHttpClaims(t *testing.T) {
 	fmt.Println("http://127.0.0.1:8888/ping")
@@ -264,7 +264,7 @@ func TestHttpClaims(t *testing.T) {
 }
 
 func validate(ctx *gin.Context) {
-	util.ValidateHttp(ctx, jwtSecret)
+	util.ValidateGin(ctx, jwtSecret)
 }
 func TestHttpValidate(t *testing.T) {
 	fmt.Println("http://127.0.0.1:8888/ping")
@@ -452,7 +452,7 @@ func TestHttpApiRetry(t *testing.T) {
 		Data Data `json:"data"`
 	}
 	var object Response
-	err := util.HttpApiWithTry(ctx, "TestHttpApiRetry", 0, util.SpiderSleepsDefault, &object, func() (*resty.Response, error) {
+	err := util.HttpApiTry(ctx, "TestHttpApiRetry", 0, util.SpiderSleepDefault, &object, func() (*resty.Response, error) {
 		return util.GetHttpSpiderRequest(ctx).Post("https://wstbd.dynv6.net/server_center/ping")
 	})
 	if err != nil {
