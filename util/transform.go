@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"golang.org/x/exp/constraints"
 	"strconv"
 	"strings"
 )
@@ -16,11 +17,11 @@ func Interface2String(value interface{}) string {
 	}
 	i64, ok := value.(int64)
 	if ok {
-		return Int642String(i64)
+		return Int2String(i64)
 	}
 	i32, ok := value.(int32)
 	if ok {
-		return Int642String(int64(i32))
+		return Int2String(i32)
 	}
 	i, ok := value.(int)
 	if ok {
@@ -28,15 +29,15 @@ func Interface2String(value interface{}) string {
 	}
 	i8, ok := value.(int8)
 	if ok {
-		return Int2String(int(i8))
+		return Int2String(i8)
 	}
 	f64, ok := value.(float64)
 	if ok {
-		return Float642String(f64)
+		return Float2String(f64)
 	}
 	f32, ok := value.(float32)
 	if ok {
-		return Float642String(float64(f32))
+		return Float2String(f32)
 	}
 	return fmt.Sprint(value)
 }
@@ -202,9 +203,9 @@ func String2Ints(value ...string) []int {
 	return list
 }
 
-func Float642String(value float64) string {
+func Float2String[T constraints.Float](value T) string {
 	var str string
-	str = strconv.FormatFloat(value, 'f', 16, 64)
+	str = strconv.FormatFloat(float64(value), 'f', 16, 64)
 	str = strings.TrimRight(str, "0")
 	str = strings.TrimRight(str, ".")
 	ss := strings.Split(str, ".")
@@ -234,29 +235,18 @@ func Float642String(value float64) string {
 	str = strings.TrimRight(str, ".")
 	return str
 }
-func Float642Strings(value ...float64) []string {
+func Float2Strings[T constraints.Float](value ...T) []string {
 	list := make([]string, 0, len(value))
 	for i := range value {
-		list = append(list, Float642String(value[i]))
+		list = append(list, Float2String(value[i]))
 	}
 	return list
 }
 
-func Int642String(value int64) string {
-	return strconv.FormatInt(value, 10)
+func Int2String[T constraints.Integer](value T) string {
+	return strconv.Itoa(int(value))
 }
-func Int642Strings(value ...int64) []string {
-	list := make([]string, 0, len(value))
-	for i := range value {
-		list = append(list, Int642String(value[i]))
-	}
-	return list
-}
-
-func Int2String(value int) string {
-	return strconv.Itoa(value)
-}
-func Int2Strings(value ...int) []string {
+func Int2Strings[T constraints.Integer](value ...T) []string {
 	list := make([]string, 0, len(value))
 	for i := range value {
 		list = append(list, Int2String(value[i]))
