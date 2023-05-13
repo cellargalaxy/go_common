@@ -27,7 +27,7 @@ func CloseIo(ctx context.Context, list ...io.Closer) {
 	}
 }
 
-func ClearPath(ctx context.Context, fileOrFolderPath string) string {
+func ClearPath(fileOrFolderPath string) string {
 	fileOrFolderPath = strings.ReplaceAll(fileOrFolderPath, "\\", "/")
 	return path.Clean(fileOrFolderPath)
 }

@@ -131,6 +131,11 @@ func (this *paramHook) getCaller(entry *logrus.Entry) string {
 		}
 		break
 	}
+	file = ClearPath(file)
+	files := strings.Split(file, "/")
+	for i := range files {
+		files[i] = strings.Split(files[i], "@")[0]
+	}
 	return fmt.Sprintf(`"%s:%d"`, file, line)
 }
 func (this *paramHook) Levels() []logrus.Level {

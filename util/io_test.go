@@ -12,7 +12,7 @@ func TestIO(t *testing.T) {
 	folder := `TestIO`
 	filename := `TestIO.txt`
 	filepath := path.Join(folder, filename)
-	filepath = ClearPath(ctx, filepath)
+	filepath = ClearPath(filepath)
 
 	err = WriteString2File(ctx, `TestIO`, filepath)
 	if err != nil {
