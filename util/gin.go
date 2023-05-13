@@ -55,7 +55,7 @@ func setGinLogId(c *gin.Context) {
 		logId = GenLogId()
 	}
 	c.Set(LogIdKey, logId)
-	c.Header(LogIdKey, Int642String(logId))
+	c.Header(LogIdKey, Int2String(logId))
 }
 func ClaimsGin(c *gin.Context, secret string) {
 	setGinLogId(c)

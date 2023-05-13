@@ -167,7 +167,7 @@ func GetLogId(ctx context.Context) int64 {
 	return GetCtxValue[int64](ctx, LogIdKey)
 }
 func GetLogIdString(ctx context.Context) string {
-	return Int642String(GetLogId(ctx))
+	return Int2String(GetLogId(ctx))
 }
 func SetLogId(ctx context.Context) context.Context {
 	if 0 < GetLogId(ctx) {
@@ -195,7 +195,7 @@ func GetOrGenReqId(ctx context.Context) int64 {
 	return id
 }
 func GetOrGenReqIdString(ctx context.Context) string {
-	return Int642String(GetOrGenReqId(ctx))
+	return Int2String(GetOrGenReqId(ctx))
 }
 func SetReqId(ctx context.Context) context.Context {
 	if 0 < GetReqId(ctx) {

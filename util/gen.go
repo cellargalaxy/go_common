@@ -18,10 +18,10 @@ func GenId() int64 {
 	return GenIdByTime(time.Now())
 }
 func GenStringId() string {
-	return Int642String(GenId())
+	return Int2String(GenId())
 }
 func ParseId(ctx context.Context, id int64) (time.Time, error) {
-	return ParseStringId(ctx, Int642String(id))
+	return ParseStringId(ctx, Int2String(id))
 }
 func ParseStringId(ctx context.Context, id string) (time.Time, error) {
 	if len(id) != 18 {
