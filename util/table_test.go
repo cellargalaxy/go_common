@@ -17,7 +17,7 @@ func TestTable(t *testing.T) {
 	table.AppendCell(3, 1, 1, "4B")
 	table.AppendCell(3, 1, 1, "4C")
 	table.AppendCell(3, 1, 2, "4D")
-	lines := table.GetTable()
+	lines := table.ListLine()
 	for i := range lines {
 		fmt.Println(JsonStruct2String(lines[i]))
 	}
@@ -28,7 +28,7 @@ func TestTable(t *testing.T) {
 | 横向合并 | 横向合并 | 3C | 乘六 | 乘六 |
 | 4A       | 4B       | 4C | 4D   | 4D   |
 +----------+----------+----+------+------+` {
-		t.Errorf(`table.Render() !=`)
+		t.Errorf(`lines.Render() !=`)
 		return
 	}
 }
