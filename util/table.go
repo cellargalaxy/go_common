@@ -20,6 +20,10 @@ type Table struct {
 	lines [][]*string
 }
 
+func (this Table) String() string {
+	return JsonStruct2String(this.lines)
+}
+
 func (this *Table) Render() string {
 	lines := this.ListLine()
 	tab := pretty_table.NewWriter()
