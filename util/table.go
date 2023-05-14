@@ -4,8 +4,8 @@ import (
 	pretty_table "github.com/jedib0t/go-pretty/v6/table"
 )
 
-func NewTable(lines ...[]string) *table {
-	tab := &table{}
+func NewTable(lines ...[]string) *Table {
+	tab := &Table{}
 	for i := range lines {
 		line := make([]*string, 0, len(lines[i]))
 		for j := range lines[i] {
@@ -16,11 +16,11 @@ func NewTable(lines ...[]string) *table {
 	return tab
 }
 
-type table struct {
+type Table struct {
 	lines [][]*string
 }
 
-func (this *table) Render() string {
+func (this *Table) Render() string {
 	lines := this.ListLine()
 	tab := pretty_table.NewWriter()
 	for i := range lines {
@@ -32,7 +32,7 @@ func (this *table) Render() string {
 	}
 	return tab.Render()
 }
-func (this *table) ListLine() [][]string {
+func (this *Table) ListLine() [][]string {
 	lines := make([][]string, 0, len(this.lines))
 	for i := range this.lines {
 		line := make([]string, 0, len(this.lines[i]))
@@ -47,7 +47,7 @@ func (this *table) ListLine() [][]string {
 	}
 	return lines
 }
-func (this *table) SetCell(row, col int, value string) {
+func (this *Table) SetCell(row, col int, value string) {
 	for len(this.lines) <= row {
 		this.lines = append(this.lines, []*string{})
 	}
@@ -56,7 +56,7 @@ func (this *table) SetCell(row, col int, value string) {
 	}
 	this.lines[row][col] = &value
 }
-func (this *table) AppendCell(row, rowspan, colspan int, value string) {
+func (this *Table) AppendCell(row, rowspan, colspan int, value string) {
 	for len(this.lines) <= row {
 		this.lines = append(this.lines, []*string{})
 	}
