@@ -24,6 +24,16 @@ func (this Table) String() string {
 	return JsonStruct2String(this.lines)
 }
 
+func (this *Table) IsEmpty() bool {
+	for i := range this.lines {
+		for j := range this.lines[i] {
+			if this.lines[i][j] != nil {
+				return false
+			}
+		}
+	}
+	return true
+}
 func (this *Table) Render() string {
 	lines := this.ListLine()
 	tab := pretty_table.NewWriter()
