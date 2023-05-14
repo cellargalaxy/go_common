@@ -51,6 +51,20 @@ func (this *Table) ListLine() [][]string {
 	}
 	return lines
 }
+func (this *Table) GetLine(row int) []string {
+	for len(this.lines) <= row {
+		return nil
+	}
+	line := make([]string, 0, len(this.lines[row]))
+	for j := range this.lines[row] {
+		var cell string
+		if this.lines[row][j] != nil {
+			cell = *this.lines[row][j]
+		}
+		line = append(line, cell)
+	}
+	return line
+}
 func (this *Table) SetCell(row, col int, value string) {
 	for len(this.lines) <= row {
 		this.lines = append(this.lines, []*string{})
