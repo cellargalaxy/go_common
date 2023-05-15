@@ -77,7 +77,7 @@ func (this *Table) listLine() [][]*string {
 	}
 	return lines
 }
-func (this *Table) GetLine(row int) []string {
+func (this *Table) GetRow(row int) []string {
 	for len(this.lines) <= row {
 		return nil
 	}
