@@ -61,6 +61,22 @@ func (this *Table) ListLine() [][]string {
 	}
 	return lines
 }
+func (this *Table) listLine() [][]*string {
+	lines := make([][]*string, 0, len(this.lines))
+	for i := range this.lines {
+		line := make([]*string, 0, len(this.lines[i]))
+		for j := range this.lines[i] {
+			var cell *string
+			if this.lines[i][j] != nil {
+				value := *this.lines[i][j]
+				cell = &value
+			}
+			line = append(line, cell)
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
 func (this *Table) GetLine(row int) []string {
 	for len(this.lines) <= row {
 		return nil
@@ -76,13 +92,16 @@ func (this *Table) GetLine(row int) []string {
 	return line
 }
 func (this *Table) SetCell(row, col int, value string) {
+	this.setCell(row, col, &value)
+}
+func (this *Table) setCell(row, col int, value *string) {
 	for len(this.lines) <= row {
 		this.lines = append(this.lines, []*string{})
 	}
 	for len(this.lines[row]) <= col {
 		this.lines[row] = append(this.lines[row], nil)
 	}
-	this.lines[row][col] = &value
+	this.lines[row][col] = value
 }
 func (this *Table) AppendCell(row, rowspan, colspan int, value string) {
 	for len(this.lines) <= row {
@@ -98,6 +117,23 @@ func (this *Table) AppendCell(row, rowspan, colspan int, value string) {
 	for i := 0; i < rowspan; i++ {
 		for j := 0; j < colspan; j++ {
 			this.SetCell(row+i, col+j, value)
+		}
+	}
+}
+func (this *Table) AddCol(col int, value string) {
+	lines := this.listLine()
+	for i := range lines {
+		for j := range lines[i] {
+			if j < col {
+				this.setCell(i, j, lines[i][j])
+			}
+			if j == col {
+				this.setCell(i, j, &value)
+				this.setCell(i, j+1, lines[i][j])
+			}
+			if col < j {
+				this.setCell(i, j+1, lines[i][j])
+			}
 		}
 	}
 }
