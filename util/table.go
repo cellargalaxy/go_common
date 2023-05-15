@@ -163,3 +163,16 @@ func (this *Table) RmRow(row int) {
 	}
 	this.lines = lines
 }
+func (this *Table) AppendRow(values ...string) {
+	rows := make([]*string, len(values))
+	for i := range rows {
+		rows[i] = &values[i]
+	}
+	this.lines = append(this.lines, rows)
+}
+func (this *Table) AppendRowTable(table *Table) {
+	if table == nil {
+		return
+	}
+	this.lines = append(this.lines, table.lines...)
+}
