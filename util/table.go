@@ -137,3 +137,29 @@ func (this *Table) AddCol(col int, value string) {
 		}
 	}
 }
+func (this *Table) AddRow(row, rowspan int, value string) {
+	rows := make([]*string, rowspan)
+	for i := range rows {
+		rows[i] = &value
+	}
+	lines := make([][]*string, 0)
+	for i := range this.lines {
+		if i == row {
+			lines = append(lines, rows)
+			lines = append(lines, this.lines[i])
+			continue
+		}
+		lines = append(lines, this.lines[i])
+	}
+	this.lines = lines
+}
+func (this *Table) RmRow(row int) {
+	lines := make([][]*string, 0)
+	for i := range this.lines {
+		if i == row {
+			continue
+		}
+		lines = append(lines, this.lines[i])
+	}
+	this.lines = lines
+}

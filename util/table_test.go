@@ -45,4 +45,29 @@ func TestTable(t *testing.T) {
 		t.Errorf(`lines.Render() !=`)
 		return
 	}
+
+	table.AddRow(3, 3, "+3")
+	fmt.Println(table.Render())
+	if table.Render() != `+----+----+----+----+----+----+
+| X4 | X4 | +2 | 1C | X6 | X6 |
+| X4 | X4 | +2 | 2C | X6 | X6 |
+| =+ | =+ | +2 | 3C | X6 | X6 |
+| +3 | +3 | +3 |    |    |    |
+| 4A | 4B | +2 | 4C | 4D | 4D |
++----+----+----+----+----+----+` {
+		t.Errorf(`lines.Render() !=`)
+		return
+	}
+
+	table.RmRow(3)
+	fmt.Println(table.Render())
+	if table.Render() != `+----+----+----+----+----+----+
+| X4 | X4 | +2 | 1C | X6 | X6 |
+| X4 | X4 | +2 | 2C | X6 | X6 |
+| =+ | =+ | +2 | 3C | X6 | X6 |
+| 4A | 4B | +2 | 4C | 4D | 4D |
++----+----+----+----+----+----+` {
+		t.Errorf(`lines.Render() !=`)
+		return
+	}
 }
