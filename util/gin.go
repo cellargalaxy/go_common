@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"fmt"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -149,4 +150,31 @@ func ValidateGin(c *gin.Context, secret string) {
 		}
 	}
 	c.Next()
+}
+
+func NewGinGet[Request any](name string, service func(ctx context.Context, request Request) (any, error)) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		var request Request
+		err := ctx.BindQuery(&request)
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
+			ctx.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
+			return
+		}
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"request": request}).Info(name)
+		ctx.JSON(http.StatusOK, NewHttpRespByErr(service(ctx, request)))
+	}
+}
+func NewGinPost[Request any](name string, service func(ctx context.Context, request Request) (any, error)) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		var request Request
+		err := ctx.BindJSON(&request)
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
+			ctx.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
+			return
+		}
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"request": request}).Info(name)
+		ctx.JSON(http.StatusOK, NewHttpRespByErr(service(ctx, request)))
+	}
 }
