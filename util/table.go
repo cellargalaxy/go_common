@@ -24,7 +24,7 @@ func (this Table) String() string {
 func (this *Table) IsEmpty() bool {
 	for i := range this.lines {
 		for j := range this.lines[i] {
-			if this.lines[i][j] != nil {
+			if this.lines[i][j] != nil && *this.lines[i][j] != "" {
 				return false
 			}
 		}
