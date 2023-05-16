@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func Interface2String(value interface{}) string {
+func Interface2String(value any) string {
 	if value == nil {
 		return ""
 	}
@@ -41,7 +41,7 @@ func Interface2String(value interface{}) string {
 	}
 	return fmt.Sprint(value)
 }
-func Interface2Strings(value ...interface{}) []string {
+func Interface2Strings(value ...any) []string {
 	list := make([]string, 0, len(value))
 	for i := range value {
 		list = append(list, Interface2String(value[i]))
@@ -49,156 +49,106 @@ func Interface2Strings(value ...interface{}) []string {
 	return list
 }
 
-func Interface2Float64(value interface{}) float64 {
-	if value == nil {
-		return 0
-	}
-	f64, ok := value.(float64)
-	if ok {
-		return f64
-	}
-	f32, ok := value.(float32)
-	if ok {
-		return float64(f32)
-	}
-	i64, ok := value.(int64)
-	if ok {
-		return float64(i64)
-	}
-	i32, ok := value.(int32)
-	if ok {
-		return float64(i32)
-	}
-	i, ok := value.(int)
-	if ok {
-		return float64(i)
-	}
-	i8, ok := value.(int8)
-	if ok {
-		return float64(i8)
-	}
-	return String2Float64(Interface2String(value))
-}
-func Interface2Float64s(value ...interface{}) []float64 {
-	list := make([]float64, 0, len(value))
-	for i := range value {
-		list = append(list, Interface2Float64(value[i]))
-	}
-	return list
-}
-
-func Interface2Int(value interface{}) int {
-	if value == nil {
-		return 0
-	}
-	i, ok := value.(int)
-	if ok {
-		return i
-	}
-	i64, ok := value.(int64)
-	if ok {
-		return int(i64)
-	}
-	i32, ok := value.(int32)
-	if ok {
-		return int(i32)
-	}
-	i8, ok := value.(int8)
-	if ok {
-		return int(i8)
-	}
-	f64, ok := value.(float64)
-	if ok {
-		return int(f64)
-	}
-	f32, ok := value.(float32)
-	if ok {
-		return int(f32)
-	}
-	return String2Int(Interface2String(value))
-}
-func Interface2Ints(value ...interface{}) []int {
-	list := make([]int, 0, len(value))
-	for i := range value {
-		list = append(list, Interface2Int(value[i]))
-	}
-	return list
-}
-
-func Interface2Int64(value interface{}) int64 {
+func Interface2Float[T constraints.Float](value any) T {
 	if value == nil {
 		return 0
 	}
 	i64, ok := value.(int64)
 	if ok {
-		return i64
+		return T(i64)
 	}
 	i, ok := value.(int)
 	if ok {
-		return int64(i)
+		return T(i)
 	}
 	i32, ok := value.(int32)
 	if ok {
-		return int64(i32)
+		return T(i32)
 	}
 	i8, ok := value.(int8)
 	if ok {
-		return int64(i8)
+		return T(i8)
 	}
 	f64, ok := value.(float64)
 	if ok {
-		return int64(f64)
+		return T(f64)
 	}
 	f32, ok := value.(float32)
 	if ok {
-		return int64(f32)
+		return T(f32)
 	}
-	return String2Int64(Interface2String(value))
+	return String2Float[T](Interface2String(value))
 }
-func Interface2Int64s(value ...interface{}) []int64 {
-	list := make([]int64, 0, len(value))
+func Interface2Floats[T constraints.Float](value ...any) []T {
+	list := make([]T, 0, len(value))
 	for i := range value {
-		list = append(list, Interface2Int64(value[i]))
+		list = append(list, Interface2Float[T](value[i]))
 	}
 	return list
 }
 
-func String2Float64(value string) float64 {
+func Interface2Int[T constraints.Integer](value any) T {
+	if value == nil {
+		return 0
+	}
+	i64, ok := value.(int64)
+	if ok {
+		return T(i64)
+	}
+	i, ok := value.(int)
+	if ok {
+		return T(i)
+	}
+	i32, ok := value.(int32)
+	if ok {
+		return T(i32)
+	}
+	i8, ok := value.(int8)
+	if ok {
+		return T(i8)
+	}
+	f64, ok := value.(float64)
+	if ok {
+		return T(f64)
+	}
+	f32, ok := value.(float32)
+	if ok {
+		return T(f32)
+	}
+	return String2Int[T](Interface2String(value))
+}
+func Interface2Ints[T constraints.Integer](value ...any) []T {
+	list := make([]T, 0, len(value))
+	for i := range value {
+		list = append(list, Interface2Int[T](value[i]))
+	}
+	return list
+}
+
+func String2Int[T constraints.Integer](value string) T {
+	data, _ := strconv.Atoi(value)
+	return T(data)
+}
+func String2Ints[T constraints.Integer](value ...string) []T {
+	list := make([]T, 0, len(value))
+	for i := range value {
+		list = append(list, String2Int[T](value[i]))
+	}
+	return list
+}
+
+func String2Float[T constraints.Float](value string) T {
 	if strings.Contains(value, ".") {
 		value = strings.TrimRight(value, "0")
 		value = strings.TrimRight(value, ".")
 	}
 	data, _ := strconv.ParseFloat(value, 64)
-	return data
+	return T(data)
 }
-func String2Float64s(value ...string) []float64 {
-	list := make([]float64, 0, len(value))
+func String2Floats[T constraints.Float](value ...string) []T {
+	list := make([]T, 0, len(value))
 	for i := range value {
-		list = append(list, String2Float64(value[i]))
-	}
-	return list
-}
-
-func String2Int64(value string) int64 {
-	data, _ := strconv.ParseInt(value, 10, 64)
-	return data
-}
-func String2Int64s(value ...string) []int64 {
-	list := make([]int64, 0, len(value))
-	for i := range value {
-		list = append(list, String2Int64(value[i]))
-	}
-	return list
-}
-
-func String2Int(value string) int {
-	data, _ := strconv.Atoi(value)
-	return data
-}
-func String2Ints(value ...string) []int {
-	list := make([]int, 0, len(value))
-	for i := range value {
-		list = append(list, String2Int(value[i]))
+		list = append(list, String2Float[T](value[i]))
 	}
 	return list
 }
@@ -219,7 +169,7 @@ func Float2String[T constraints.Float](value T) string {
 	list = list[:len(list)-1]
 	for i := len(list) - 2; i >= 0; i-- {
 		if list[i] != "9" && list[i+1] == "9" {
-			list[i] = Int2String(String2Int(list[i]) + 1)
+			list[i] = Int2String(String2Int[int](list[i]) + 1)
 			list = list[:i+1]
 			break
 		}
@@ -263,13 +213,13 @@ func String2IntWithCarry(value string, carry int) int {
 		for i := 0; i < carry; i++ {
 			ss[0] += "0"
 		}
-		return String2Int(ss[0])
+		return String2Int[int](ss[0])
 	}
 	for len(ss[1]) < carry {
 		ss[1] += "0"
 	}
 	ss[1] = ss[1][:carry]
-	return String2Int(strings.Join(ss, ""))
+	return String2Int[int](strings.Join(ss, ""))
 }
 
 func Hump2Underscore(text string) string {
@@ -288,4 +238,36 @@ func ReverseString(s string) string {
 		runes[from], runes[to] = runes[to], runes[from]
 	}
 	return string(runes)
+}
+
+func S2P[T any](value T) *T {
+	return &value
+}
+func S2Ps[T any](value ...T) []*T {
+	list := make([]*T, 0, len(value))
+	for i := range value {
+		list = append(list, S2P(value[i]))
+	}
+	return list
+}
+func P2S[T any](value *T) T {
+	var object T
+	if value != nil {
+		object = *value
+	}
+	return object
+}
+func P2Ss[T any](value ...*T) []T {
+	list := make([]T, 0, len(value))
+	for i := range value {
+		list = append(list, P2S(value[i]))
+	}
+	return list
+}
+func CopyArray[T any](value ...T) []T {
+	list := make([]T, 0, len(value))
+	for i := range value {
+		list = append(list, value[i])
+	}
+	return list
 }

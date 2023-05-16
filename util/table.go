@@ -1,19 +1,16 @@
 package util
 
 import (
-	pretty_table "github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/table"
 )
 
 func NewTable(lines ...[]string) *Table {
-	tab := &Table{}
+	table := &Table{}
+	table.lines = make([][]*string, len(lines))
 	for i := range lines {
-		line := make([]*string, 0, len(lines[i]))
-		for j := range lines[i] {
-			line = append(line, &lines[i][j])
-		}
-		tab.lines = append(tab.lines, line)
+		table.lines[i] = S2Ps(lines[i]...)
 	}
-	return tab
+	return table
 }
 
 type Table struct {
@@ -36,44 +33,27 @@ func (this *Table) IsEmpty() bool {
 }
 func (this *Table) Render() string {
 	lines := this.ListLine()
-	tab := pretty_table.NewWriter()
+	table := table.NewWriter()
 	for i := range lines {
 		line := make([]interface{}, 0, len(lines[i]))
 		for j := range lines[i] {
 			line = append(line, lines[i][j])
 		}
-		tab.AppendRow(line)
+		table.AppendRow(line)
 	}
-	return tab.Render()
+	return table.Render()
 }
 func (this *Table) ListLine() [][]string {
-	lines := make([][]string, 0, len(this.lines))
+	lines := make([][]string, len(this.lines))
 	for i := range this.lines {
-		line := make([]string, 0, len(this.lines[i]))
-		for j := range this.lines[i] {
-			var cell string
-			if this.lines[i][j] != nil {
-				cell = *this.lines[i][j]
-			}
-			line = append(line, cell)
-		}
-		lines = append(lines, line)
+		lines[i] = P2Ss(this.lines[i]...)
 	}
 	return lines
 }
 func (this *Table) listLine() [][]*string {
-	lines := make([][]*string, 0, len(this.lines))
+	lines := make([][]*string, len(this.lines))
 	for i := range this.lines {
-		line := make([]*string, 0, len(this.lines[i]))
-		for j := range this.lines[i] {
-			var cell *string
-			if this.lines[i][j] != nil {
-				value := *this.lines[i][j]
-				cell = &value
-			}
-			line = append(line, cell)
-		}
-		lines = append(lines, line)
+		lines[i] = CopyArray(this.lines[i]...)
 	}
 	return lines
 }
@@ -81,15 +61,7 @@ func (this *Table) GetRow(row int) []string {
 	for len(this.lines) <= row {
 		return nil
 	}
-	line := make([]string, 0, len(this.lines[row]))
-	for j := range this.lines[row] {
-		var cell string
-		if this.lines[row][j] != nil {
-			cell = *this.lines[row][j]
-		}
-		line = append(line, cell)
-	}
-	return line
+	return P2Ss(this.lines[row]...)
 }
 func (this *Table) SetCell(row, col int, value string) {
 	this.setCell(row, col, &value)

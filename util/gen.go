@@ -12,7 +12,7 @@ import (
 func GenIdByTime(time time.Time) int64 {
 	str := time.Format(DateLayout_060102150405_0000000)
 	str = str[:12] + str[13:]
-	return String2Int64(str)
+	return String2Int[int64](str)
 }
 func GenId() int64 {
 	return GenIdByTime(time.Now())
