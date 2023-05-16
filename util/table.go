@@ -142,9 +142,8 @@ func (this *Table) AppendRow(values ...string) {
 	}
 	this.lines = append(this.lines, rows)
 }
-func (this *Table) AppendRowTable(table *Table) {
-	if table == nil {
-		return
+func (this *Table) AppendRowTable(tables ...*Table) {
+	for i := range tables {
+		this.lines = append(this.lines, tables[i].lines...)
 	}
-	this.lines = append(this.lines, table.lines...)
 }
