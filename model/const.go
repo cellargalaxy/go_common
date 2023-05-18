@@ -9,7 +9,7 @@ const (
 )
 
 const (
-	PingPath   = "/ping"
+	PingPath   = "/api/ping"
 	StaticPath = "/static"
 	DebugPath  = "/debug"
 	PprofPath  = "/pprof"
