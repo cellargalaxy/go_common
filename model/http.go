@@ -22,10 +22,15 @@ func (this Claims) String() string {
 	return data
 }
 
+type HttpData struct {
+	Object any   `json:"object"`
+	Count  int64 `json:"count"`
+}
+
 type HttpResp struct {
-	Code int         `json:"code"`
-	Msg  string      `json:"msg"`
-	Data interface{} `json:"data"`
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data any    `json:"data"`
 }
 
 func (this HttpResp) String() string {
