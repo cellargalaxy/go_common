@@ -9,21 +9,19 @@ import (
 )
 
 type ConfigHandler interface {
+	GetPath(ctx context.Context) string
 	GetConfig(ctx context.Context) string
-	ParseConfig(ctx context.Context, text string)
+	ParseConfig(ctx context.Context, text string) error
 }
 
-func NewConfigService(filePath string, handler ConfigHandler) *ConfigService {
+func NewConfigService(handler ConfigHandler) *ConfigService {
 	var service ConfigService
-	service.FilePath = filePath
 	service.handler = handler
 	service.lock = &sync.Mutex{}
 	return &service
 }
 
 type ConfigService struct {
-	FilePath string `json:"file_path"`
-
 	handler ConfigHandler
 	lock    *sync.Mutex
 	pool    *SingleGoPool
@@ -35,20 +33,22 @@ func (this *ConfigService) Start(ctx context.Context) error {
 	defer this.lock.Unlock()
 
 	if this.pool != nil && !this.pool.IsClose(ctx) {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，已启动")
 		return nil
 	}
 
 	var err error
-	this.pool, err = NewDaemonSingleGoPool(ctx, fmt.Sprintf(""), time.Minute, this.flushConfig)
+	this.pool, err = NewDaemonSingleGoPool(ctx, fmt.Sprintf("ConfigService-%s", this.handler.GetPath(ctx)), time.Minute, this.flushConfig)
 	if err != nil {
 		return err
 	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，启动")
 	return nil
 }
 func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) {
 	defer Defer(func(err interface{}, stack string) {
 		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Warn("ConfigService，异常")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("ConfigService，异常")
 		}
 	})
 
@@ -68,27 +68,32 @@ func (this *ConfigService) SaveConfig(ctx context.Context) error {
 	if this.text == "" {
 		this.text = this.handler.GetConfig(ctx)
 	}
-	return WriteString2File(ctx, this.text, this.FilePath)
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，保存")
+	return WriteString2File(ctx, this.text, this.handler.GetPath(ctx))
 }
 func (this *ConfigService) LoadConfig(ctx context.Context) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	text, err := ReadFile2String(ctx, this.FilePath, "")
+	text, err := ReadFile2String(ctx, this.handler.GetPath(ctx), "")
 	if err != nil {
 		return err
 	}
 	if text == "" {
 		text = this.handler.GetConfig(ctx)
-		err = WriteString2File(ctx, this.text, this.FilePath)
+		err = WriteString2File(ctx, this.text, this.handler.GetPath(ctx))
 		if err != nil {
 			return err
 		}
 	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，加载")
 	if text == this.text {
 		return nil
 	}
+	err = this.handler.ParseConfig(ctx, text)
+	if err != nil {
+		return err
+	}
 	this.text = text
-	this.handler.ParseConfig(ctx, text)
 	return nil
 }
