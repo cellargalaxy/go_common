@@ -1,9 +1,8 @@
-package tool
+package util
 
 import (
 	"context"
 	"fmt"
-	"github.com/cellargalaxy/go_common/util"
 	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
@@ -27,7 +26,7 @@ type ConfigService struct {
 
 	handler ConfigHandler
 	lock    *sync.Mutex
-	pool    *util.SingleGoPool
+	pool    *SingleGoPool
 	text    string
 }
 
@@ -40,24 +39,24 @@ func (this *ConfigService) Start(ctx context.Context) error {
 	}
 
 	var err error
-	this.pool, err = util.NewDaemonSingleGoPool(ctx, fmt.Sprintf(""), time.Minute, this.flushConfig)
+	this.pool, err = NewDaemonSingleGoPool(ctx, fmt.Sprintf(""), time.Minute, this.flushConfig)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (this *ConfigService) flushConfig(ctx context.Context, pool *util.SingleGoPool) {
-	defer util.Defer(func(err interface{}, stack string) {
+func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) {
+	defer Defer(func(err interface{}, stack string) {
 		if err != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Warn("ConfigService，异常")
 		}
 	})
 
 	for {
-		ctx := util.ResetLogId(ctx)
+		ctx := ResetLogId(ctx)
 		this.LoadConfig(ctx)
-		util.Sleep(ctx, time.Minute)
-		if util.CtxDone(ctx) {
+		Sleep(ctx, time.Minute)
+		if CtxDone(ctx) {
 			return
 		}
 	}
@@ -69,19 +68,19 @@ func (this *ConfigService) SaveConfig(ctx context.Context) error {
 	if this.text == "" {
 		this.text = this.handler.GetConfig(ctx)
 	}
-	return util.WriteString2File(ctx, this.text, this.FilePath)
+	return WriteString2File(ctx, this.text, this.FilePath)
 }
 func (this *ConfigService) LoadConfig(ctx context.Context) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	text, err := util.ReadFile2String(ctx, this.FilePath, "")
+	text, err := ReadFile2String(ctx, this.FilePath, "")
 	if err != nil {
 		return err
 	}
 	if text == "" {
 		text = this.handler.GetConfig(ctx)
-		err = util.WriteString2File(ctx, this.text, this.FilePath)
+		err = WriteString2File(ctx, this.text, this.FilePath)
 		if err != nil {
 			return err
 		}
