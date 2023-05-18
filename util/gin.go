@@ -17,22 +17,22 @@ const (
 	ClaimsKey        = "claims"
 )
 
-func NewHttpRespByErr(data interface{}, err error) model.HttpResponse {
+func NewHttpRespByErr(data interface{}, err error) model.HttpResp {
 	var msg string
 	if err != nil {
 		msg = err.Error()
 	}
 	return NewHttpRespByMsg(data, msg)
 }
-func NewHttpRespByMsg(data interface{}, msg string) model.HttpResponse {
+func NewHttpRespByMsg(data interface{}, msg string) model.HttpResp {
 	if msg == "" {
-		return NewHttpResp(model.HttpSuccessCode, "", data)
+		return NewHttpResp(model.SuccessCode, "", data)
 	} else {
-		return NewHttpResp(model.HttpFailCode, msg, data)
+		return NewHttpResp(model.FailCode, msg, data)
 	}
 }
-func NewHttpResp(code int, msg string, data interface{}) model.HttpResponse {
-	return model.HttpResponse{Code: code, Msg: msg, Data: data}
+func NewHttpResp(code int, msg string, data interface{}) model.HttpResp {
+	return model.HttpResp{Code: code, Msg: msg, Data: data}
 }
 
 func Ping(c *gin.Context) {
@@ -135,7 +135,7 @@ func ValidateGin(c *gin.Context, secret string) {
 	if claims.ReqId != "" {
 		if existReqId(c, claims.ReqId, duration) {
 			c.Abort()
-			c.JSON(http.StatusOK, NewHttpResp(model.HttpReRequestCode, "请求非法重放", nil))
+			c.JSON(http.StatusOK, NewHttpResp(model.ReRequestCode, "请求非法重放", nil))
 			return
 		}
 	}
@@ -145,7 +145,7 @@ func ValidateGin(c *gin.Context, secret string) {
 		uri = strings.Split(uri, "?")[0]
 		if claims.Uri != uri {
 			c.Abort()
-			c.JSON(http.StatusOK, NewHttpResp(model.HttpIllegalUriCode, "请求非法uri", nil))
+			c.JSON(http.StatusOK, NewHttpResp(model.IllegalUriCode, "请求非法uri", nil))
 			return
 		}
 	}

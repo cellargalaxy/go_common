@@ -22,19 +22,19 @@ func (this Claims) String() string {
 	return data
 }
 
-type HttpResponse struct {
+type HttpResp struct {
 	Code int         `json:"code"`
 	Msg  string      `json:"msg"`
 	Data interface{} `json:"data"`
 }
 
-func (this HttpResponse) String() string {
+func (this HttpResp) String() string {
 	data, _ := json.MarshalToString(this)
 	return data
 }
-func (this *HttpResponse) HttpSuccess(ctx context.Context) error {
+func (this *HttpResp) HttpSuccess(ctx context.Context) error {
 	switch this.Code {
-	case HttpSuccessCode, HttpReRequestCode:
+	case SuccessCode, ReRequestCode:
 		return nil
 	default:
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"this": this}).Error("HTTP响应失败")
