@@ -82,3 +82,89 @@ func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (strin
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"elapsed": elapsed, "sql": sql}).Info()
 	}
 }
+
+type GormObject interface {
+	TableName() string
+}
+type GormHandler[Inquiry any] interface {
+	GetName(ctx context.Context) string
+	GetDb(ctx context.Context, where *gorm.DB) *gorm.DB
+	Where(ctx context.Context, where *gorm.DB, inquiry Inquiry) *gorm.DB
+}
+type GormService[Object GormObject, Inquiry GormObject] struct {
+	GormHandler[Inquiry]
+}
+
+func (this *GormService[Object, Inquiry]) Insert(ctx context.Context, object ...*Object) ([]*Object, error) {
+	if len(object) == 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("插入%s，为空", this.GetName(ctx))
+		return object, nil
+	}
+	where := this.GetDb(ctx, nil)
+	err := where.Create(&object).Error
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("插入%s，异常", this.GetName(ctx))
+		return object, errors.Errorf("插入%s，异常: %+v", this.GetName(ctx), err)
+	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("插入%s，完成", this.GetName(ctx))
+	return object, nil
+}
+func (this *GormService[Object, Inquiry]) Delete(ctx context.Context, inquiry Inquiry) error {
+	var where *gorm.DB
+	where = this.Where(ctx, where, inquiry)
+	if where == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"inquiry": inquiry}).Warnf("删除%s，条件为空", this.GetName(ctx))
+		return errors.Errorf("删除%s，条件为空", this.GetName(ctx))
+	}
+	err := where.Delete(&inquiry).Error
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("删除%s，异常", this.GetName(ctx))
+		return errors.Errorf("删除%s，异常: %+v", this.GetName(ctx), err)
+	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("删除%s，完成", this.GetName(ctx))
+	return nil
+}
+func (this *GormService[Object, Inquiry]) Update(ctx context.Context, object *Object) (*Object, int64, error) {
+	if object == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("更新%s，为空", this.GetName(ctx))
+		return object, 0, nil
+	}
+	where := this.GetDb(ctx, nil)
+	where = where.Model(&object)
+	result := where.Select("*").Updates(&object)
+	count := result.RowsAffected
+	err := result.Error
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("更新%s，异常", this.GetName(ctx))
+		return object, count, errors.Errorf("更新%s，异常: %+v", this.GetName(ctx), err)
+	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("更新%s，完成", this.GetName(ctx))
+	return object, count, nil
+}
+func (this *GormService[Object, Inquiry]) Select(ctx context.Context, inquiry Inquiry) ([]*Object, error) {
+	where := this.GetDb(ctx, nil)
+	where = where.Model(&inquiry)
+	where = this.Where(ctx, where, inquiry)
+	var object []*Object
+	err := where.Find(&object).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.GetName(ctx))
+		return object, nil
+	}
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("查询%s，异常", this.GetName(ctx))
+		return object, errors.Errorf("查询%s, 异常: %+v", this.GetName(ctx), err)
+	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"len": len(object)}).Infof("查询%s，完成", this.GetName(ctx))
+	return object, nil
+}
+func (this *GormService[Object, Inquiry]) SelectOne(ctx context.Context, inquiry Inquiry) (*Object, error) {
+	list, err := this.Select(ctx, inquiry)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) == 0 {
+		return nil, nil
+	}
+	return list[0], nil
+}
