@@ -43,7 +43,7 @@ func (this *ConfigService) Start(ctx context.Context) error {
 		return err
 	}
 	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，启动")
-	return nil
+	return this.loadConfig(ctx)
 }
 func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) {
 	defer Defer(func(err interface{}, stack string) {
@@ -75,6 +75,9 @@ func (this *ConfigService) LoadConfig(ctx context.Context) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
+	return this.loadConfig(ctx)
+}
+func (this *ConfigService) loadConfig(ctx context.Context) error {
 	text, err := ReadFile2String(ctx, this.handler.GetPath(ctx), "")
 	if err != nil {
 		return err
