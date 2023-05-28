@@ -65,6 +65,9 @@ func (this *ConfigService) SaveConfig(ctx context.Context) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
+	return this.saveConfig(ctx)
+}
+func (this *ConfigService) saveConfig(ctx context.Context) error {
 	if this.text == "" {
 		this.text = this.handler.GetConfig(ctx)
 	}
@@ -99,4 +102,10 @@ func (this *ConfigService) loadConfig(ctx context.Context) error {
 	}
 	this.text = text
 	return nil
+}
+func (this *ConfigService) GetConfig(ctx context.Context) string {
+	return this.text
+}
+func (this *ConfigService) SetConfig(ctx context.Context, text string) {
+	this.text = text
 }
