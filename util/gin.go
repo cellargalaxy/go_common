@@ -75,18 +75,9 @@ func ClaimsGin(c *gin.Context, secret string) {
 		return
 	}
 	var claims model.Claims
-	jwtToken, err := DeJwt(c, token, secret, &claims)
+	DeJwt(c, token, secret, &claims)
 	if claims.LogId > 0 {
 		c.Set(LogIdKey, claims.LogId)
-	}
-	if err != nil {
-		return
-	}
-	if jwtToken == nil {
-		return
-	}
-	if !jwtToken.Valid {
-		return
 	}
 	c.Set(ClaimsKey, &claims)
 }

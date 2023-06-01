@@ -57,6 +57,7 @@ func TestJwt(t *testing.T) {
 
 	var ccc model.Claims
 	token, err := DeJwt(ctx, jwt, "secret", &ccc)
+	t.Log(JsonStruct2String(ccc))
 	if err != nil {
 		t.Errorf("%+v", err)
 		return
