@@ -88,8 +88,8 @@ type GormObject interface {
 }
 type GormInquiry interface {
 	GormObject
-	GetOffset() int
-	GetLimit() int
+	GetPageNum() int
+	GetPageSize() int
 }
 type GormHandler[Inquiry GormInquiry] interface {
 	GetName(ctx context.Context) string
@@ -162,13 +162,13 @@ func (this *GormService[Object, Inquiry]) Select(ctx context.Context, inquiry In
 		return nil, count, errors.Errorf("查询%s，异常: %+v", this.GetName(ctx), err)
 	}
 
-	offset := inquiry.GetOffset()
-	if offset > 0 {
-		where = where.Offset(offset)
+	pageSize := inquiry.GetPageSize()
+	if pageSize > 0 {
+		where = where.Limit(pageSize)
 	}
-	limit := inquiry.GetLimit()
-	if limit > 0 {
-		where = where.Limit(limit)
+	pageNum := inquiry.GetPageNum()
+	if pageNum > 0 {
+		where = where.Offset((pageNum - 1) * pageSize)
 	}
 
 	var object []*Object
