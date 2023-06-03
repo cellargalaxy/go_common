@@ -13,9 +13,9 @@ type Inquiry struct {
 	PageSize int `json:"page_size" form:"page_size" query:"page_size"`
 }
 
-func (this *Inquiry) GetPageNum() int {
+func (this Inquiry) GetPageNum() int {
 	return this.PageNum
 }
-func (this *Inquiry) GetPageSize() int {
+func (this Inquiry) GetPageSize() int {
 	return this.PageSize
 }
