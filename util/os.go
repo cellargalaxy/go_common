@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -31,9 +32,23 @@ func GetServerName() string {
 func GetHome() string {
 	home, err := homedir.Dir()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": errors.WithStack(err)}).Error("获取HOME异常")
+		logrus.WithFields(logrus.Fields{"err": errors.WithStack(err)}).Error("获取HOME，异常")
 	}
 	return home
+}
+func GetExecFile() string {
+	execPath, err := os.Executable()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": errors.WithStack(err)}).Error("获取执行文件路径，异常")
+	}
+	return execPath
+}
+func GetExecFolder() string {
+	execPath, err := os.Executable()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": errors.WithStack(err)}).Error("获取执行文件路径，异常")
+	}
+	return filepath.Dir(execPath)
 }
 
 func GetEnv(key string) string {
