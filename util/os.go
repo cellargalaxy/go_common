@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -138,8 +139,12 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 	stdoutReader := bufio.NewReader(stdout)
 	stderrReader := bufio.NewReader(stderr)
 	var stdoutLines, stderrLines []string
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
 		defer Defer(func(err interface{}, stack string) {
+			wg.Done()
 			if err != nil {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 			}
@@ -147,8 +152,10 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 
 		stdoutLines, _ = Read2LogByReader(ctx, stdoutReader, true)
 	}()
+	wg.Add(1)
 	go func() {
 		defer Defer(func(err interface{}, stack string) {
+			wg.Done()
 			if err != nil {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
 			}
@@ -157,6 +164,7 @@ func ExecCommand(ctx context.Context, commands []string) ([]string, []string, er
 		stderrLines, _ = Read2LogByReader(ctx, stderrReader, true)
 	}()
 
+	wg.Wait()
 	err = cmd.Wait()
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
