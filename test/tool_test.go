@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"github.com/cellargalaxy/go_common/tool"
 	"github.com/cellargalaxy/go_common/util"
 	"testing"
@@ -89,5 +90,10 @@ func TestEnAesCbcBookmark(t *testing.T) {
 
 func TestLog2Csv(t *testing.T) {
 	ctx := util.GenCtx()
-	tool.Log2Csv(ctx, `/home/meltsprout/code/mmm/log/mmm_job/tmp.log`, "log.csv")
+	tool.Log2Csv(ctx, `$HOME/code/mmm/log/mmm_job/tmp.log`, "log.csv")
+}
+
+func TestBankStatementPdf2Xlsx(t *testing.T) {
+	ctx := util.GenCtx()
+	tool.CmbBankStatementPdf2Xlsx(ctx, fmt.Sprintf("%s/招商银行交易流水.pdf", util.GetHome()), "BankStatement.xlsx")
 }

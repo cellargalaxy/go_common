@@ -3,6 +3,7 @@ package util
 import (
 	"bufio"
 	"context"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/constraints"
@@ -25,6 +26,14 @@ func InitOs(serverName string) {
 
 func GetServerName() string {
 	return GetEnvString(serverNameKey, defaultServerName)
+}
+
+func GetHome() string {
+	home, err := homedir.Dir()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{"err": errors.WithStack(err)}).Error("获取HOME异常")
+	}
+	return home
 }
 
 func GetEnv(key string) string {

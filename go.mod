@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
+	github.com/gen2brain/go-fitz v1.22.2
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/gocarina/gocsv v0.0.0-20230513223533-9ddd7fd60602
@@ -12,6 +13,7 @@ require (
 	github.com/hetiansu5/urlquery v1.2.7
 	github.com/jedib0t/go-pretty/v6 v6.4.6
 	github.com/json-iterator/go v1.1.12
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/panjf2000/ants/v2 v2.7.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
