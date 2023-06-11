@@ -116,10 +116,16 @@ func ExitSignal(fun func(signal os.Signal)) {
 	}()
 }
 
-func ExecCommand(ctx context.Context, commands []string) ([]string, []string, error) {
+func ExecCommand(ctx context.Context, commands ...string) ([]string, []string, error) {
 	command := strings.Join(commands, " && ")
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.CommandContext(ctx, command)
+	default:
+		cmd = exec.CommandContext(ctx, "bash", "-c", command)
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
