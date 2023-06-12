@@ -120,8 +120,34 @@ func ExecCommand(ctx context.Context, command string) ([]string, []string, error
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.CommandContext(ctx, "start", "/B", command)
+		commands := strings.Split(command, " ")
+		list := make([]string, 0, len(commands))
+		for i := range commands {
+			commands[i] = strings.TrimSpace(commands[i])
+			if commands[i] == "" {
+				continue
+			}
+			list = append(list, commands[i])
+		}
+		var name string
+		var arg []string
+		if len(list) > 0 {
+			name = list[0]
+		}
+		if len(list) > 1 {
+			arg = list[1:]
+		}
+		if name == "" {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("执行命令，命令为空")
+			return nil, nil, nil
+		}
+		cmd = exec.CommandContext(ctx, name, arg...)
 	default:
+		command = strings.TrimSpace(command)
+		if command == "" {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("执行命令，命令为空")
+			return nil, nil, nil
+		}
 		cmd = exec.CommandContext(ctx, "bash", "-c", command)
 	}
 	stdout, err := cmd.StdoutPipe()
