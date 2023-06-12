@@ -116,14 +116,12 @@ func ExitSignal(fun func(signal os.Signal)) {
 	}()
 }
 
-func ExecCommand(ctx context.Context, commands ...string) ([]string, []string, error) {
+func ExecCommand(ctx context.Context, command string) ([]string, []string, error) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		command := strings.Join(commands, " ; ")
-		cmd = exec.CommandContext(ctx, "powershell", "-Command", command)
+		cmd = exec.CommandContext(ctx, "start", "/B", command)
 	default:
-		command := strings.Join(commands, " && ")
 		cmd = exec.CommandContext(ctx, "bash", "-c", command)
 	}
 	stdout, err := cmd.StdoutPipe()
