@@ -370,7 +370,10 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 	var statusCode int
 	for i := range lines {
 		lines[i] = strings.TrimSpace(lines[i])
-		list := strings.Split(lines[i], "< HTTP/")
+		if !strings.Contains(lines[i], "< HTTP/") {
+			continue
+		}
+		list := strings.Split(lines[i], "HTTP/")
 		if len(list) < 2 {
 			continue
 		}
