@@ -325,3 +325,76 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 	}
 	return &param, nil
 }
+func ExecCurl(ctx context.Context, name, method, url string, header map[string]string) (string, error) {
+	method = strings.TrimSpace(method)
+	method = strings.ToUpper(method)
+	switch method {
+	case "", "GET", "POST":
+	default:
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"method": method}).Error(genHttpText(ctx, name, nil, "CURL请求异常，非法方法"))
+		return "", errors.Errorf("CURL请求异常，非法方法")
+	}
+	url = strings.TrimSpace(url)
+	if url == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(genHttpText(ctx, name, nil, "CURL请求异常，链接为空"))
+		return "", errors.Errorf("CURL请求异常，链接为空")
+	}
+	if header == nil {
+		header = make(map[string]string)
+	}
+	if header[UserAgentKey] == "" {
+		header[UserAgentKey] = UserAgentDefault
+	}
+
+	filename := fmt.Sprintf("/tmp/%d", GenId())
+	curls := make([]string, 0, len(header)+2)
+	curls = append(curls, fmt.Sprintf(`curl -v '%s' \`, url))
+	if method == "POST" {
+		curls = append(curls, `  -X 'POST' \`)
+	}
+	for key, value := range header {
+		curls = append(curls, fmt.Sprintf(`  -H '%s: %s' \`, key, value))
+	}
+	curls = append(curls, fmt.Sprintf(`  --compressed >> %s`, filename))
+	curl := strings.Join(curls, "\n")
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"curl": curl}).Info(genHttpText(ctx, name, nil, "CURL请求"))
+
+	lines, stderrLines, err := ExecCommand(ctx, curl)
+	if err != nil {
+		return "", err
+	}
+	if len(lines) == 0 {
+		lines = stderrLines
+	}
+
+	var statusCode int
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+		list := strings.Split(lines[i], "< HTTP/")
+		if len(list) < 2 {
+			continue
+		}
+		list = strings.Split(list[1], " ")
+		if len(list) >= 2 {
+			statusCode = String2Int[int](list[1])
+		}
+		break
+	}
+	if statusCode != http.StatusOK {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(genHttpText(ctx, name, nil, "响应码失败"))
+		return "", errors.Errorf(genHttpText(ctx, name, statusCode, "响应码失败"))
+	}
+
+	fileInfo := GetFileInfo(ctx, filename)
+	if fileInfo == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("CURL请求异常，文件为空")
+		return "", errors.Errorf("CURL请求异常，文件为空")
+	}
+	data, err := ReadFile2String(ctx, filename, "")
+	if err != nil {
+		return "", err
+	}
+	RemoveFile(ctx, filename)
+
+	return data, nil
+}

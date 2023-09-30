@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,20 @@ func TestHttpApiTry(t *testing.T) {
 	}
 	if object.Id <= 0 {
 		t.Errorf(`if object.Id <= 0 {`)
+		return
+	}
+}
+
+func TestExecCurl(t *testing.T) {
+	ctx := GenCtx()
+
+	data, err := ExecCurl(ctx, "", "", "https://reqres.in/api/users", nil)
+	if err != nil {
+		t.Errorf("%+v", err)
+		return
+	}
+	if !strings.Contains(data, `"page":1`) {
+		t.Errorf("strings.Contains")
 		return
 	}
 }
