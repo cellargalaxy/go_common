@@ -7,12 +7,14 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/cellargalaxy/go_common/util"
+	"github.com/panjf2000/ants/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"net/url"
 	"path"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const (
@@ -295,4 +297,71 @@ func parseBookmark(ctx context.Context, doc *goquery.Document, selecter string, 
 	})
 
 	return list
+}
+
+func CheckBookmark(ctx context.Context, csvPath string, excludeSorts ...string) error {
+	fileInfo := util.GetFileInfo(ctx, csvPath)
+	if fileInfo == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"csvPath": csvPath}).Error("检测书签，文件不存在")
+		return errors.Errorf("检测书签，文件不存在")
+	}
+	var list []model.Bookmark
+	err := util.CsvFile2Struct(ctx, csvPath, &list)
+	if err != nil {
+		return err
+	}
+	for i := range list {
+		list[i].Survive = ""
+	}
+
+	var wg sync.WaitGroup
+	pool, err := ants.NewPoolWithFunc(32, func(param interface{}) {
+		defer wg.Done()
+		if param == nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"param": param}).Error("检测书签，协程池参数为空")
+			err = fmt.Errorf("检测书签，协程池参数为空")
+			return
+		}
+		i, ok := param.(int)
+		if !ok {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"param": param}).Error("检测书签，协程池参数转型失败")
+			err = fmt.Errorf("检测书签，协程池参数转型失败")
+			return
+		}
+		for _, excludeSort := range excludeSorts {
+			if strings.HasPrefix(list[i].Sort, excludeSort) {
+				return
+			}
+		}
+		response, err := util.GetHttpSpiderRequest(ctx).Get(list[i].Url)
+		_, err = util.DealHttpResponse(ctx, "", response, err)
+		if err != nil {
+			list[i].Survive = err.Error()
+		}
+		if list[i].Survive == "，响应码失败: 403" {
+			list[i].Survive = ""
+		}
+	})
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("检测书签，协程池创建异常")
+		return err
+	}
+	defer pool.Release()
+
+	for i := range list {
+		wg.Add(1)
+		poolErr := pool.Invoke(i)
+		if poolErr != nil {
+			err = poolErr
+			wg.Done()
+		}
+	}
+	wg.Wait()
+
+	err = util.CsvStruct2File(ctx, list, csvPath)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/cellargalaxy/go_common/tool"
 	"github.com/cellargalaxy/go_common/util"
+	"os"
 	"testing"
 )
 
@@ -16,11 +17,13 @@ import (
 
 5. 比较bookmark_new.csv和bookmark_back.csv
 
-6. bookmark_back.csv -> bookmark.html
-7. 上传到浏览器里
+6. 检测书签存活
 
-8. bookmark_back.csv -> bookmark_en.txt
-9. bookmark_en.txt推到github
+7. bookmark_back.csv -> bookmark.html
+8. 上传到浏览器里
+
+9. bookmark_back.csv -> bookmark_en.txt
+10. bookmark_en.txt推到github
 */
 
 // 2. bookmark.html -> bookmark_new.csv
@@ -58,13 +61,20 @@ func TestDeAesCbcBookmark(t *testing.T) {
 	}
 }
 
-// 6. bookmark_back.csv -> bookmark.html
+// 6. 检测书签存活
+func TestCheckBookmark(t *testing.T) {
+	os.Setenv("https_proxy", "http://192.168.123.5:10808")
+	ctx := util.GenCtx()
+	tool.CheckBookmark(ctx, "bookmark_back.csv", "书签栏/b")
+}
+
+// 7. bookmark_back.csv -> bookmark.html
 func TestBookmarkCsv2Xml(t *testing.T) {
 	ctx := util.GenCtx()
 	tool.BookmarkCsv2Xml(ctx, "bookmark_back.csv", "bookmark.html")
 }
 
-// 8. bookmark_back.csv -> bookmark_en.txt
+// 9. bookmark_back.csv -> bookmark_en.txt
 func TestEnAesCbcBookmark(t *testing.T) {
 	ctx := util.GenCtx()
 	secret, err := util.ReadFile2String(ctx, "bookmark_secret.txt", "")
