@@ -105,5 +105,6 @@ func TestLog2Csv(t *testing.T) {
 
 func TestBankStatementPdf2Xlsx(t *testing.T) {
 	ctx := util.GenCtx()
-	tool.CmbBankStatementPdf2Xlsx(ctx, fmt.Sprintf("%s/招商银行交易流水.pdf", util.GetHome()), "BankStatement.xlsx")
+	//tool.CmbBankStatementPdf2Xlsx(ctx, fmt.Sprintf("%s/招商银行交易流水.pdf", util.GetHome()), "CmbBankStatement.xlsx")
+	tool.IcbcBankStatementPdf2Xlsx(ctx, fmt.Sprintf("%s/工商银行交易流水.pdf", util.GetHome()), "IcbcBankStatement.xlsx")
 }
