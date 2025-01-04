@@ -157,15 +157,21 @@ func IcbcBankStatementPdf2Xlsx(ctx context.Context, pdfPath, xlsxPath string) er
 				continue
 			}
 			var object []string
+			var inOut string
 			for i := range texts {
 				if i == 0 { //记账日期
 					object = append(object, texts[i])
+				}
+				if i == 3 { //收支
+					if strings.TrimSpace(texts[i]) == "借" {
+						inOut = "-"
+					}
 				}
 				if i == 6 { //货币
 					object = append(object, texts[i])
 				}
 				if i == 7 { //交易金额
-					object = append(object, texts[i])
+					object = append(object, inOut+texts[i])
 				}
 				if i == 8 { //联机余额
 					object = append(object, texts[i])
