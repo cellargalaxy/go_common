@@ -275,9 +275,9 @@ func parseBookmark(ctx context.Context, doc *goquery.Document, selecter string, 
 		}
 		list = append(list, object)
 	})
-	if len(list) > 0 {
-		return list
-	}
+	//if len(list) > 0 {
+	//	return list
+	//}
 
 	h3Selecter := selecter + " > h3"
 	var sort string
