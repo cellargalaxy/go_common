@@ -83,7 +83,7 @@ func GetFileInfo(ctx context.Context, filePath string) os.FileInfo {
 }
 
 func CreateFolderPath(ctx context.Context, folderPath string) error {
-	err := os.MkdirAll(folderPath, 0777)
+	err := os.MkdirAll(folderPath, 0750)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("创建文件夹异常")
 		return errors.Errorf("创建文件夹异常: %+v", err)
@@ -109,7 +109,7 @@ func createFile(ctx context.Context, filePath string) (*os.File, error) {
 }
 
 func openReadFile(ctx context.Context, filePath string) (*os.File, error) {
-	file, err := os.OpenFile(filePath, os.O_RDONLY, 0666)
+	file, err := os.OpenFile(filePath, os.O_RDONLY, 0600)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件打开异常")
 		return nil, errors.Errorf("文件打开异常: %+v", err)
@@ -129,7 +129,7 @@ func OpenReadFile(ctx context.Context, filePath string) (*os.File, error) {
 }
 
 func openWriteFile(ctx context.Context, filePath string) (*os.File, error) {
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_TRUNC, 0666)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_TRUNC, 0600)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件打开异常")
 		return nil, errors.Errorf("文件打开异常: %+v", err)

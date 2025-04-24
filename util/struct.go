@@ -32,12 +32,16 @@ func DifferenceSet[T constraints.Ordered](ctx context.Context, a, b []T) []T {
 }
 
 func Distinct[T constraints.Ordered](ctx context.Context, list ...T) []T {
-	listMap := List2Map(ctx, list...)
-	list = make([]T, 0, len(listMap))
-	for i := range listMap {
-		list = append(list, i)
+	listMap := make(map[T]bool, len(list))
+	object := make([]T, 0, len(list))
+	for i := range list {
+		if listMap[list[i]] {
+			continue
+		}
+		listMap[list[i]] = true
+		object = append(object, list[i])
 	}
-	return list
+	return object
 }
 
 func Contain[T constraints.Ordered](ctx context.Context, list []T, object ...T) bool {
@@ -54,6 +58,32 @@ func List2Map[T constraints.Ordered](ctx context.Context, list ...T) map[T]bool 
 	object := make(map[T]bool, len(list))
 	for i := range list {
 		object[list[i]] = true
+	}
+	return object
+}
+
+func List2MapV2[T constraints.Ordered, K any](ctx context.Context, list []K, getKey func(object K) T) map[T]K {
+	object := make(map[T]K, len(list))
+	for i := range list {
+		key := getKey(list[i])
+		object[key] = list[i]
+	}
+	return object
+}
+
+func List2MapV3[T constraints.Ordered, K any](ctx context.Context, list []K, getKey func(object K) T) map[T][]K {
+	object := make(map[T][]K, len(list))
+	for i := range list {
+		key := getKey(list[i])
+		object[key] = append(object[key], list[i])
+	}
+	return object
+}
+
+func List2List[T any, K any](ctx context.Context, list []T, get func(object T) K) []K {
+	object := make([]K, 0, len(list))
+	for i := range list {
+		object = append(object, get(list[i]))
 	}
 	return object
 }

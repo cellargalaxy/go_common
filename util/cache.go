@@ -62,7 +62,7 @@ func (this *LocalCache[T]) GetWithTimeout(ctx context.Context, key string, durat
 
 	object, ok := this.Get(ctx, key)
 	cacheTime := this.timeMap[key]
-	if ok && time.Now().Sub(cacheTime) <= duration {
+	if ok && time.Since(cacheTime) <= duration {
 		return object, nil
 	}
 

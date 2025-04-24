@@ -5,9 +5,20 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"math/rand"
 	"strings"
 	"time"
 )
+
+var runes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func CreateRandString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = runes[rand.Intn(len(runes))]
+	}
+	return string(b)
+}
 
 func GenIdByTime(time time.Time) int64 {
 	str := time.Format(DateLayout_060102150405_0000000)

@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"golang.org/x/exp/constraints"
+	"hash/fnv"
 	"strconv"
 	"strings"
 )
@@ -240,6 +241,15 @@ func ReverseString(s string) string {
 	return string(runes)
 }
 
+func Integer2Integer[T, K constraints.Integer](value T) K {
+	return K(value)
+}
+func Float2Float[T, K constraints.Float](value T) K {
+	return K(value)
+}
+func String2String[T, K ~string](value T) K {
+	return K(value)
+}
 func S2P[T any](value T) *T {
 	return &value
 }
@@ -266,8 +276,12 @@ func P2Ss[T any](value ...*T) []T {
 }
 func CopyArray[T any](value ...T) []T {
 	list := make([]T, 0, len(value))
-	for i := range value {
-		list = append(list, value[i])
-	}
+	list = append(list, value...)
 	return list
+}
+
+func StringHash2Uint32(value string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(value))
+	return h.Sum32()
 }
