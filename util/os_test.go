@@ -74,11 +74,20 @@ func TestGetEnvInt(t *testing.T) {
 		t.Errorf("GetEnvInt(负数) = %d", got)
 	}
 	//非法值必须回落默认值而非0
-	for _, bad := range []string{"", "abc", "1.5", "1e3", " 1 "} {
+	//注意：" 1 " 这类仅首尾带空白的合法数字不属于非法值——
+	//同文件 GetEnvBool 明确容忍 " true "，String2Int/String2Float 也都做了TrimSpace，
+	//env经shell/.env/ConfigMap传入时带空白极常见，静默退回默认值会让配置"看似生效实则未生效"。
+	//该场景的正向断言见 TestGetEnvIntFloatTrimSpace。
+	for _, bad := range []string{"", "abc", "1.5", "1e3", "1_000", "0x1F"} {
 		t.Setenv("GO_COMMON_INT", bad)
 		if got := GetEnvInt("GO_COMMON_INT", 42); got != 42 {
 			t.Errorf("非法值 %q 应回落默认值, got %d", bad, got)
 		}
+	}
+	//仅带首尾空白的合法值须被正确解析
+	t.Setenv("GO_COMMON_INT", " 1 ")
+	if got := GetEnvInt("GO_COMMON_INT", 42); got != 1 {
+		t.Errorf("带空白的合法值 \" 1 \" 应解析为 1, got %d", got)
 	}
 	//不同整型宽度
 	t.Setenv("GO_COMMON_INT", "300")

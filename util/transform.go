@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"golang.org/x/exp/constraints"
 	"hash/fnv"
@@ -108,6 +109,16 @@ func Interface2Int[T constraints.Integer](value any) T {
 	if ok {
 		return T(i8)
 	}
+	//无符号类型必须直接转换：若漏掉而落到下面的字符串兜底，
+	//大于MaxInt64的值(如MaxUint64)会在解析阶段被钳制，静默丢失数值
+	u64, ok := value.(uint64)
+	if ok {
+		return T(u64)
+	}
+	u, ok := value.(uint)
+	if ok {
+		return T(u)
+	}
 	f64, ok := value.(float64)
 	if ok {
 		return T(f64)
@@ -127,7 +138,24 @@ func Interface2Ints[T constraints.Integer](value ...any) []T {
 }
 
 func String2Int[T constraints.Integer](value string) T {
-	data, _ := strconv.Atoi(value)
+	//显式用64位解析，不依赖平台int宽度：Atoi在32位平台上会按平台int宽度解析，大数值直接溢出。
+	//必须按无符号再解析一次：Int2String对无符号类型用的是FormatUint，
+	//而ParseInt的上限是MaxInt64，"18446744073709551615"这类合法uint64串会被钳到MaxInt64，
+	//导致 String2Int(Int2String(v)) 对 v>MaxInt64 无法往返（实测MaxUint64往返得MaxInt64）。
+	//注意：溢出时ParseInt/ParseUint返回的是钳制值(MaxInt64/MinInt64/MaxUint64)而非0，
+	//此处丢弃err即沿用该钳制语义。
+	value = strings.TrimSpace(value)
+	data, err := strconv.ParseInt(value, 10, 64)
+	if err == nil {
+		return T(data)
+	}
+	//仅在"超出int64正向范围"时回退到无符号解析，其余错误(空串、非数字)保持原有归零语义。
+	//这里不能无条件回退：ParseUint对负数一律报错，回退会把"-1"的钳制值MinInt64变成0。
+	if errors.Is(err, strconv.ErrRange) && !strings.HasPrefix(value, "-") {
+		if udata, uerr := strconv.ParseUint(value, 10, 64); uerr == nil {
+			return T(udata)
+		}
+	}
 	return T(data)
 }
 func String2Ints[T constraints.Integer](value ...string) []T {
@@ -139,11 +167,8 @@ func String2Ints[T constraints.Integer](value ...string) []T {
 }
 
 func String2Float[T constraints.Float](value string) T {
-	if strings.Contains(value, ".") {
-		value = strings.TrimRight(value, "0")
-		value = strings.TrimRight(value, ".")
-	}
-	data, _ := strconv.ParseFloat(value, 64)
+	//不能对含小数点的字符串直接TrimRight("0")，科学计数法如"1.0e20"会被截成"1.0e2"，量级出错
+	data, _ := strconv.ParseFloat(strings.TrimSpace(value), 64)
 	return T(data)
 }
 func String2Floats[T constraints.Float](value ...string) []T {
@@ -195,7 +220,11 @@ func Float2Strings[T constraints.Float](value ...T) []string {
 }
 
 func Int2String[T constraints.Integer](value T) string {
-	return strconv.Itoa(int(value))
+	//不能用strconv.Itoa(int(value))，无符号大值会回绕成负数（uint64最大值曾输出"-1"）
+	if value < 0 {
+		return strconv.FormatInt(int64(value), 10)
+	}
+	return strconv.FormatUint(uint64(value), 10)
 }
 func Int2Strings[T constraints.Integer](value ...T) []string {
 	list := make([]string, 0, len(value))
@@ -206,6 +235,16 @@ func Int2Strings[T constraints.Integer](value ...T) []string {
 }
 
 func String2IntWithCarry(value string, carry int) int {
+	//负carry在下面 ss[1][:carry] 处会panic(slice bounds out of range)，
+	//而无小数点分支里负carry又等同于0（循环不执行）；统一夹紧为0，保证两个分支语义一致
+	if carry < 0 {
+		carry = 0
+	}
+	//必须先TrimSpace：本函数按字符串切分小数位，末尾空白会被当成有效小数位占位，
+	//" 123.4 "(carry=2) 会因 "4 " 已占满2位而得到 1234 而非 12340（量级差10倍）；
+	//无小数点时 "  123  "(carry=2) 拼成 "  123  00"，String2Int解析失败直接归零。
+	//下游 String2Int/String2Float 本身都做了TrimSpace，此处对齐同一套入参容忍度。
+	value = strings.TrimSpace(value)
 	ss := strings.Split(value, ".")
 	if len(ss) == 0 || len(ss) > 2 {
 		return 0
@@ -216,6 +255,9 @@ func String2IntWithCarry(value string, carry int) int {
 		}
 		return String2Int[int](ss[0])
 	}
+	//整数、小数两侧可能各自残留空白（如 " 123 . 4 "），需分别清理后再按位拼接
+	ss[0] = strings.TrimSpace(ss[0])
+	ss[1] = strings.TrimSpace(ss[1])
 	for len(ss[1]) < carry {
 		ss[1] += "0"
 	}
@@ -224,6 +266,10 @@ func String2IntWithCarry(value string, carry int) int {
 }
 
 func Hump2Underscore(text string) string {
+	//空字符串直接返回，避免下标越界panic
+	if text == "" {
+		return text
+	}
 	for j := 'A'; j <= 'Z'; j++ {
 		text = strings.ReplaceAll(text, fmt.Sprintf("%c", j), fmt.Sprintf("_%c", j+32))
 	}

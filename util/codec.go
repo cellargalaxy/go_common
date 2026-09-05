@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto"
+	"crypto/aes"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
@@ -25,9 +26,12 @@ import (
 func EnGzip(ctx context.Context, data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	writer := gzip.NewWriter(&buf)
-	defer CloseIo(ctx, writer)
+	//不能用 defer CloseIo 兜底：下面必须显式Close以刷出gzip尾部(CRC/长度)后才能取buf，
+	//再由defer关闭一次即为重复Close。gzip.Writer重复Close虽当前不报错，
+	//但依赖未承诺的实现细节；此处改为在各出口显式关闭，语义明确且不重复。
 	_, err := writer.Write(data)
 	if err != nil {
+		CloseIo(ctx, writer)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("GZIP压缩，异常")
 		return nil, errors.Errorf("GZIP压缩，异常: %+v", err)
 	}
@@ -40,11 +44,12 @@ func EnGzip(ctx context.Context, data []byte) ([]byte, error) {
 }
 func DeGzip(ctx context.Context, data []byte) ([]byte, error) {
 	reader, err := gzip.NewReader(bytes.NewReader(data))
-	defer CloseIo(ctx, reader)
+	//先判断异常再注册关闭，否则reader为空指针时关闭会panic
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("GZIP解压，异常")
 		return nil, errors.Errorf("GZIP解压，异常: %+v", err)
 	}
+	defer CloseIo(ctx, reader)
 
 	buf := new(bytes.Buffer)
 	_, err = buf.ReadFrom(reader)
@@ -133,6 +138,13 @@ func DeAesCbcString(ctx context.Context, text, secret string) (string, error) {
 	return string(de), nil
 }
 func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
+	//密文长度必须是AES块大小(16)的正整数倍：goEncrypt 在遇到非完整块时
+	//只打印日志、返回的err为nil，会让调用方把失败当成"解出空串"的成功，
+	//故此处先自行校验，避免静默失败
+	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"len": len(data)}).Error("AesCbc解密异常，密文长度非法")
+		return nil, errors.Errorf("AesCbc解密异常，密文长度非法")
+	}
 	secret = EnSha256(secret)
 	ivAes := EnMd5(secret)
 	de, err := goEncrypt.AesCbcDecrypt(data, secret, ivAes)

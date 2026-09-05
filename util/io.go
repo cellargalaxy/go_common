@@ -5,25 +5,48 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"io"
 	"io/fs"
 	"io/ioutil"
 	"os"
 	"path"
+	"reflect"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 func CloseIo(ctx context.Context, list ...io.Closer) {
 	for i := range list {
-		if list[i] == nil {
+		//list[i] == nil 只能挡住"空接口"，挡不住"非空接口里装了nil指针"(typed-nil)：
+		//如 var f *excelize.File; CloseIo(ctx, f) 时接口本身非nil，
+		//直接调 Close() 会解引用空指针而panic。
+		//这正是 DeGzip、XlsxData2Strings 此前"先defer再判err"会崩的根因，
+		//在此统一兜住，调用方才不必各自小心翼翼地调整defer顺序。
+		if isNilIo(list[i]) {
 			continue
 		}
 		err := list[i].Close()
 		if err != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("IO流关闭异常")
 		}
+	}
+}
+
+// isNilIo 判断closer是否为nil，含"非空接口装了nil指针"的情形。
+// 只对本身可为nil的类型(指针/map/切片/通道/函数/接口)取Value.IsNil，
+// 其余类型(如值接收器的结构体)一律视为非nil，避免reflect对不支持的类型panic。
+func isNilIo(closer io.Closer) bool {
+	if closer == nil {
+		return true
+	}
+	value := reflect.ValueOf(closer)
+	switch value.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.UnsafePointer, reflect.Interface:
+		return value.IsNil()
+	default:
+		return false
 	}
 }
 
@@ -193,6 +216,11 @@ func WriteReader2File(ctx context.Context, reader io.Reader, filePath string) er
 }
 
 func ReadFile2Data(ctx context.Context, filePath string, defaultData []byte) ([]byte, error) {
+	//文件不存在时返回默认值，既不报错也不创建文件，保持只读语义
+	if GetPathInfo(ctx, filePath) == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Warn("文件不存在，返回默认值")
+		return defaultData, nil
+	}
 	file, err := OpenReadFile(ctx, filePath)
 	if err != nil {
 		return nil, err
@@ -223,6 +251,20 @@ func ReadFile2String(ctx context.Context, filePath string, defaultText string) (
 	return string(data), nil
 }
 func ReadFile2Writer(ctx context.Context, filePath string, writer io.Writer, defaultData []byte) error {
+	//文件不存在时写出默认值，保持与ReadFile2Data一致的只读语义
+	if GetPathInfo(ctx, filePath) == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Warn("文件不存在，写出默认值")
+		if len(defaultData) == 0 {
+			return nil
+		}
+		written, err := writer.Write(defaultData)
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("文件拷贝数据异常")
+			return errors.Errorf("文件拷贝数据异常: %+v", err)
+		}
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "written": written}).Info("文件拷贝数据完成")
+		return nil
+	}
 	file, err := OpenReadFile(ctx, filePath)
 	if err != nil {
 		return err
@@ -302,9 +344,23 @@ func RemoveFile(ctx context.Context, filePath string) error {
 
 func Read2LogByReader(ctx context.Context, reader *bufio.Reader, save bool) ([]string, error) {
 	var lines []string
+	//空行统一跳过：EOF分支与正常分支必须同一套标准，
+	//否则"a\n\nb\n"会收集到空串、而"a\n\nb"（末尾无换行）不会，同一函数两种语义
+	appendLine := func(line string) {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return
+		}
+		logrus.WithFields(logrus.Fields{"line": line}).Info("流读取")
+		if save {
+			lines = append(lines, line)
+		}
+	}
 	for {
 		line, err := reader.ReadString('\n')
 		if err == io.EOF {
+			//EOF时可能带回最后一段无换行内容，需补入结果避免丢数据
+			appendLine(line)
 			logrus.WithFields(logrus.Fields{}).Info("流读取，完成")
 			return lines, nil
 		}
@@ -312,10 +368,6 @@ func Read2LogByReader(ctx context.Context, reader *bufio.Reader, save bool) ([]s
 			logrus.WithFields(logrus.Fields{"err": err}).Error("流读取，异常")
 			return lines, errors.Errorf("流读取，异常: %+v", err)
 		}
-		line = strings.TrimSpace(line)
-		logrus.WithFields(logrus.Fields{"line": line}).Info("流读取")
-		if save {
-			lines = append(lines, line)
-		}
+		appendLine(line)
 	}
 }

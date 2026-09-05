@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -71,7 +72,7 @@ type SingleGoPool struct {
 	pool     *ants.Pool
 
 	lock      *sync.Mutex
-	taskName  string
+	taskName  atomic.Value //由守护重启协程并发写、日志与Doing并发读，须原子访问
 	ctxCancel func()
 }
 
@@ -84,7 +85,7 @@ func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep 
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	if this.taskName == name {
+	if this.loadTaskName() == name {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，守护任务已添加")
 		return nil
 	}
@@ -97,7 +98,7 @@ func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep 
 	if err != nil {
 		return err
 	}
-	this.taskName = name
+	this.storeTaskName(name)
 
 	return nil
 }
@@ -112,8 +113,8 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 
 			go func() {
 				this.lock.Lock()
-				if this.taskName == name {
-					this.taskName = ""
+				if this.loadTaskName() == name {
+					this.storeTaskName("")
 				}
 				this.lock.Unlock()
 
@@ -141,7 +142,7 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err}).Error("单协程池，添加守护任务异常")
 		return errors.Errorf("单协程池，添加守护任务异常: %+v", err)
 	}
-	this.taskName = name
+	this.storeTaskName(name)
 
 	return nil
 }
@@ -154,7 +155,7 @@ func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task fun
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	if this.taskName == name {
+	if this.loadTaskName() == name {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，单次任务已添加")
 		return nil
 	}
@@ -181,8 +182,8 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task fun
 
 			go func() {
 				this.lock.Lock()
-				if this.taskName == name {
-					this.taskName = ""
+				if this.loadTaskName() == name {
+					this.storeTaskName("")
 				}
 				this.lock.Unlock()
 			}()
@@ -207,17 +208,17 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task fun
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err}).Error("单协程池，添加单次任务异常")
 		return errors.Errorf("单协程池，添加单次任务异常: %+v", err)
 	}
-	this.taskName = name
+	this.storeTaskName(name)
 
 	return nil
 }
 func (this *SingleGoPool) Doing(ctx context.Context) bool {
-	return this.taskName != ""
+	return this.GetTaskName(ctx) != ""
 }
 func (this *SingleGoPool) cancel(ctx context.Context) {
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，取消")
 	CancelCtx(this.ctxCancel)
-	this.taskName = ""
+	this.storeTaskName("")
 }
 func (this *SingleGoPool) Cancel(ctx context.Context) {
 	this.lock.Lock()
@@ -232,7 +233,7 @@ func (this *SingleGoPool) IsClose(ctx context.Context) bool {
 func (this *SingleGoPool) close(ctx context.Context) {
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，关闭")
 	CancelCtx(this.ctxCancel)
-	this.taskName = ""
+	this.storeTaskName("")
 	if this.pool != nil {
 		this.pool.Release()
 	}
@@ -245,18 +246,29 @@ func (this *SingleGoPool) Close(ctx context.Context) {
 func (this *SingleGoPool) GetPollName(ctx context.Context) string {
 	return this.poolName
 }
+
+// 原子读写taskName：不能改用互斥锁，pool.Submit会在持锁期间阻塞，
+// 届时任务协程的日志取名若再抢锁将直接死锁
+func (this *SingleGoPool) loadTaskName() string {
+	value, _ := this.taskName.Load().(string)
+	return value
+}
+func (this *SingleGoPool) storeTaskName(name string) {
+	this.taskName.Store(name)
+}
 func (this *SingleGoPool) GetTaskName(ctx context.Context) string {
-	return this.taskName
+	return this.loadTaskName()
 }
 func (this *SingleGoPool) GetName(ctx context.Context) string {
-	if this.poolName != "" && this.taskName != "" {
-		return fmt.Sprintf("%s_%s", this.poolName, this.taskName)
+	taskName := this.loadTaskName()
+	if this.poolName != "" && taskName != "" {
+		return fmt.Sprintf("%s_%s", this.poolName, taskName)
 	}
 	if this.poolName != "" {
 		return this.poolName
 	}
-	if this.taskName != "" {
-		return this.taskName
+	if taskName != "" {
+		return taskName
 	}
 	return "SingleGoPool"
 }

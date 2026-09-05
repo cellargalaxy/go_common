@@ -63,7 +63,10 @@ func GetEnvString(key, defaultValue string) string {
 	return value
 }
 func GetEnvInt[T constraints.Integer](key string, defaultValue T) T {
-	value := GetEnv(key)
+	//必须TrimSpace：环境变量常经shell、.env文件、K8s ConfigMap 传入而带首尾空白，
+	//strconv.Atoi 对 "  123  " 直接报错，会静默退回默认值（配置看似生效实则未生效）。
+	//同文件的 GetEnvBool 已做TrimSpace，此处对齐，避免同一套env读取有两种容忍度。
+	value := strings.TrimSpace(GetEnv(key))
 	data, err := strconv.Atoi(value)
 	if err != nil {
 		return defaultValue
@@ -71,7 +74,8 @@ func GetEnvInt[T constraints.Integer](key string, defaultValue T) T {
 	return T(data)
 }
 func GetEnvFloat[T constraints.Float](key string, defaultValue T) T {
-	value := GetEnv(key)
+	//同 GetEnvInt：未TrimSpace时 "  1.5  " 会静默退回默认值
+	value := strings.TrimSpace(GetEnv(key))
 	data, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return defaultValue

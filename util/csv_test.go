@@ -270,9 +270,19 @@ func TestCsvEmpty(t *testing.T) {
 
 func TestCsvError(t *testing.T) {
 	ctx := GenCtx()
-	//列数不一致的CSV须报错（标准csv要求列数一致）
-	if _, err := CsvString2Strings(ctx, "a,b\nc,d,e\n"); err == nil {
-		t.Errorf("列数不一致应返回error")
+	//列数不一致不再报错：本库写入端(CsvStrings2Data)对参差不齐的行照写不误，
+	//读取端若按首行列数强校验，会导致本库自己写出的CSV自己读不回来，
+	//故读取端放宽为不校验列数（详见 CsvReader2Strings 注释与 TestCsvRaggedRoundTrip）
+	if got, err := CsvString2Strings(ctx, "a,b\nc,d,e\n"); err != nil {
+		t.Errorf("列数不一致不应再返回error: %+v", err)
+	} else if len(got) != 2 || len(got[0]) != 2 || len(got[1]) != 3 {
+		t.Errorf("列数不一致的行未按原样读回: %v", got)
+	}
+	//但真正的语法错误（引号未闭合等）仍必须报错，放宽列数校验不等于放弃校验
+	for _, bad := range []string{"a,\"b\nc,d\n", "a,\"bc\n", "a,\"b\"x,c\n"} {
+		if _, err := CsvString2Strings(ctx, bad); err == nil {
+			t.Errorf("非法CSV %q 应返回error", bad)
+		}
 	}
 	//类型不匹配
 	var list []csvDemo

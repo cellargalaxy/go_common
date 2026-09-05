@@ -7,12 +7,18 @@ import (
 	"github.com/sirupsen/logrus"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 )
 
 var runes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func CreateRandString(n int) string {
+	//n为负会让 make([]rune, n) 直接panic(makeslice: len out of range)，
+	//语义上负长度与0长度等价，统一夹紧后返回空串
+	if n <= 0 {
+		return ""
+	}
 	b := make([]rune, n)
 	for i := range b {
 		b[i] = runes[rand.Intn(len(runes))]
@@ -21,12 +27,41 @@ func CreateRandString(n int) string {
 }
 
 func GenIdByTime(time time.Time) int64 {
-	str := time.Format(DateLayout_060102150405_0000000)
+	//必须与ParseStringId的解析时区E8Loc保持一致，否则非UTC+8环境下ID无法往返解析
+	str := time.In(E8Loc).Format(DateLayout_060102150405_0000000)
 	str = str[:12] + str[13:]
 	return String2Int[int64](str)
 }
+
+// lastIdMicro 记录上一次GenId发出的ID所对应的Unix微秒时刻，用于保证ID唯一。
+// ID格式只到微秒(见DateLayout_060102150405_0000000的.000000)，而time.Now()的
+// 实测最小步进约几十纳秒，因此同一微秒内的多次调用会拿到完全相同的ID：
+// 实测顺序调用2万次仅得约2700个不同值(碰撞率86%)，20并发下碰撞率约97%。
+// GenId同时是GenLogId与GenReqId的底层实现，而ValidateGin用reqId做防重放校验
+// (existReqId命中即拒绝请求)，ID重复会让合法请求被误判为重放而拒绝，故必须保证唯一。
+var lastIdMicro struct {
+	sync.Mutex
+	micro int64
+}
+
+// nextIdMicro 返回严格递增的Unix微秒值：正常返回当前时刻，
+// 若当前时刻未超过上次发号时刻(同一微秒内连续调用，或系统时钟回拨)，则取上次值+1。
+// 递增在"微秒时刻"上进行而非直接对ID整数+1：ID是060102150405.000000的拼接结果，
+// 直接对整数+1会在边界产生非法值(如秒位变成60，ParseId报second out of range)，
+// 而在时间域上+1微秒可让秒/分/时/日/年逐级正常进位。
+func nextIdMicro(now time.Time) int64 {
+	micro := now.UnixMicro()
+	lastIdMicro.Lock()
+	defer lastIdMicro.Unlock()
+	if micro <= lastIdMicro.micro {
+		micro = lastIdMicro.micro + 1
+	}
+	lastIdMicro.micro = micro
+	return micro
+}
+
 func GenId() int64 {
-	return GenIdByTime(time.Now())
+	return GenIdByTime(time.UnixMicro(nextIdMicro(time.Now())))
 }
 func GenStringId() string {
 	return Int2String(GenId())
@@ -35,6 +70,14 @@ func ParseId(ctx context.Context, id int64) (time.Time, error) {
 	return ParseStringId(ctx, Int2String(id))
 }
 func ParseStringId(ctx context.Context, id string) (time.Time, error) {
+	//ID是"年份后两位+月日时分秒+微秒"的定长18位数字串，年份后两位为0x时首位是0
+	//(2000~2009、2100~2109等)，一旦经 int64 承载再 Int2String 输出，前导零会丢失：
+	//实测 GenIdByTime(2006-01-02 15:04:05) 得17位ID，被本函数按"非法长度"拒绝，
+	//即 GenId 生成的ID自己的反函数解析不了，故先左补零还原到18位再解析。
+	//补零不会放宽校验：月/日/时若为00，time.ParseInLocation 仍会报错（实测全部拒绝）。
+	if 0 < len(id) && len(id) < 18 {
+		id = strings.Repeat("0", 18-len(id)) + id
+	}
 	if len(id) != 18 {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("解析ID，非法长度ID")
 		return time.Time{}, errors.Errorf("解析ID，非法长度ID")
@@ -89,9 +132,18 @@ func GenGoLabel(ctx context.Context, code string, labels ...string) string {
 		param.Type = strings.TrimSpace(param.Type)
 		underscoreName := Hump2Underscore(param.Name)
 		param.Label = fmt.Sprintf("`json:\"%s\"", underscoreName)
+		//labelMap 用于标签去重：json 由上一行固定写入，
+		//若 labels 再传入 json（或同名标签重复传入），拼出的
+		//`json:"x" json:"x"` 是重复键，会让后续 reflect 取标签的行为依赖实现细节。
+		//此前该map只写不读，等于去重逻辑失效，实测 GenGoLabel(code,"json") 真会输出重复标签
 		labelMap := make(map[string]bool)
 		labelMap["json"] = true
 		for _, label := range labels {
+			label = strings.TrimSpace(label)
+			if label == "" || labelMap[label] {
+				continue
+			}
+			labelMap[label] = true
 			param.Label += fmt.Sprintf(" %s:\"%s\"", label, underscoreName)
 		}
 		param.Label += "`"
@@ -205,6 +257,9 @@ func getBdDefaultValue(goType string) string {
 	case "float64":
 		return "DEFAULT 0"
 	default:
-		return goType
+		//未知类型不能把Go类型名原样当作默认值输出，
+		//那会生成 "`flag` bool NOT NULL bool" 这种语法必然非法的SQL。
+		//此处返回空串表示不带DEFAULT子句，列类型仍由getBdType原样透出以便人工核对。
+		return ""
 	}
 }

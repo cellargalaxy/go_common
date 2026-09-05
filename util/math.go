@@ -84,7 +84,12 @@ func Sum[T constraints.Integer | constraints.Float](list ...T) T {
 }
 
 func Avg[T constraints.Integer | constraints.Float](list ...T) T {
-	avg := Sum(list...)
+	var avg T
+	//空列表直接返回零值，避免整型除零panic
+	if len(list) == 0 {
+		return avg
+	}
+	avg = Sum(list...)
 	return avg / T(len(list))
 }
 
@@ -104,17 +109,27 @@ func LeastSquare[T constraints.Integer | constraints.Float](list ...[2]T) (float
 	if len(list) <= 1 {
 		return 0, 0
 	}
-	var xi, x2, yi, xy T
+	//在float64域累加与相除，避免整型入参被整除截断
+	var xi, x2, yi, xy float64
 	for i := 0; i < len(list); i++ {
-		xi += list[i][0]
-		x2 += list[i][0] * list[i][0]
-		yi += list[i][1]
-		xy += list[i][0] * list[i][1]
+		x := float64(list[i][0])
+		y := float64(list[i][1])
+		xi += x
+		x2 += x * x
+		yi += y
+		xy += x * y
 	}
-	length := T(len(list))
-	k := (yi*xi - xy*length) / (xi*xi - x2*length) //斜率
-	a := (yi*x2 - xy*xi) / (x2*length - xi*xi)     //截距
-	return float64(k), float64(a)
+	length := float64(len(list))
+	//分母为0表示所有样本x相同(垂直线)，此时最小二乘无解：
+	//继续相除会得到NaN并顺着调用方一路污染后续计算(NaN与任何数比较均为false，
+	//常见后果是排序、阈值判断静默失效)，故与"样本不足"一样返回0,0。
+	denominator := xi*xi - x2*length
+	if denominator == 0 {
+		return 0, 0
+	}
+	k := (yi*xi - xy*length) / denominator     //斜率
+	a := (yi*x2 - xy*xi) / (x2*length - xi*xi) //截距
+	return k, a
 }
 
 func AvgAndSVar[T constraints.Integer | constraints.Float](data ...T) (float64, float64) {
@@ -125,13 +140,18 @@ func AvgAndVar[T constraints.Integer | constraints.Float](list ...T) (float64, f
 	if len(list) <= 0 {
 		return 0, 0
 	}
-	avg := Avg(list...)
+	//均值须在float64域计算，整型入参若在T域取均值会被截断，导致方差一并出错
+	var sum float64
+	for i := range list {
+		sum += float64(list[i])
+	}
+	avg := sum / float64(len(list))
 	var variance float64
 	for i := range list {
-		variance += math.Pow(float64(list[i]-avg), 2)
+		variance += math.Pow(float64(list[i])-avg, 2)
 	}
 	variance /= float64(len(list))
-	return float64(avg), variance
+	return avg, variance
 }
 
 func SameTick[T constraints.Integer | constraints.Float](ctx context.Context, value1, value2, tick T) bool {
@@ -166,6 +186,12 @@ func FloatRoundInt[Integer constraints.Integer, Float constraints.Float](value F
 12346 -> 123.46
 */
 func IntDivFloat[Integer constraints.Integer, Float constraints.Float](value Integer, div Float) Float {
+	//decimal.Div 对除数0是直接panic("decimal division by 0")，
+	//而本文件其余函数(Avg、LeastSquare、AvgAndVar)遇到无意义入参都是返回零值而非崩溃，
+	//此处对齐同一约定：除数为0返回0，不让调用方在一次普通换算里崩掉。
+	if float64(div) == 0 {
+		return 0
+	}
 	result, _ := decimal.NewFromInt(int64(value)).Div(decimal.NewFromFloat(float64(div))).Float64()
 	return Float(result)
 }

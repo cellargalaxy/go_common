@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,7 +28,9 @@ var httpClient *resty.Client
 var httpClientOnce sync.Once
 var httpClientSpider *resty.Client
 var httpClientSpiderOnce sync.Once
-var ip string
+
+// ip为守护协程写入、日志与JWT并发读取，使用原子变量避免数据竞争
+var ip atomic.Value
 
 func initHttp(ctx context.Context) {
 	var err error
@@ -51,6 +54,11 @@ func HttpApiTry(ctx context.Context, name string, try int, sleeps []time.Duratio
 		if err == nil {
 			return nil
 		}
+		//最后一次尝试失败后不再退避：后面没有重试了，这一觉纯属让调用方多等。
+		//实测 try=2、sleeps=[500ms] 时原实现耗时约1s(睡了2次)，修复后约500ms(睡1次)。
+		if i == try-1 {
+			break
+		}
 		wareSleep := WareNumber(GetSleepTime(sleeps, i))
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "wareSleep": wareSleep}).Error(genHttpText(ctx, name, nil, "异常", "重试请求"))
 		Sleep(ctx, wareSleep)
@@ -73,18 +81,18 @@ func HttpApi(ctx context.Context, name string, response HttpResponse, newRespons
 func DealHttpResponse(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(genHttpText(ctx, name, nil, "请求异常"))
-		return "", errors.Errorf(genHttpText(ctx, name, err, "请求异常"))
+		return "", errors.New(genHttpText(ctx, name, err, "请求异常"))
 	}
 	if response == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(genHttpText(ctx, name, nil, "响应为空"))
-		return "", errors.Errorf(genHttpText(ctx, name, nil, "响应为空"))
+		return "", errors.New(genHttpText(ctx, name, nil, "响应为空"))
 	}
 	statusCode := response.StatusCode()
 	body := response.String()
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(genHttpText(ctx, name, nil, "响应"))
 	if statusCode != http.StatusOK {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(genHttpText(ctx, name, nil, "响应码失败"))
-		return "", errors.Errorf(genHttpText(ctx, name, statusCode, "响应码失败"))
+		return "", errors.New(genHttpText(ctx, name, statusCode, "响应码失败"))
 	}
 	return body, nil
 }
@@ -102,11 +110,15 @@ func genHttpText(ctx context.Context, name string, value interface{}, texts ...s
 }
 
 func GetIp() string {
-	return ip
+	value, _ := ip.Load().(string)
+	return value
 }
 func flushHttpGetIp(ctx context.Context, pool *SingleGoPool) {
 	defer Defer(func(err interface{}, stack string) {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
+		//正常退出不应记为Error，与config.go的flushConfig保持一致
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
+		}
 	})
 
 	for {
@@ -114,7 +126,7 @@ func flushHttpGetIp(ctx context.Context, pool *SingleGoPool) {
 		object := HttpGetIp(ctx)
 		object = strings.TrimSpace(object)
 		if object != "" {
-			ip = object
+			ip.Store(object)
 		}
 		Sleep(ctx, time.Hour)
 		if CtxDone(ctx) {
@@ -258,6 +270,11 @@ func GetSleepTime(sleeps []time.Duration, index int) time.Duration {
 	if len(sleeps) == 0 {
 		return 1
 	}
+	//负下标会越界panic，而调用方存在 attempt-1 的用法（attempt为0时即为-1），
+	//故按首个退避时间兜底，语义等价于"第一次重试"
+	if index < 0 {
+		index = 0
+	}
 	sleep := sleeps[len(sleeps)-1]
 	if index < len(sleeps) {
 		sleep = sleeps[index]
@@ -299,7 +316,10 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 			if strings.HasSuffix(line, "'") || strings.HasSuffix(line, "\"") {
 				line = line[:len(line)-1]
 			}
-			ss := strings.Split(line, ":")
+			//只能按首个冒号切分：HTTP头值本身常含冒号
+			//(Referer: https://x.com、Authorization: Bearer a:b、X-Time: 10:20:30)，
+			//用 Split 后取 ss[1] 会把值截断成 "https"、"10"，请求头随之失真
+			ss := strings.SplitN(line, ":", 2)
 			if len(ss) < 2 {
 				continue
 			}
@@ -347,6 +367,10 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 	}
 
 	filename := fmt.Sprintf("/tmp/%d", GenId())
+	//文件由下面的 >> 重定向创建，只要命令执行过就会落盘。
+	//此前只在成功路径末尾删除，命令失败、响应码非200、读取失败等分支都会把文件留在/tmp里，
+	//实测打一次失败请求即残留一个0字节文件，长期运行会持续堆积，故统一用defer兜底删除。
+	defer RemoveFile(ctx, filename)
 	curls := make([]string, 0, len(header)+2)
 	curls = append(curls, fmt.Sprintf(`curl -v '%s' \`, url))
 	if method == "POST" {
@@ -385,7 +409,7 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 	}
 	if statusCode != http.StatusOK {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(genHttpText(ctx, name, nil, "响应码失败"))
-		return "", errors.Errorf(genHttpText(ctx, name, statusCode, "响应码失败"))
+		return "", errors.New(genHttpText(ctx, name, statusCode, "响应码失败"))
 	}
 
 	fileInfo := GetFileInfo(ctx, filename)
@@ -397,7 +421,6 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 	if err != nil {
 		return "", err
 	}
-	RemoveFile(ctx, filename)
 
 	return data, nil
 }
