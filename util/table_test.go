@@ -442,6 +442,27 @@ func TestTableAddRow(t *testing.T) {
 	if got := neg.ListLine(); len(got) != 1 || got[0][0] != "r0" {
 		t.Errorf("AddRow 负row = %v", got)
 	}
+	//负rowspan曾panic(makeslice: len out of range)：
+	//本类型其余写入方法对非法下标一律忽略，此处须夹紧为0即插入空行，不得崩溃
+	negSpan := NewTable([]string{"r0"}, []string{"r1"})
+	negSpan.AddRow(1, -3, "N")
+	got := negSpan.ListLine()
+	if len(got) != 3 {
+		t.Fatalf("AddRow 负rowspan 行数 = %d, 期望 3: %v", len(got), got)
+	}
+	if len(got[1]) != 0 {
+		t.Errorf("AddRow 负rowspan 应插入空行, got %v", got[1])
+	}
+	//原有行内容不得被破坏
+	if got[0][0] != "r0" || got[2][0] != "r1" {
+		t.Errorf("AddRow 负rowspan 破坏了原有行: %v", got)
+	}
+	//与 rowspan=0 的结果必须一致（负值语义上等价于0）
+	zeroSpan := NewTable([]string{"r0"}, []string{"r1"})
+	zeroSpan.AddRow(1, 0, "N")
+	if zeroSpan.String() != negSpan.String() {
+		t.Errorf("AddRow 负rowspan(%s) 与 rowspan=0(%s) 结果不一致", negSpan.String(), zeroSpan.String())
+	}
 }
 
 func TestTableRmRow(t *testing.T) {

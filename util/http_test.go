@@ -504,3 +504,69 @@ func TestExecCurlLocal(t *testing.T) {
 		t.Errorf("500 响应应返回error")
 	}
 }
+
+// HttpGetIp / flushHttpGetIp：此前无任何用例直接调用。
+// HttpGetIp 依赖外网端点，不能让用例的成败取决于网络；这里只锁定"必须安全返回、
+// 不panic、返回值可直接交给 ip.Store 使用"这类与网络无关的契约。
+func TestHttpGetIp(t *testing.T) {
+	ctx := GenCtx()
+
+	//无论外网是否可达，都不得panic，且返回值必须是可安全使用的字符串
+	got := HttpGetIp(ctx)
+	if strings.ContainsAny(got, "\x00") {
+		t.Errorf("HttpGetIp 返回含NUL字节: %q", got)
+	}
+	//取到内容时，应是去除首尾空白后仍非空的一行文本（flushHttpGetIp 依赖这一点做判空）
+	if trimmed := strings.TrimSpace(got); trimmed != "" {
+		if strings.Contains(trimmed, "\n") {
+			t.Errorf("HttpGetIp 返回多行内容 %q, flushHttpGetIp 会把整段存进ip字段", trimmed)
+		}
+	} else {
+		t.Logf("HttpGetIp 未取到内容（外网不可达时属正常）: %q", got)
+	}
+
+	//ctx 已取消时必须快速返回且不panic，不能挂住调用方
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	start := time.Now()
+	_ = HttpGetIp(cancelled)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("已取消ctx下 HttpGetIp 耗时 %v, 未及时返回", elapsed)
+	}
+}
+
+// flushHttpGetIp 是守护任务体：只校验它对空返回值的保护逻辑，
+// 即"取到空串时不得把 ip 覆盖成空"，这是该函数唯一与网络无关的关键分支。
+func TestFlushHttpGetIpKeepsOldOnEmpty(t *testing.T) {
+	ctx := GenCtx()
+	old := ip.Load()
+	t.Cleanup(func() {
+		if old != nil {
+			ip.Store(old)
+		} else {
+			ip.Store("")
+		}
+	})
+
+	//预置一个已知IP，模拟此前已成功获取过
+	ip.Store("9.9.9.9")
+
+	//用已取消的ctx驱动一次守护体：内部取IP大概率为空且循环会立刻退出，
+	//关键断言是——即使这一轮没取到，也不能把已有的IP擦成空串
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	done := make(chan bool, 1)
+	go func() {
+		flushHttpGetIp(cancelled, nil)
+		done <- true
+	}()
+	select {
+	case <-done:
+	case <-timeAfterMs(15000):
+		t.Fatalf("flushHttpGetIp 在已取消ctx下未退出")
+	}
+
+	if got := GetIp(); got == "" {
+		t.Errorf("flushHttpGetIp 把已有IP擦成了空串，GetIp = %q", got)
+	}
+}

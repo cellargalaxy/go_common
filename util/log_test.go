@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -82,6 +83,35 @@ func TestResetLogId(t *testing.T) {
 	//原ctx不受影响
 	if GetLogId(ctx) != old {
 		t.Errorf("原ctx被污染")
+	}
+}
+
+func TestGenReqId(t *testing.T) {
+	//GenReqId 是 SetReqId/GetOrGenReqId 的底层ID来源，此前无任何用例直接覆盖
+	id1 := GenReqId()
+	if id1 <= 0 {
+		t.Errorf("GenReqId = %d, 应为正整数", id1)
+	}
+	//与 GenLogId/GenId 同源，均为18位时间序ID
+	if got := len(Int2String(id1)); got != 18 {
+		t.Errorf("GenReqId 位数 = %d (%s), 期望 18", got, Int2String(id1))
+	}
+	//随时间单调不减；同一时刻可能相等，但绝不能倒退
+	for i := 0; i < 50; i++ {
+		id2 := GenReqId()
+		if id2 < id1 {
+			t.Fatalf("GenReqId 倒退: %d -> %d", id1, id2)
+		}
+		id1 = id2
+	}
+	//必须可被 ParseId 解回时间，且与当前时刻接近（证明是时间序ID而非随机数）
+	ctx := GenCtx()
+	parsed, err := ParseId(ctx, GenReqId())
+	if err != nil {
+		t.Fatalf("GenReqId 生成的ID无法解析: %+v", err)
+	}
+	if diff := time.Since(parsed); diff < -time.Minute || diff > time.Minute {
+		t.Errorf("GenReqId 解析出的时间与当前偏差 %v, 过大", diff)
 	}
 }
 

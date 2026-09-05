@@ -1,6 +1,10 @@
 package util
 
 import (
+	cryptorand "crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"strings"
 	"testing"
 	"time"
@@ -743,5 +747,144 @@ func TestRsaVerifyNegative(t *testing.T) {
 	s3, _ := RsaSignString(ctx, "different", testRsaPkcs1PrivateKey)
 	if s1 == s3 {
 		t.Errorf("不同数据产生了相同签名")
+	}
+}
+
+// RsaSign / RsaVerify 的字节级API：此前仅有 RsaSignString/RsaVerifyString 的用例，
+// 这两个导出函数从未被直接调用过。它们是String版的底层实现，也是外部可直接使用的公开API，
+// 需覆盖二进制数据（含NUL与非UTF8字节）这一String版无法表达的场景。
+func TestRsaSignVerifyBytes(t *testing.T) {
+	ctx := GenCtx()
+
+	//二进制数据（含NUL、0xFF等非UTF8字节）必须能正常签名验签
+	data := []byte{0x00, 0x01, 0xFF, 0xFE, 0x00, 'a', 'b'}
+	sign, err := RsaSign(ctx, data, []byte(testRsaPkcs1PrivateKey))
+	if err != nil {
+		t.Fatalf("RsaSign 异常: %+v", err)
+	}
+	if len(sign) == 0 {
+		t.Fatalf("RsaSign 返回空签名")
+	}
+	ok, err := RsaVerify(ctx, data, sign, []byte(testRsaPublicKey1))
+	if err != nil {
+		t.Fatalf("RsaVerify 异常: %+v", err)
+	}
+	if !ok {
+		t.Errorf("二进制数据验签失败")
+	}
+
+	//PKCS8 私钥同样支持
+	sign8, err := RsaSign(ctx, data, []byte(testRsaPkcs8PrivateKey))
+	if err != nil {
+		t.Fatalf("RsaSign(PKCS8) 异常: %+v", err)
+	}
+	if ok, err = RsaVerify(ctx, data, sign8, []byte(testRsaPublicKey2)); err != nil || !ok {
+		t.Errorf("PKCS8 二进制验签失败: ok=%v err=%v", ok, err)
+	}
+
+	//与String版必须自洽：String版即是对字节版做Base64包装
+	strSign, err := RsaSignString(ctx, string(data), testRsaPkcs1PrivateKey)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if got := EnBase64(ctx, sign); got != strSign {
+		t.Errorf("RsaSign 与 RsaSignString 结果不一致:\n字节版Base64=%s\nString版  =%s", got, strSign)
+	}
+
+	//空数据也应能签名（对空哈希签名是合法操作）
+	emptySign, err := RsaSign(ctx, []byte{}, []byte(testRsaPkcs1PrivateKey))
+	if err != nil {
+		t.Errorf("RsaSign(空数据) 异常: %+v", err)
+	}
+	if ok, err = RsaVerify(ctx, []byte{}, emptySign, []byte(testRsaPublicKey1)); err != nil || !ok {
+		t.Errorf("空数据验签失败: ok=%v err=%v", ok, err)
+	}
+	//nil 与空切片语义相同
+	if ok, _ = RsaVerify(ctx, nil, emptySign, []byte(testRsaPublicKey1)); !ok {
+		t.Errorf("nil 数据应与空切片等价，验签应通过")
+	}
+
+	//篡改一个字节即须验签失败
+	tampered := make([]byte, len(data))
+	copy(tampered, data)
+	tampered[0] ^= 0xFF
+	if ok, _ = RsaVerify(ctx, tampered, sign, []byte(testRsaPublicKey1)); ok {
+		t.Errorf("数据被篡改后仍验签通过")
+	}
+	//篡改签名同样须失败
+	badSign := make([]byte, len(sign))
+	copy(badSign, sign)
+	badSign[len(badSign)-1] ^= 0xFF
+	if ok, _ = RsaVerify(ctx, data, badSign, []byte(testRsaPublicKey1)); ok {
+		t.Errorf("签名被篡改后仍验签通过")
+	}
+	//公钥不匹配须失败。
+	//注意：testRsaPublicKey1 与 testRsaPublicKey2 实为同一份公钥（两个常量内容完全相同，
+	//仅名字不同），用它们互相验签必然通过，测不出"密钥不匹配"。故此处现场生成一对独立密钥。
+	otherPub := genOtherRsaPublicKeyPem(t)
+	if ok, _ = RsaVerify(ctx, data, sign, otherPub); ok {
+		t.Errorf("使用不匹配的公钥仍验签通过")
+	}
+
+	//非法密钥必须返回error而非panic
+	for _, bad := range [][]byte{nil, {}, []byte("not a key"),
+		[]byte("-----BEGIN RSA PRIVATE KEY-----\nbad\n-----END RSA PRIVATE KEY-----\n")} {
+		if _, err = RsaSign(ctx, data, bad); err == nil {
+			t.Errorf("RsaSign 非法私钥 %.20q 应报错", bad)
+		}
+	}
+	for _, bad := range [][]byte{nil, {}, []byte("not a key"),
+		[]byte("-----BEGIN PUBLIC KEY-----\nbad\n-----END PUBLIC KEY-----\n")} {
+		if _, err = RsaVerify(ctx, data, sign, bad); err == nil {
+			t.Errorf("RsaVerify 非法公钥 %.20q 应报错", bad)
+		}
+	}
+	//把私钥PEM当公钥传入：块类型不是PUBLIC KEY，须报错
+	if _, err = RsaVerify(ctx, data, sign, []byte(testRsaPkcs1PrivateKey)); err == nil {
+		t.Errorf("私钥当公钥使用应报错")
+	}
+	//空签名须验签失败并报错
+	if ok, err = RsaVerify(ctx, data, nil, []byte(testRsaPublicKey1)); ok || err == nil {
+		t.Errorf("空签名应验签失败并报错: ok=%v err=%v", ok, err)
+	}
+}
+
+// genOtherRsaPublicKeyPem 现场生成一对与测试固定密钥无关的RSA密钥，返回其公钥PEM。
+// 用于验证"密钥不匹配时必须验签失败"——这一点无法用 testRsaPublicKey1/2 验证，
+// 因为那两个常量的内容完全相同，实际上只是同一份公钥的两个别名。
+func genOtherRsaPublicKeyPem(t *testing.T) []byte {
+	t.Helper()
+	//2048位足够且比4096快很多，本用例只关心"不是同一把钥匙"
+	key, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("生成测试用RSA密钥异常: %+v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatalf("序列化测试用公钥异常: %+v", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
+}
+
+// 固定测试密钥的自检：testRsaPublicKey1 与 testRsaPublicKey2 目前内容完全相同。
+// 明确记录这一事实，避免后续用例误以为它们是两把不同的钥匙而写出恒真断言。
+func TestRsaTestKeysAreSamePair(t *testing.T) {
+	ctx := GenCtx()
+	if testRsaPublicKey1 != testRsaPublicKey2 {
+		//若将来有人补齐成两对真实密钥，这里会提醒同步更新依赖该假设的用例
+		t.Skip("testRsaPublicKey1/2 已不同，跨密钥用例可改用常量而非现场生成")
+	}
+	//两个私钥常量编码不同(PKCS1 / PKCS8)，但对应同一把私钥，
+	//故两者的签名结果必须完全一致（PKCS1v15为确定性签名）
+	s1, err := RsaSignString(ctx, "probe", testRsaPkcs1PrivateKey)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	s8, err := RsaSignString(ctx, "probe", testRsaPkcs8PrivateKey)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if s1 != s8 {
+		t.Errorf("PKCS1与PKCS8私钥常量应为同一把私钥的两种编码，签名却不同")
 	}
 }
