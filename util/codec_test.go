@@ -1,131 +1,18 @@
 package util
 
 import (
-	"github.com/cellargalaxy/go_common/model"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/cellargalaxy/go_common/model"
+	"github.com/golang-jwt/jwt"
 )
 
-func TestGzip(t *testing.T) {
-	ctx := GenCtx()
+// ==== RSA 测试密钥（沿用原用例中的固定密钥对） ====
 
-	data, err := EnGzip(ctx, []byte("aaa"))
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	data, err = DeGzip(ctx, data)
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	if string(data) != "aaa" {
-		t.Errorf(`if string(data) != "aaa" {`)
-		return
-	}
-}
-
-func TestBase64(t *testing.T) {
-	ctx := GenCtx()
-
-	data := EnBase64(ctx, []byte("aaa"))
-	value := DeBase64(ctx, data)
-	if string(value) != "aaa" {
-		t.Errorf(`if string(value) != "aaa" {`)
-		return
-	}
-}
-
-func TestJwt(t *testing.T) {
-	ctx := GenCtx()
-
-	expire := time.Hour
-	now := time.Now()
-	var claims model.Claims
-	claims.IssuedAt = now.Add(-expire).Unix()
-	claims.ExpiresAt = now.Add(expire).Unix()
-	claims.Ip = "GetIp()"
-	claims.ServerName = "GetServerName()"
-	claims.LogId = 123456
-	claims.ReqId = "GetOrGenReqIdString(ctx)"
-
-	jwt, err := EnJwt(ctx, "secret", claims)
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-
-	var ccc model.Claims
-	token, err := DeJwt(ctx, jwt, "secret", &ccc)
-	t.Log(JsonStruct2String(ccc))
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	if token == nil {
-		t.Errorf(`if token == nil {`)
-		return
-	}
-	if !token.Valid {
-		t.Errorf(`if !token.Valid {`)
-		return
-	}
-	if ccc.Ip != "GetIp()" {
-		t.Errorf(`if ccc.Ip != "GetIp()" {`)
-		return
-	}
-	if ccc.ServerName != "GetServerName()" {
-		t.Errorf(`if ccc.ServerName != "GetServerName()" {`)
-		return
-	}
-	if ccc.LogId != 123456 {
-		t.Errorf(`if ccc.LogId != 123456 {`)
-		return
-	}
-	if ccc.ReqId != "GetOrGenReqIdString(ctx)" {
-		t.Errorf(`if ccc.ReqId != "GetOrGenReqIdString(ctx)" {`)
-		return
-	}
-}
-
-func TestAesCbc(t *testing.T) {
-	ctx := GenCtx()
-
-	value, err := EnAesCbcString(ctx, "aaa", "bbb")
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	value, err = DeAesCbcString(ctx, value, "bbb")
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	if value != "aaa" {
-		t.Errorf(`if value != "aaa" {`)
-		return
-	}
-}
-
-func TestHash(t *testing.T) {
-	if EnSha256Hex("123456") != "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" {
-		t.Errorf(`EnSha256Hex("123456") %+v`, EnSha256Hex("123456"))
-		return
-	}
-	if EnMd5Hex("123456") != "e10adc3949ba59abbe56e057f20f883e" {
-		t.Errorf(`EnMd5Hex("123456") %+v`, EnMd5Hex("123456"))
-		return
-	}
-	if EnCrc32Hex("123456") != "972d361" {
-		t.Errorf(`EnCrc32Hex("123456") %+v`, EnCrc32Hex("123456"))
-		return
-	}
-}
-
-func TestRsa1(t *testing.T) {
-	ctx := GenCtx()
-
-	sign, err := RsaSignString(ctx, `aaa`, `-----BEGIN RSA PRIVATE KEY-----
+// PKCS1 格式私钥
+const testRsaPkcs1PrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIIJKgIBAAKCAgEAqkk9WHSyUDdbq1oIm9gSdOxGTXE4Tx8OW2O55We1LMdMCvc2
 YQRrGmQctvzTsRA9+ECrgL+DaWPbcNbvcofyVN1r4Q3zeEkHejbrOVJTnvTnPljy
 SiNSKO1nNNInBSpjeRh9UbPZdpyCD1bNZ93QDcQEeQTcccouDclljVAbOJX5USWn
@@ -176,12 +63,10 @@ gYa8ExocmwezHYVzCkpD01rPvDV0cvr5oDsYIIjeu074cKm14X3HkDJidUdRDcwR
 m7/GaR2ij7sA73ujRWgUZXflyzrE6S2mTQ19NK3emjUHhEf0CviULLxm816AndM6
 xCUVLblLnDTSKJXK05R0zBk1HrXEsPvSmIOUJ6E86hafgS/B5WlTj+VWxM9yjw==
 -----END RSA PRIVATE KEY-----
-`)
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	ok, err := RsaVerifyString(ctx, `aaa`, sign, `-----BEGIN PUBLIC KEY-----
+`
+
+// 与 PKCS1 私钥配对的公钥
+const testRsaPublicKey1 = `-----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAqkk9WHSyUDdbq1oIm9gS
 dOxGTXE4Tx8OW2O55We1LMdMCvc2YQRrGmQctvzTsRA9+ECrgL+DaWPbcNbvcofy
 VN1r4Q3zeEkHejbrOVJTnvTnPljySiNSKO1nNNInBSpjeRh9UbPZdpyCD1bNZ93Q
@@ -195,21 +80,10 @@ FlPzQGFtIFox6H/LZ6sVbFxZkXPQoeuxl2nm3dfoEjRJYJq2ffTG6CWDuAi0jFul
 xOGUIizG5oRMOXLdUx6mDsgyknIbelpccbRz4kYv/A6owVktTyw4XJw1MLCTYIrr
 0qSIvAAO7lGVhpzsUAmjcBcCAwEAAQ==
 -----END PUBLIC KEY-----
-`)
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	if !ok {
-		t.Errorf(`if !ok {`)
-		return
-	}
-}
+`
 
-func TestRsa2(t *testing.T) {
-	ctx := GenCtx()
-
-	sign, err := RsaSignString(ctx, `aaa`, `-----BEGIN PRIVATE KEY-----
+// PKCS8 格式私钥（同一密钥对的另一种编码）
+const testRsaPkcs8PrivateKey = `-----BEGIN PRIVATE KEY-----
 MIIJRAIBADANBgkqhkiG9w0BAQEFAASCCS4wggkqAgEAAoICAQCqST1YdLJQN1ur
 Wgib2BJ07EZNcThPHw5bY7nlZ7Usx0wK9zZhBGsaZBy2/NOxED34QKuAv4NpY9tw
 1u9yh/JU3WvhDfN4SQd6Nus5UlOe9Oc+WPJKI1Io7Wc00icFKmN5GH1Rs9l2nIIP
@@ -261,12 +135,10 @@ eEA0ts9ZvglLUMnxnZICP6bSOO+LzlB266eBhrwTGhybB7MdhXMKSkPTWs+8NXRy
 LaZNDX00rd6aNQeER/QK+JQsvGbzXoCd0zrEJRUtuUucNNIolcrTlHTMGTUetcSw
 +9KYg5QnoTzqFp+BL8HlaVOP5VbEz3KP
 -----END PRIVATE KEY-----
-`)
-	if err != nil {
-		t.Errorf("%+v", err)
-		return
-	}
-	ok, err := RsaVerifyString(ctx, `aaa`, sign, `-----BEGIN PUBLIC KEY-----
+`
+
+// 与 PKCS8 私钥配对的公钥
+const testRsaPublicKey2 = `-----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAqkk9WHSyUDdbq1oIm9gS
 dOxGTXE4Tx8OW2O55We1LMdMCvc2YQRrGmQctvzTsRA9+ECrgL+DaWPbcNbvcofy
 VN1r4Q3zeEkHejbrOVJTnvTnPljySiNSKO1nNNInBSpjeRh9UbPZdpyCD1bNZ93Q
@@ -280,13 +152,596 @@ FlPzQGFtIFox6H/LZ6sVbFxZkXPQoeuxl2nm3dfoEjRJYJq2ffTG6CWDuAi0jFul
 xOGUIizG5oRMOXLdUx6mDsgyknIbelpccbRz4kYv/A6owVktTyw4XJw1MLCTYIrr
 0qSIvAAO7lGVhpzsUAmjcBcCAwEAAQ==
 -----END PUBLIC KEY-----
-`)
+`
+
+// ==== Gzip ====
+
+func TestGzip(t *testing.T) {
+	ctx := GenCtx()
+	//往返一致
+	data, err := EnGzip(ctx, []byte("aaa"))
 	if err != nil {
-		t.Errorf("%+v", err)
-		return
+		t.Fatalf("EnGzip 异常: %+v", err)
+	}
+	got, err := DeGzip(ctx, data)
+	if err != nil {
+		t.Fatalf("DeGzip 异常: %+v", err)
+	}
+	if string(got) != "aaa" {
+		t.Errorf("往返结果 = %q, 期望 aaa", string(got))
+	}
+	//必须真的产生压缩效果，而非原样返回
+	big := strings.Repeat("a", 10000)
+	z, err := EnGzip(ctx, []byte(big))
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if len(z) >= len(big) {
+		t.Errorf("压缩后 %d 字节 >= 原始 %d 字节，未真正压缩", len(z), len(big))
+	}
+	if back, err := DeGzip(ctx, z); err != nil || string(back) != big {
+		t.Errorf("大数据往返失败: err=%v 长度=%d", err, len(back))
+	}
+	//二进制数据（含0字节）不能被破坏
+	bin := []byte{0, 1, 2, 255, 0, 128}
+	z, _ = EnGzip(ctx, bin)
+	back, err := DeGzip(ctx, z)
+	if err != nil || string(back) != string(bin) {
+		t.Errorf("二进制往返失败: %v, %v", back, err)
+	}
+	//空输入
+	z, err = EnGzip(ctx, []byte{})
+	if err != nil {
+		t.Errorf("EnGzip(空) 异常: %+v", err)
+	}
+	if back, err = DeGzip(ctx, z); err != nil || len(back) != 0 {
+		t.Errorf("空数据往返: %v, %v", back, err)
+	}
+}
+
+// DeGzip 对非法数据必须返回error而非panic（曾因先defer后判err而空指针panic）
+func TestDeGzipInvalid(t *testing.T) {
+	ctx := GenCtx()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("DeGzip 非法数据触发panic: %v", r)
+		}
+	}()
+	for _, bad := range [][]byte{
+		[]byte("not gzip at all"),
+		{},
+		{0x1f, 0x8b},             //仅magic头，数据截断
+		{0x1f, 0x8b, 0x08, 0xff}, //头部合法但内容损坏
+	} {
+		got, err := DeGzip(ctx, bad)
+		if err == nil && len(got) > 0 {
+			t.Errorf("DeGzip(%v) 未报错且返回了数据 %v", bad, got)
+		}
+	}
+}
+
+// ==== Base64 ====
+
+func TestBase64(t *testing.T) {
+	ctx := GenCtx()
+	//已知编码值，防止算法被换成非标准变体
+	if got := EnBase64(ctx, []byte("aaa")); got != "YWFh" {
+		t.Errorf(`EnBase64("aaa") = %q, 期望 "YWFh"`, got)
+	}
+	if got := string(DeBase64(ctx, "YWFh")); got != "aaa" {
+		t.Errorf("DeBase64 = %q", got)
+	}
+	//空值
+	if got := EnBase64(ctx, []byte{}); got != "" {
+		t.Errorf("EnBase64(空) = %q", got)
+	}
+	if got := DeBase64(ctx, ""); len(got) != 0 {
+		t.Errorf("DeBase64(空) = %v", got)
+	}
+	//二进制与多字节字符往返
+	for _, in := range [][]byte{{0, 1, 2, 255}, []byte("中文测试"), []byte(strings.Repeat("x", 1000))} {
+		if back := DeBase64(ctx, EnBase64(ctx, in)); string(back) != string(in) {
+			t.Errorf("往返失败, 长度 %d -> %d", len(in), len(back))
+		}
+	}
+	//非法base64：DeBase64 约定静默返回空，不panic
+	if got := DeBase64(ctx, "!!!非法!!!"); len(got) != 0 {
+		t.Errorf("DeBase64(非法) = %v, 期望空", got)
+	}
+	//deBase64 内部版本必须返回error供调用方判断
+	if _, err := deBase64(ctx, "!!!"); err == nil {
+		t.Errorf("deBase64(非法) 应返回error")
+	}
+	if _, err := deBase64(ctx, "YWFh"); err != nil {
+		t.Errorf("deBase64(合法) 异常: %+v", err)
+	}
+}
+
+// ==== JWT ====
+
+func TestJwtRoundTrip(t *testing.T) {
+	ctx := GenCtx()
+	expire := time.Hour
+	now := time.Now()
+	var claims model.Claims
+	claims.IssuedAt = now.Add(-expire).Unix()
+	claims.ExpiresAt = now.Add(expire).Unix()
+	claims.Ip = "1.2.3.4"
+	claims.ServerName = "svc"
+	claims.LogId = 123456
+	claims.ReqId = "req-1"
+
+	token, err := EnJwt(ctx, "secret", claims)
+	if err != nil {
+		t.Fatalf("EnJwt 异常: %+v", err)
+	}
+	//JWT 应为三段点分结构
+	if parts := strings.Split(token, "."); len(parts) != 3 {
+		t.Errorf("JWT 段数 = %d, 期望 3", len(parts))
+	}
+
+	var got model.Claims
+	parsed, err := DeJwt(ctx, token, "secret", &got)
+	if err != nil {
+		t.Fatalf("DeJwt 异常: %+v", err)
+	}
+	if parsed == nil || !parsed.Valid {
+		t.Fatalf("token 无效: %v", parsed)
+	}
+	//逐字段核对
+	if got.Ip != "1.2.3.4" || got.ServerName != "svc" || got.LogId != 123456 || got.ReqId != "req-1" {
+		t.Errorf("claims 还原不一致: %+v", got)
+	}
+	if got.IssuedAt != claims.IssuedAt || got.ExpiresAt != claims.ExpiresAt {
+		t.Errorf("时间字段不一致: %d/%d vs %d/%d", got.IssuedAt, got.ExpiresAt, claims.IssuedAt, claims.ExpiresAt)
+	}
+}
+
+// 安全关键：错误密钥、过期、篡改都必须被拒绝
+func TestJwtSecurity(t *testing.T) {
+	ctx := GenCtx()
+	now := time.Now()
+	var claims model.Claims
+	claims.IssuedAt = now.Unix()
+	claims.ExpiresAt = now.Add(time.Hour).Unix()
+	claims.Ip = "1.2.3.4"
+	token, err := EnJwt(ctx, "right-secret", claims)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	//错误密钥必须失败
+	var out model.Claims
+	if _, err = DeJwt(ctx, token, "wrong-secret", &out); err == nil {
+		t.Errorf("错误密钥应校验失败")
+	}
+	//篡改payload必须失败
+	parts := strings.Split(token, ".")
+	tampered := parts[0] + "." + EnBase64(ctx, []byte(`{"ip":"9.9.9.9"}`)) + "." + parts[2]
+	if _, err = DeJwt(ctx, tampered, "right-secret", &out); err == nil {
+		t.Errorf("篡改payload应校验失败")
+	}
+	//格式非法
+	for _, bad := range []string{"", "abc", "a.b", "a.b.c"} {
+		if _, err = DeJwt(ctx, bad, "right-secret", &out); err == nil {
+			t.Errorf("非法token %q 应报错", bad)
+		}
+	}
+	//已过期必须失败
+	var expired model.Claims
+	expired.IssuedAt = now.Add(-2 * time.Hour).Unix()
+	expired.ExpiresAt = now.Add(-time.Hour).Unix()
+	expiredToken, err := EnJwt(ctx, "s", expired)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if _, err = DeJwt(ctx, expiredToken, "s", &out); err == nil {
+		t.Errorf("过期token应校验失败")
+	} else if !strings.Contains(err.Error(), "expired") {
+		t.Errorf("过期错误信息未体现expired: %v", err)
+	}
+	//不同密钥生成的token必须不同
+	t1, _ := EnJwt(ctx, "s1", claims)
+	t2, _ := EnJwt(ctx, "s2", claims)
+	if t1 == t2 {
+		t.Errorf("不同密钥生成了相同token")
+	}
+}
+
+// DeJwt 的 claims 传 nil 时走 jwt.Parse 分支（与传 &claims 的 ParseWithClaims 分支不同），
+// 该分支此前完全未被覆盖；校验它同样能验签成功、并同样拒绝错误密钥与过期token
+func TestDeJwtNilClaims(t *testing.T) {
+	ctx := GenCtx()
+	secret := "nil-claims-secret"
+	now := time.Now()
+	var claims model.Claims
+	claims.IssuedAt = now.Unix()
+	claims.ExpiresAt = now.Add(time.Hour).Unix()
+	claims.Ip = "10.0.0.1"
+	token, err := EnJwt(ctx, secret, claims)
+	if err != nil {
+		t.Fatalf("EnJwt 异常: %+v", err)
+	}
+
+	//正确密钥 + nil claims：须返回非空token且Valid
+	jwtToken, err := DeJwt(ctx, token, secret, nil)
+	if err != nil {
+		t.Fatalf("DeJwt(nil claims) 异常: %+v", err)
+	}
+	if jwtToken == nil {
+		t.Fatalf("DeJwt(nil claims) 返回空token")
+	}
+	if !jwtToken.Valid {
+		t.Errorf("DeJwt(nil claims) Valid = false")
+	}
+	//payload 仍应可从MapClaims中读到，证明确实解析了内容
+	if mc, ok := jwtToken.Claims.(jwt.MapClaims); ok {
+		if mc["ip"] != "10.0.0.1" {
+			t.Errorf("nil claims 解析出的ip = %v, 期望 10.0.0.1", mc["ip"])
+		}
+	} else {
+		t.Errorf("nil claims 时 Claims 类型 = %T, 期望 jwt.MapClaims", jwtToken.Claims)
+	}
+
+	//错误密钥必须失败，不能因为claims为nil就跳过签名校验
+	if _, err = DeJwt(ctx, token, "wrong-secret", nil); err == nil {
+		t.Errorf("nil claims + 错误密钥 应校验失败")
+	}
+	//过期token必须失败
+	var expired model.Claims
+	expired.IssuedAt = now.Add(-2 * time.Hour).Unix()
+	expired.ExpiresAt = now.Add(-time.Hour).Unix()
+	expiredToken, err := EnJwt(ctx, secret, expired)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if _, err = DeJwt(ctx, expiredToken, secret, nil); err == nil {
+		t.Errorf("nil claims + 过期token 应校验失败")
+	}
+	//非法格式必须报错而非panic
+	for _, bad := range []string{"", "abc", "a.b", "a.b.c"} {
+		if _, err = DeJwt(ctx, bad, secret, nil); err == nil {
+			t.Errorf("nil claims + 非法token %q 应报错", bad)
+		}
+	}
+}
+
+func TestEnDefaultJwt(t *testing.T) {
+	ctx := GenCtx()
+	token, err := EnDefaultJwt(ctx, "secret", time.Hour)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if token == "" {
+		t.Fatalf("EnDefaultJwt 返回空")
+	}
+	//默认claims须自动带上链路信息，可被解回
+	var got model.Claims
+	if _, err = DeJwt(ctx, token, "secret", &got); err != nil {
+		t.Fatalf("解析自身生成的token失败: %+v", err)
+	}
+	if got.ServerName != GetServerName() {
+		t.Errorf("serverName = %q, 期望 %q", got.ServerName, GetServerName())
+	}
+	if got.LogId != GetLogId(ctx) {
+		t.Errorf("logId = %d, 期望 %d", got.LogId, GetLogId(ctx))
+	}
+	//过期时间应落在预期区间
+	if got.ExpiresAt <= time.Now().Unix() {
+		t.Errorf("ExpiresAt %d 已过期", got.ExpiresAt)
+	}
+	if got.ExpiresAt > time.Now().Add(2*time.Hour).Unix() {
+		t.Errorf("ExpiresAt %d 超出预期", got.ExpiresAt)
+	}
+}
+
+func TestAuthorizationHeader(t *testing.T) {
+	ctx := GenCtx()
+	//固定头名与Bearer前缀，属对外协议不能变
+	key, value := GenAuthorizationHeader(ctx, "mytoken")
+	if key != "Authorization" {
+		t.Errorf("header key = %q, 期望 Authorization", key)
+	}
+	if value != "Bearer mytoken" {
+		t.Errorf("header value = %q, 期望 'Bearer mytoken'", value)
+	}
+	//EnAuthorizationJwt 应产出可解析的Bearer token
+	key, value = EnAuthorizationJwt(ctx, "secret", time.Hour)
+	if key != "Authorization" {
+		t.Errorf("key = %q", key)
+	}
+	if !strings.HasPrefix(value, "Bearer ") {
+		t.Errorf("value 缺少 Bearer 前缀: %q", value)
+	}
+	token := strings.TrimPrefix(value, "Bearer ")
+	var got model.Claims
+	if _, err := DeJwt(ctx, token, "secret", &got); err != nil {
+		t.Errorf("Authorization 中的token无法解析: %+v", err)
+	}
+}
+
+// ==== AES ====
+
+func TestAesCbc(t *testing.T) {
+	ctx := GenCtx()
+	//往返
+	enc, err := EnAesCbcString(ctx, "aaa", "bbb")
+	if err != nil {
+		t.Fatalf("EnAesCbcString 异常: %+v", err)
+	}
+	//密文必须与明文不同，否则等于没加密
+	if enc == "aaa" {
+		t.Errorf("密文与明文相同，未实际加密")
+	}
+	got, err := DeAesCbcString(ctx, enc, "bbb")
+	if err != nil {
+		t.Fatalf("DeAesCbcString 异常: %+v", err)
+	}
+	if got != "aaa" {
+		t.Errorf("往返结果 = %q, 期望 aaa", got)
+	}
+	//不同密钥必须产生不同密文
+	enc2, _ := EnAesCbcString(ctx, "aaa", "ccc")
+	if enc == enc2 {
+		t.Errorf("不同密钥产生了相同密文")
+	}
+	//不同明文必须产生不同密文
+	enc3, _ := EnAesCbcString(ctx, "aab", "bbb")
+	if enc == enc3 {
+		t.Errorf("不同明文产生了相同密文")
+	}
+	//较长文本与多字节字符
+	for _, plain := range []string{"", "中文测试内容", strings.Repeat("x", 1000)} {
+		e, err := EnAesCbcString(ctx, plain, "key")
+		if err != nil {
+			t.Errorf("加密 %d 字节异常: %+v", len(plain), err)
+			continue
+		}
+		d, err := DeAesCbcString(ctx, e, "key")
+		if err != nil || d != plain {
+			t.Errorf("往返失败(%d字节): got %q err %v", len(plain), d, err)
+		}
+	}
+	//字节数组版本
+	encB, err := EnAesCbc(ctx, []byte("data"), []byte("key"))
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	decB, err := DeAesCbc(ctx, encB, []byte("key"))
+	if err != nil || string(decB) != "data" {
+		t.Errorf("EnAesCbc/DeAesCbc 往返失败: %q %v", decB, err)
+	}
+}
+
+// 记录已知安全短板：错误密钥解密不报错，只返回垃圾数据
+func TestAesCbcWrongSecret(t *testing.T) {
+	ctx := GenCtx()
+	enc, err := EnAesCbcString(ctx, "hello", "right")
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	got, err := DeAesCbcString(ctx, enc, "wrong")
+	//当前实现无完整性校验，错误密钥不报错；至少不能还原出原文，也不能panic
+	if err == nil && got == "hello" {
+		t.Errorf("错误密钥竟解出了正确明文")
+	}
+	//非法密文必须报错，不能静默返回空
+	if _, err = DeAesCbcString(ctx, "!!!非法密文!!!", "key"); err == nil {
+		t.Errorf("非法密文应返回error")
+	}
+}
+
+// 密文长度非法时不得静默失败：底层 goEncrypt 在遇到非完整块时只打日志、
+// 返回的err为nil，会让调用方把失败当成"解出空串"的成功，须由本包拦成error。
+func TestDeAesCbcIllegalLength(t *testing.T) {
+	ctx := GenCtx()
+	secret := []byte("key")
+
+	//非AES块大小(16)整数倍的密文，一律报错
+	for _, n := range []int{1, 5, 15, 17, 31, 33} {
+		data := make([]byte, n)
+		got, err := DeAesCbc(ctx, data, secret)
+		if err == nil {
+			t.Errorf("DeAesCbc(%d字节) err=nil, 期望报错（静默失败会被误当成解密成功）", n)
+		}
+		if got != nil {
+			t.Errorf("DeAesCbc(%d字节) 返回了数据 %q, 期望 nil", n, got)
+		}
+	}
+	//空密文同样报错，而非解出空串
+	if got, err := DeAesCbc(ctx, nil, secret); err == nil || got != nil {
+		t.Errorf("DeAesCbc(nil) = %q, err=%v, 期望报错", got, err)
+	}
+	if got, err := DeAesCbc(ctx, []byte{}, secret); err == nil || got != nil {
+		t.Errorf("DeAesCbc(空切片) = %q, err=%v, 期望报错", got, err)
+	}
+
+	//合法长度不得被误伤：正常往返必须成功
+	plain := []byte("hello aes cbc")
+	en, err := EnAesCbc(ctx, plain, secret)
+	if err != nil {
+		t.Fatalf("EnAesCbc 异常: %+v", err)
+	}
+	if len(en)%16 != 0 {
+		t.Errorf("EnAesCbc 输出长度 %d 不是16的倍数", len(en))
+	}
+	de, err := DeAesCbc(ctx, en, secret)
+	if err != nil {
+		t.Errorf("合法密文被误伤报错: %+v", err)
+	}
+	if string(de) != string(plain) {
+		t.Errorf("往返失败: %q, 期望 %q", de, plain)
+	}
+
+	//空明文加密后仍是完整块，须能正常解回空串
+	enEmpty, err := EnAesCbc(ctx, nil, secret)
+	if err != nil {
+		t.Fatalf("EnAesCbc(nil) 异常: %+v", err)
+	}
+	deEmpty, err := DeAesCbc(ctx, enEmpty, secret)
+	if err != nil {
+		t.Errorf("空明文往返被误伤: %+v", err)
+	}
+	if len(deEmpty) != 0 {
+		t.Errorf("空明文往返 = %q, 期望空", deEmpty)
+	}
+
+	//空密钥经sha256派生后仍是合法32字节密钥，往返须成功
+	enNoKey, err := EnAesCbc(ctx, plain, nil)
+	if err != nil {
+		t.Fatalf("EnAesCbc(空密钥) 异常: %+v", err)
+	}
+	deNoKey, err := DeAesCbc(ctx, enNoKey, nil)
+	if err != nil {
+		t.Errorf("空密钥往返异常: %+v", err)
+	}
+	if string(deNoKey) != string(plain) {
+		t.Errorf("空密钥往返 = %q, 期望 %q", deNoKey, plain)
+	}
+}
+
+// ==== 哈希 ====
+
+func TestHash(t *testing.T) {
+	//已知标准值，锁定算法不被替换
+	if got := EnSha256Hex("123456"); got != "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" {
+		t.Errorf("EnSha256Hex = %s", got)
+	}
+	if got := EnMd5Hex("123456"); got != "e10adc3949ba59abbe56e057f20f883e" {
+		t.Errorf("EnMd5Hex = %s", got)
+	}
+	if got := EnCrc32Hex("123456"); got != "972d361" {
+		t.Errorf("EnCrc32Hex = %s", got)
+	}
+	//空输入的标准值
+	if got := EnSha256Hex(""); got != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+		t.Errorf("EnSha256Hex(空) = %s", got)
+	}
+	if got := EnMd5Hex(""); got != "d41d8cd98f00b204e9800998ecf8427e" {
+		t.Errorf("EnMd5Hex(空) = %s", got)
+	}
+	//输出长度
+	if got := EnSha256([]byte("x")); len(got) != 32 {
+		t.Errorf("EnSha256 长度 = %d, 期望 32", len(got))
+	}
+	if got := EnMd5([]byte("x")); len(got) != 16 {
+		t.Errorf("EnMd5 长度 = %d, 期望 16", len(got))
+	}
+	//确定性与区分度
+	if EnSha256Hex("a") == EnSha256Hex("b") {
+		t.Errorf("不同输入SHA256相同")
+	}
+	if EnMd5Hex("a") == EnMd5Hex("b") {
+		t.Errorf("不同输入MD5相同")
+	}
+	if EnCrc32([]byte("a")) == EnCrc32([]byte("b")) {
+		t.Errorf("不同输入CRC32相同")
+	}
+	//确定性：先取基准值再重复比较，写成同表达式内两次调用不构成校验
+	stable := EnSha256Hex("stable")
+	for i := 0; i < 3; i++ {
+		if again := EnSha256Hex("stable"); again != stable {
+			t.Errorf("SHA256 结果不稳定: %s vs %s", stable, again)
+		}
+	}
+	//锁定标准算法：这些是 SHA256/MD5 对固定输入的公开已知值，
+	//可防止实现被替换成其他摘要算法而仅靠长度校验漏检
+	if got := EnSha256Hex("abc"); got != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+		t.Errorf("EnSha256Hex(abc) = %s, 与标准SHA256不符", got)
+	}
+	if got := EnMd5Hex("abc"); got != "900150983cd24fb0d6963f7d28e17f72" {
+		t.Errorf("EnMd5Hex(abc) = %s, 与标准MD5不符", got)
+	}
+	//中文不应因编码问题出错
+	if got := EnMd5Hex("中文"); len(got) != 32 {
+		t.Errorf("EnMd5Hex(中文) = %s", got)
+	}
+}
+
+// ==== RSA ====
+
+// PKCS1 私钥签名 + 公钥验签
+func TestRsaPkcs1(t *testing.T) {
+	ctx := GenCtx()
+	sign, err := RsaSignString(ctx, "aaa", testRsaPkcs1PrivateKey)
+	if err != nil {
+		t.Fatalf("RsaSignString 异常: %+v", err)
+	}
+	if sign == "" {
+		t.Fatalf("签名为空")
+	}
+	ok, err := RsaVerifyString(ctx, "aaa", sign, testRsaPublicKey1)
+	if err != nil {
+		t.Fatalf("RsaVerifyString 异常: %+v", err)
 	}
 	if !ok {
-		t.Errorf(`if !ok {`)
-		return
+		t.Errorf("验签失败")
+	}
+}
+
+// PKCS8 私钥签名 + 公钥验签（两种私钥编码都要支持）
+func TestRsaPkcs8(t *testing.T) {
+	ctx := GenCtx()
+	sign, err := RsaSignString(ctx, "aaa", testRsaPkcs8PrivateKey)
+	if err != nil {
+		t.Fatalf("RsaSignString 异常: %+v", err)
+	}
+	ok, err := RsaVerifyString(ctx, "aaa", sign, testRsaPublicKey2)
+	if err != nil {
+		t.Fatalf("RsaVerifyString 异常: %+v", err)
+	}
+	if !ok {
+		t.Errorf("验签失败")
+	}
+}
+
+// 安全关键：篡改数据、篡改签名、错误公钥都必须验签失败
+func TestRsaVerifyNegative(t *testing.T) {
+	ctx := GenCtx()
+	sign, err := RsaSignString(ctx, "original", testRsaPkcs1PrivateKey)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	//数据被篡改
+	ok, _ := RsaVerifyString(ctx, "tampered", sign, testRsaPublicKey1)
+	if ok {
+		t.Errorf("数据被篡改后仍验签通过")
+	}
+	//签名被篡改
+	ok, _ = RsaVerifyString(ctx, "original", EnBase64(ctx, []byte("badsign")), testRsaPublicKey1)
+	if ok {
+		t.Errorf("签名被篡改后仍验签通过")
+	}
+	//空签名
+	if ok, _ = RsaVerifyString(ctx, "original", "", testRsaPublicKey1); ok {
+		t.Errorf("空签名仍验签通过")
+	}
+
+	//非法密钥必须报错而非panic
+	for _, badKey := range []string{"", "not a key", "-----BEGIN PUBLIC KEY-----\nbad\n-----END PUBLIC KEY-----\n"} {
+		if _, err = RsaVerifyString(ctx, "d", sign, badKey); err == nil {
+			t.Errorf("非法公钥 %.20q 应报错", badKey)
+		}
+	}
+	for _, badKey := range []string{"", "not a key", "-----BEGIN RSA PRIVATE KEY-----\nbad\n-----END RSA PRIVATE KEY-----\n"} {
+		if _, err = RsaSignString(ctx, "d", badKey); err == nil {
+			t.Errorf("非法私钥 %.20q 应报错", badKey)
+		}
+	}
+	//把公钥当私钥用（类型不匹配）须报错
+	if _, err = RsaSignString(ctx, "d", testRsaPublicKey1); err == nil {
+		t.Errorf("公钥当私钥使用应报错")
+	}
+	//签名相同数据两次，PKCS1v15为确定性签名，结果应一致
+	s1, _ := RsaSignString(ctx, "same", testRsaPkcs1PrivateKey)
+	s2, _ := RsaSignString(ctx, "same", testRsaPkcs1PrivateKey)
+	if s1 != s2 {
+		t.Errorf("PKCS1v15 签名应为确定性，两次结果不同")
+	}
+	//不同数据签名必须不同
+	s3, _ := RsaSignString(ctx, "different", testRsaPkcs1PrivateKey)
+	if s1 == s3 {
+		t.Errorf("不同数据产生了相同签名")
 	}
 }
