@@ -57,8 +57,7 @@ func SetClaims(ctx context.Context, claims *model.Claims) context.Context {
 	return SetCtxValue(ctx, ClaimsKey, claims)
 }
 
-func setGinLogId(c *gin.Context) {
-	logId := GetLogId(c)
+func setGinLogId(c *gin.Context, logId int64) {
 	if logId <= 0 {
 		logId = GenId()
 	}
@@ -66,7 +65,7 @@ func setGinLogId(c *gin.Context) {
 	c.Header(LogIdKey, Int2Str(logId))
 }
 func ClaimsGin(c *gin.Context, secret string) {
-	setGinLogId(c)
+	setGinLogId(c, GetLogId(c))
 	defer c.Next()
 
 	var token string
@@ -84,12 +83,12 @@ func ClaimsGin(c *gin.Context, secret string) {
 	var claims model.Claims
 	DeJwt(c, token, secret, &claims)
 	if claims.LogId > 0 {
-		c.Set(LogIdKey, claims.LogId)
+		setGinLogId(c, claims.LogId)
 	}
 	c.Set(ClaimsKey, &claims)
 }
 func ValidateGin(c *gin.Context, secret string) {
-	setGinLogId(c)
+	setGinLogId(c, GetLogId(c))
 
 	var token string
 	authorization := c.Request.Header.Get(AuthorizationKey)
@@ -151,28 +150,28 @@ func ValidateGin(c *gin.Context, secret string) {
 }
 
 func NewGinGet[Request any](name string, service func(ctx context.Context, request Request) (any, error)) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
+	return func(c *gin.Context) {
 		var request Request
-		err := ctx.BindQuery(&request)
+		err := c.BindQuery(&request)
 		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
-			ctx.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
+			logrus.WithContext(c).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
+			c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
 			return
 		}
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"request": request}).Info(name)
-		ctx.JSON(http.StatusOK, NewHttpRespByErr(service(ctx, request)))
+		logrus.WithContext(c).WithFields(logrus.Fields{"request": request}).Info(name)
+		c.JSON(http.StatusOK, NewHttpRespByErr(service(c, request)))
 	}
 }
 func NewGinPost[Request any](name string, service func(ctx context.Context, request Request) (any, error)) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
+	return func(c *gin.Context) {
 		var request Request
-		err := ctx.BindJSON(&request)
+		err := c.BindJSON(&request)
 		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
-			ctx.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
+			logrus.WithContext(c).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
+			c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
 			return
 		}
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"request": request}).Info(name)
-		ctx.JSON(http.StatusOK, NewHttpRespByErr(service(ctx, request)))
+		logrus.WithContext(c).WithFields(logrus.Fields{"request": request}).Info(name)
+		c.JSON(http.StatusOK, NewHttpRespByErr(service(c, request)))
 	}
 }
