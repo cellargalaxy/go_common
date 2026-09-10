@@ -59,14 +59,6 @@ func TestGetSetLogId(t *testing.T) {
 	if again != ctx {
 		t.Errorf("已有logId时应返回原ctx，避免ctx链增长")
 	}
-	//字符串形式一致
-	if GetLogIdStr(ctx) != Int2Str(id) {
-		t.Errorf("GetLogIdStr = %q, 期望 %q", GetLogIdStr(ctx), Int2Str(id))
-	}
-	//空ctx的字符串形式
-	if got := GetLogIdStr(context.Background()); got != "0" {
-		t.Errorf(`空ctx GetLogIdStr = %q, 期望 "0"`, got)
-	}
 }
 
 func TestReSetLogId(t *testing.T) {

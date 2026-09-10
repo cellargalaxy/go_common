@@ -70,9 +70,9 @@ func NewSingleGoPool(ctx context.Context, name string) (*SingleGoPool, error) {
 
 type SingleGoPool struct {
 	poolName  string
-	pool      *ants.Pool    //如果不使用指针会有问题吗
-	lock      *sync.RWMutex //如果不使用指针会有问题吗
-	taskName  string
+	pool      *ants.Pool
+	lock      *sync.RWMutex
+	taskName  atomic.Value
 	ctxCancel func()
 }
 
@@ -80,12 +80,18 @@ func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep 
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	var err error
-	err = this.addDaemonTask(ctx, name, sleep, task)
-	if err != nil {
-		return err
+	if name == "" {
+		name = GenStrId()
 	}
-	return nil
+	if this.getTaskName() == name {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，守护任务已添加")
+		return nil
+	}
+
+	this.cancel(ctx)
+	ctx, this.ctxCancel = context.WithCancel(ctx)
+
+	return this.addDaemonTask(ctx, name, sleep, task)
 }
 func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
@@ -97,29 +103,24 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 			}
 
 			go func() {
+				if this.getTaskName() == name {
+					this.setTaskName("")
+				}
+				Sleep(ctx, sleep)
+				if CtxDone(ctx) {
+					logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Info("单协程池，已取消")
+					return
+				}
+
 				this.lock.Lock()
 				defer this.lock.Unlock()
 
-				if this.taskName == name {
-					this.taskName = ""
-				}
-				Sleep(ctx, sleep)
 				this.addDaemonTask(ctx, name, sleep, task)
 			}()
 		})
 
 		task(ctx, this)
 	}
-
-	if name == "" {
-		name = GenStrId()
-	}
-	if this.taskName == name {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，守护任务已添加")
-		return nil
-	}
-	this.cancel(ctx)
-	ctx, this.ctxCancel = context.WithCancel(ctx)
 
 	if CtxDone(ctx) {
 		this.cancel(ctx)
@@ -137,7 +138,7 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "err": err}).Error("单协程池，添加守护任务异常")
 		return errors.Errorf("单协程池，添加守护任务异常: %+v", err)
 	}
-	this.taskName = name
+	this.setTaskName(name)
 
 	return nil
 }
@@ -145,11 +146,18 @@ func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task fun
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	err := this.addOnceTask(ctx, name, task)
-	if err != nil {
-		return err
+	if name == "" {
+		name = GenStrId()
 	}
-	return nil
+	if this.getTaskName() == name {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，单次任务已添加")
+		return nil
+	}
+
+	this.cancel(ctx)
+	ctx, this.ctxCancel = context.WithCancel(ctx)
+
+	return this.addOnceTask(ctx, name, task)
 }
 func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
@@ -160,28 +168,13 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task fun
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "panic": panic, "stack": stack}).Error("单协程池，退出")
 			}
 
-			go func() {
-				this.lock.Lock()
-				defer this.lock.Unlock()
-
-				if this.taskName == name {
-					this.taskName = ""
-				}
-			}()
+			if this.getTaskName() == name {
+				this.setTaskName("")
+			}
 		})
 
 		task(ctx, this)
 	}
-
-	if name == "" {
-		name = GenStrId()
-	}
-	if this.taskName == name {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，单次任务已添加")
-		return nil
-	}
-	this.cancel(ctx)
-	ctx, this.ctxCancel = context.WithCancel(ctx)
 
 	if CtxDone(ctx) {
 		this.cancel(ctx)
@@ -199,7 +192,7 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task fun
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "err": err}).Error("单协程池，添加单次任务异常")
 		return errors.Errorf("单协程池，添加单次任务异常: %+v", err)
 	}
-	this.taskName = name
+	this.setTaskName(name)
 
 	return nil
 }
