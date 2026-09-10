@@ -112,6 +112,7 @@ func NewInsertHandler[Object any](name string, object ...*Object) *InsertHandler
 type InsertHandler[Object any] struct {
 	name   string
 	Object []*Object
+	Count  int64
 }
 
 func (this *InsertHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
@@ -119,12 +120,14 @@ func (this *InsertHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("插入%s，为空", this.name)
 		return nil
 	}
-	err := tx.CreateInBatches(this.Object, DbBatchSize).Error
+	result := tx.CreateInBatches(this.Object, DbBatchSize)
+	this.Count = result.RowsAffected
+	err := result.Error
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("插入%s，异常", this.name)
 		return errors.Errorf("插入%s，异常: %+v", this.name, err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("插入%s，完成", this.name)
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"count": this.Count}).Infof("插入%s，完成", this.name)
 	return nil
 }
 
@@ -154,7 +157,7 @@ func (this *UpdateHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB)
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("更新%s，异常", this.name)
 		return errors.Errorf("更新%s，异常: %+v", this.name, err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("更新%s，完成", this.name)
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"count": this.Count}).Infof("更新%s，完成", this.name)
 	return nil
 }
 
@@ -176,18 +179,21 @@ type DeleteHandler[Object any, Inquiry any] struct {
 	InquiryHandler[Inquiry]
 	name    string
 	inquiry Inquiry
+	Count   int64
 }
 
 func (this *DeleteHandler[Object, Inquiry]) Transaction(ctx context.Context, tx *gorm.DB) error {
 	tx = this.Where(ctx, tx, this.inquiry)
 	tx = this.Order(ctx, tx, this.inquiry)
 	tx = this.Limit(ctx, tx, this.inquiry)
-	err := tx.Delete(new(Object)).Error
+	result := tx.Delete(new(Object))
+	this.Count = result.RowsAffected
+	err := result.Error
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("删除%s，异常", this.name)
 		return errors.Errorf("删除%s，异常: %+v", this.name, err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("删除%s，完成", this.name)
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"count": this.Count}).Infof("删除%s，完成", this.name)
 	return nil
 }
 
@@ -224,7 +230,6 @@ func (this *SelectHandler[Object, Inquiry]) Transaction(ctx context.Context, tx 
 
 	tx = this.Order(ctx, tx, this.inquiry)
 	tx = this.Limit(ctx, tx, this.inquiry)
-
 	err = tx.Find(&this.Object).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
