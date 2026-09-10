@@ -316,7 +316,7 @@ func RemoveFile(ctx context.Context, filePath string) error {
 	}
 	err := os.Remove(filePath)
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("删除文件，异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("删除文件，异常")
 		return errors.Errorf("删除文件，异常: %+v", err)
 	}
 	return nil
