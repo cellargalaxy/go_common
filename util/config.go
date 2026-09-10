@@ -49,9 +49,9 @@ func (this *ConfigService) Start(ctx context.Context) error {
 	return this.loadConfig(ctx)
 }
 func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("ConfigService，异常")
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("ConfigService，异常")
 		}
 	})
 

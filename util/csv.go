@@ -23,10 +23,10 @@ func CsvReader2Strs(ctx context.Context, reader io.Reader) ([][]string, error) {
 	return list, nil
 }
 func CsvReader2Struct(ctx context.Context, reader io.Reader, list interface{}) (err error) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("解析CSV异常")
-			err = errors.Errorf("解析CSV异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("解析CSV异常")
+			err = errors.Errorf("解析CSV异常: %+v", panic)
 		}
 	})
 
@@ -46,10 +46,10 @@ func CsvData2Strs(ctx context.Context, data []byte) ([][]string, error) {
 	return CsvReader2Strs(ctx, bytes.NewReader(data))
 }
 func CsvData2Struct(ctx context.Context, data []byte, list interface{}) (err error) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("解析CSV异常")
-			err = errors.Errorf("解析CSV异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("解析CSV异常")
+			err = errors.Errorf("解析CSV异常: %+v", panic)
 		}
 	})
 
@@ -158,10 +158,10 @@ func CsvStrs2Struct(ctx context.Context, lines [][]string, list interface{}) err
 }
 
 func CsvStruct2Data(ctx context.Context, list interface{}) (data []byte, err error) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("序列化CSV异常")
-			err = errors.Errorf("序列化CSV异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化CSV异常")
+			err = errors.Errorf("序列化CSV异常: %+v", panic)
 		}
 	})
 
@@ -173,10 +173,10 @@ func CsvStruct2Data(ctx context.Context, list interface{}) (data []byte, err err
 	return data, nil
 }
 func CsvStruct2Str(ctx context.Context, list interface{}) (text string, err error) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("序列化CSV异常")
-			err = errors.Errorf("序列化CSV异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化CSV异常")
+			err = errors.Errorf("序列化CSV异常: %+v", panic)
 		}
 	})
 
@@ -195,10 +195,10 @@ func CsvStruct2File(ctx context.Context, list interface{}, filePath string) erro
 	return WriteData2File(ctx, data, filePath)
 }
 func CsvStruct2Writer(ctx context.Context, list interface{}, writer io.Writer) (err error) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("序列化CSV异常")
-			err = errors.Errorf("序列化CSV异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化CSV异常")
+			err = errors.Errorf("序列化CSV异常: %+v", panic)
 		}
 	})
 
