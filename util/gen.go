@@ -11,14 +11,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var randRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
 func GenRandStr(n int) string {
 	if n <= 0 {
 		return ""
 	}
-	var runes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = runes[rand.Intn(len(runes))]
+		b[i] = randRunes[rand.Intn(len(randRunes))]
 	}
 	return string(b)
 }
@@ -30,18 +31,19 @@ func GenIdByTime(time time.Time) int64 {
 }
 
 var genIdLock struct {
-	sync.Mutex //这里不使用指针会有问题吗
-	micro      int64
+	sync.Mutex
+	micro int64
 }
 
 func GenId() int64 {
 	genIdLock.Lock()
 	defer genIdLock.Unlock()
-	now := time.Now()
-	micro := now.UnixMicro()
+
+	micro := time.Now().UnixMicro()
 	if micro <= genIdLock.micro {
 		micro = genIdLock.micro + 1
 	}
+	genIdLock.micro = micro
 	return GenIdByTime(time.UnixMicro(micro))
 }
 func GenStrId() string {
