@@ -153,11 +153,11 @@ func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task fun
 }
 func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
-		defer Defer(func(err interface{}, stack string) {
-			if err == nil {
+		defer Defer(func(panic any, stack string) {
+			if panic == nil {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，退出")
 			} else {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "err": err, "stack": stack}).Error("单协程池，退出")
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "panic": panic, "stack": stack}).Error("单协程池，退出")
 			}
 
 			go func() {
