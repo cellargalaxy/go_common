@@ -152,7 +152,7 @@ func ValidateGin(c *gin.Context, secret string) {
 func NewGinGet[Request any](name string, service func(ctx context.Context, request Request) (any, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var request Request
-		err := c.BindQuery(&request)
+		err := c.ShouldBindQuery(&request)
 		if err != nil {
 			logrus.WithContext(c).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
 			c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
@@ -165,7 +165,7 @@ func NewGinGet[Request any](name string, service func(ctx context.Context, reque
 func NewGinPost[Request any](name string, service func(ctx context.Context, request Request) (any, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var request Request
-		err := c.BindJSON(&request)
+		err := c.ShouldBindJSON(&request)
 		if err != nil {
 			logrus.WithContext(c).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
 			c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
