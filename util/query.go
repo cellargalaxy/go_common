@@ -9,10 +9,9 @@ import (
 )
 
 func QueryStruct2Data(ctx context.Context, x interface{}) (data []byte) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("序列化query异常")
-			err = errors.Errorf("序列化query异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化query异常")
 		}
 	})
 
@@ -28,8 +27,15 @@ func QueryStruct2Str(ctx context.Context, x interface{}) string {
 	return string(data)
 }
 
-func QueryData2Struct(ctx context.Context, data []byte, v interface{}) error {
-	err := urlquery.Unmarshal(data, v)
+func QueryData2Struct(ctx context.Context, data []byte, v interface{}) (err error) {
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("反序列化query异常")
+			err = errors.Errorf("反序列化query异常: %+v", panic)
+		}
+	})
+
+	err = urlquery.Unmarshal(data, v)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"data": string(data), "err": errors.WithStack(err)}).Error("反序列化query异常")
 		return errors.Errorf("反序列化query异常: %+v", err)
