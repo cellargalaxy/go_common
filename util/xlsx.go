@@ -22,11 +22,11 @@ func XlsxStrs2File(ctx context.Context, lines [][]string, filePath string) error
 }
 func XlsxStrs2Data(ctx context.Context, lines [][]string) ([]byte, error) {
 	file := excelize.NewFile()
-	defer CloseIo(ctx, file)
 	if file == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("创建xlsx为空")
 		return nil, errors.Errorf("创建xlsx为空")
 	}
+	defer CloseIo(ctx, file)
 
 	for i := range lines {
 		for j := range lines[i] {
