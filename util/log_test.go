@@ -27,15 +27,15 @@ func TestLogKeyConstants(t *testing.T) {
 }
 
 func TestGenLogId(t *testing.T) {
-	id1 := GenLogId()
+	id1 := GenId()
 	if id1 <= 0 {
 		t.Errorf("GenLogId = %d, 应为正", id1)
 	}
 	//18位且递增
-	if len(Int2String(id1)) != 18 {
-		t.Errorf("GenLogId 位数 = %d", len(Int2String(id1)))
+	if len(Int2Str(id1)) != 18 {
+		t.Errorf("GenLogId 位数 = %d", len(Int2Str(id1)))
 	}
-	if id2 := GenLogId(); id2 <= id1 {
+	if id2 := GenId(); id2 <= id1 {
 		t.Errorf("GenLogId 未递增: %d -> %d", id1, id2)
 	}
 }
@@ -60,25 +60,25 @@ func TestGetSetLogId(t *testing.T) {
 		t.Errorf("已有logId时应返回原ctx，避免ctx链增长")
 	}
 	//字符串形式一致
-	if GetLogIdString(ctx) != Int2String(id) {
-		t.Errorf("GetLogIdString = %q, 期望 %q", GetLogIdString(ctx), Int2String(id))
+	if GetLogIdStr(ctx) != Int2Str(id) {
+		t.Errorf("GetLogIdStr = %q, 期望 %q", GetLogIdStr(ctx), Int2Str(id))
 	}
 	//空ctx的字符串形式
-	if got := GetLogIdString(context.Background()); got != "0" {
-		t.Errorf(`空ctx GetLogIdString = %q, 期望 "0"`, got)
+	if got := GetLogIdStr(context.Background()); got != "0" {
+		t.Errorf(`空ctx GetLogIdStr = %q, 期望 "0"`, got)
 	}
 }
 
-func TestResetLogId(t *testing.T) {
+func TestReSetLogId(t *testing.T) {
 	ctx := SetLogId(context.Background())
 	old := GetLogId(ctx)
-	//与SetLogId不同，ResetLogId必须强制换新ID
-	reset := ResetLogId(ctx)
+	//与SetLogId不同，ReSetLogId必须强制换新ID
+	reset := ReSetLogId(ctx)
 	if GetLogId(reset) == old {
-		t.Errorf("ResetLogId 未更换 logId")
+		t.Errorf("ReSetLogId 未更换 logId")
 	}
 	if GetLogId(reset) <= 0 {
-		t.Errorf("ResetLogId 后 logId 非法")
+		t.Errorf("ReSetLogId 后 logId 非法")
 	}
 	//原ctx不受影响
 	if GetLogId(ctx) != old {
@@ -88,17 +88,17 @@ func TestResetLogId(t *testing.T) {
 
 func TestGenReqId(t *testing.T) {
 	//GenReqId 是 SetReqId/GetOrGenReqId 的底层ID来源，此前无任何用例直接覆盖
-	id1 := GenReqId()
+	id1 := GenId()
 	if id1 <= 0 {
 		t.Errorf("GenReqId = %d, 应为正整数", id1)
 	}
 	//与 GenLogId/GenId 同源，均为18位时间序ID
-	if got := len(Int2String(id1)); got != 18 {
-		t.Errorf("GenReqId 位数 = %d (%s), 期望 18", got, Int2String(id1))
+	if got := len(Int2Str(id1)); got != 18 {
+		t.Errorf("GenReqId 位数 = %d (%s), 期望 18", got, Int2Str(id1))
 	}
 	//随时间单调不减；同一时刻可能相等，但绝不能倒退
 	for i := 0; i < 50; i++ {
-		id2 := GenReqId()
+		id2 := GenId()
 		if id2 < id1 {
 			t.Fatalf("GenReqId 倒退: %d -> %d", id1, id2)
 		}
@@ -106,7 +106,7 @@ func TestGenReqId(t *testing.T) {
 	}
 	//必须可被 ParseId 解回时间，且与当前时刻接近（证明是时间序ID而非随机数）
 	ctx := GenCtx()
-	parsed, err := ParseId(ctx, GenReqId())
+	parsed, err := ParseId(ctx, GenId())
 	if err != nil {
 		t.Fatalf("GenReqId 生成的ID无法解析: %+v", err)
 	}
@@ -142,18 +142,14 @@ func TestReqId(t *testing.T) {
 	if GetReqId(bare) != 0 {
 		t.Errorf("GetOrGenReqId 不应写入ctx，但ctx中已有reqId")
 	}
-	//字符串形式
-	if GetOrGenReqIdString(ctx) != Int2String(id) {
-		t.Errorf("GetOrGenReqIdString = %q", GetOrGenReqIdString(ctx))
-	}
 }
 
 func TestResetAndRmReqId(t *testing.T) {
 	ctx := SetReqId(context.Background())
 	old := GetReqId(ctx)
-	//ResetReqId 强制换新
-	if reset := ResetReqId(ctx); GetReqId(reset) == old || GetReqId(reset) <= 0 {
-		t.Errorf("ResetReqId = %d, 期望新的正整数", GetReqId(reset))
+	//ReSetReqId 强制换新
+	if reset := ReSetReqId(ctx); GetReqId(reset) == old || GetReqId(reset) <= 0 {
+		t.Errorf("ReSetReqId = %d, 期望新的正整数", GetReqId(reset))
 	}
 	//RmReqId 清零，之后GetOrGenReqId应重新生成
 	rm := RmReqId(ctx)
@@ -165,9 +161,9 @@ func TestResetAndRmReqId(t *testing.T) {
 	}
 }
 
-// paramHook 是日志字段注入的核心，逐字段验证
+// LogrusHook 是日志字段注入的核心，逐字段验证
 func TestParamHookFire(t *testing.T) {
-	hook := &paramHook{serverName: "test-server"}
+	hook := &LogrusHook{serverName: "test-server"}
 	ctx := GenCtx()
 	entry := logrus.WithContext(ctx)
 	entry.Data = logrus.Fields{}
@@ -204,7 +200,7 @@ func TestParamHookFire(t *testing.T) {
 
 // entry.Context 为nil时不能panic，logId取0
 func TestParamHookNilContext(t *testing.T) {
-	hook := &paramHook{serverName: "s"}
+	hook := &LogrusHook{serverName: "s"}
 	entry := logrus.NewEntry(logrus.StandardLogger())
 	entry.Data = logrus.Fields{}
 	if err := hook.Fire(entry); err != nil {
@@ -216,7 +212,7 @@ func TestParamHookNilContext(t *testing.T) {
 }
 
 func TestParamHookLevels(t *testing.T) {
-	hook := &paramHook{}
+	hook := &LogrusHook{}
 	levels := hook.Levels()
 	//必须覆盖全部级别，否则部分日志会丢失字段
 	if len(levels) != len(logrus.AllLevels) {
@@ -233,57 +229,32 @@ func TestParamHookLevels(t *testing.T) {
 	}
 }
 
-func TestCreateLog(t *testing.T) {
-	dir := newTestDir(t)
-	chdir(t, dir)
-
-	//指定参数创建
-	log := CreateLog("svc", "custom.log", 1, 3, 7, logrus.WarnLevel)
-	if log == nil {
-		t.Fatalf("CreateLog 返回 nil")
-	}
-	if log.GetLevel() != logrus.WarnLevel {
-		t.Errorf("日志级别 = %v, 期望 Warn", log.GetLevel())
-	}
-	//写一条日志应实际落盘到 log/svc/custom.log
-	log.WithField("k", "v").Warn("测试日志")
-	if info := GetPathInfo(GenCtx(), "log/svc/custom.log"); info == nil {
-		t.Errorf("日志文件未创建")
-	}
-
-	//空serverName与空filename应走默认值而非panic
-	if got := CreateLog("", "", 1, 1, 1, logrus.InfoLevel); got == nil {
-		t.Errorf("空参数 CreateLog 返回 nil")
-	}
-	if got := CreateDefaultLog("d.log"); got == nil {
-		t.Errorf("CreateDefaultLog 返回 nil")
-	}
-	if got := CreateDefaultLog(""); got == nil {
-		t.Errorf("CreateDefaultLog(空) 返回 nil")
-	}
-}
-
-// InitLog 会改动全局logger，单独用例验证并复原
 func TestInitLog(t *testing.T) {
 	dir := newTestDir(t)
 	chdir(t, dir)
 	old := logrus.GetLevel()
 	t.Cleanup(func() {
 		logrus.SetLevel(old)
-		InitDefaultLog()
+		initLog(GetServerName(), "", 1, 100, 30, logrus.InfoLevel)
 	})
 
-	InitLog("initsvc", "init.log", 1, 2, 3, logrus.DebugLevel)
+	initLog("initsvc", "init.log", 1, 2, 3, logrus.DebugLevel)
 	if logrus.GetLevel() != logrus.DebugLevel {
-		t.Errorf("InitLog 未设置级别, got %v", logrus.GetLevel())
+		t.Errorf("initLog 未设置级别, got %v", logrus.GetLevel())
 	}
 	logrus.WithContext(GenCtx()).Debug("测试")
 	if info := GetPathInfo(GenCtx(), "log/initsvc/init.log"); info == nil {
-		t.Errorf("InitLog 日志文件未创建")
+		t.Errorf("initLog 日志文件未创建")
 	}
 	//空参数不panic
-	InitLog("", "", 1, 1, 1, logrus.InfoLevel)
-	InitDefaultLog()
+	initLog("", "", 1, 1, 1, logrus.InfoLevel)
+
+	//重复初始化不得让钩子累加，否则同一条日志会被Fire多次
+	initLog("initsvc", "init.log", 1, 2, 3, logrus.DebugLevel)
+	initLog("initsvc", "init.log", 1, 2, 3, logrus.DebugLevel)
+	if got := len(logrus.StandardLogger().Hooks[logrus.InfoLevel]); got != 1 {
+		t.Errorf("重复initLog后钩子数量 = %d, 期望 1", got)
+	}
 }
 
 // GinLog 按状态码分三档记录：200=Info、>=500=Error、其余=Warn

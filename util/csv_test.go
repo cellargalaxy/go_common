@@ -17,9 +17,9 @@ func csvDemoList() []csvDemo {
 }
 
 // 校验实际生成的CSV文本（含表头），而非仅"能转回来"
-func TestCsvStruct2String(t *testing.T) {
+func TestCsvStruct2Str(t *testing.T) {
 	ctx := GenCtx()
-	got, err := CsvStruct2String(ctx, csvDemoList())
+	got, err := CsvStruct2Str(ctx, csvDemoList())
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -47,9 +47,9 @@ func TestCsvStruct2String(t *testing.T) {
 	}
 }
 
-func TestCsvStruct2Strings(t *testing.T) {
+func TestCsvStruct2Strs(t *testing.T) {
 	ctx := GenCtx()
-	got, err := CsvStruct2Strings(ctx, csvDemoList())
+	got, err := CsvStruct2Strs(ctx, csvDemoList())
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -84,23 +84,23 @@ func TestCsvRoundTripAllPaths(t *testing.T) {
 	assertCsvList(t, "Data", viaData, want)
 
 	//String 路径
-	text, err := CsvStruct2String(ctx, want)
+	text, err := CsvStruct2Str(ctx, want)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	var viaString []csvDemo
-	if err = CsvString2Struct(ctx, text, &viaString); err != nil {
+	if err = CsvStr2Struct(ctx, text, &viaString); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	assertCsvList(t, "String", viaString, want)
 
 	//Strings 路径
-	strs, err := CsvStruct2Strings(ctx, want)
+	strs, err := CsvStruct2Strs(ctx, want)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	var viaStrings []csvDemo
-	if err = CsvStrings2Struct(ctx, strs, &viaStrings); err != nil {
+	if err = CsvStrs2Struct(ctx, strs, &viaStrings); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	assertCsvList(t, "Strings", viaStrings, want)
@@ -152,22 +152,22 @@ func TestCsvStrings2AllPaths(t *testing.T) {
 	lines := [][]string{{"h1", "h2"}, {"v1", "v2"}}
 
 	//Strings -> String -> Strings 往返
-	text, err := CsvStrings2String(ctx, lines)
+	text, err := CsvStrs2Str(ctx, lines)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	got, err := CsvString2Strings(ctx, text)
+	got, err := CsvStr2Strs(ctx, text)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	assertStrings(t, got, lines)
 
 	//Strings -> Data -> Strings
-	data, err := CsvStrings2Data(ctx, lines)
+	data, err := CsvStrs2Data(ctx, lines)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if got, err = CsvData2Strings(ctx, data); err != nil {
+	if got, err = CsvData2Strs(ctx, data); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	assertStrings(t, got, lines)
@@ -175,17 +175,17 @@ func TestCsvStrings2AllPaths(t *testing.T) {
 	//Strings -> File -> Strings
 	dir := newTestDir(t)
 	filePath := path.Join(dir, "x.csv")
-	if err = CsvStrings2File(ctx, lines, filePath); err != nil {
+	if err = CsvStrs2File(ctx, lines, filePath); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if got, err = CsvFile2Strings(ctx, filePath); err != nil {
+	if got, err = CsvFile2Strs(ctx, filePath); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	assertStrings(t, got, lines)
 
 	//Strings -> Writer
 	var buf bytes.Buffer
-	if err = CsvStrings2Writer(ctx, lines, &buf); err != nil {
+	if err = CsvStrs2Writer(ctx, lines, &buf); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if buf.String() != text {
@@ -193,7 +193,7 @@ func TestCsvStrings2AllPaths(t *testing.T) {
 	}
 
 	//Reader -> Strings
-	if got, err = CsvReader2Strings(ctx, strings.NewReader(text)); err != nil {
+	if got, err = CsvReader2Strs(ctx, strings.NewReader(text)); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	assertStrings(t, got, lines)
@@ -226,11 +226,11 @@ func TestCsvEscape(t *testing.T) {
 		{"含\n换行", "中文内容"},
 		{"", " 前后空格 "},
 	}
-	text, err := CsvStrings2String(ctx, lines)
+	text, err := CsvStrs2Str(ctx, lines)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	got, err := CsvString2Strings(ctx, text)
+	got, err := CsvStr2Strs(ctx, text)
 	if err != nil {
 		t.Fatalf("解析含特殊字符的CSV异常: %+v", err)
 	}
@@ -240,11 +240,11 @@ func TestCsvEscape(t *testing.T) {
 func TestCsvEmpty(t *testing.T) {
 	ctx := GenCtx()
 	//空行集
-	text, err := CsvStrings2String(ctx, [][]string{})
+	text, err := CsvStrs2Str(ctx, [][]string{})
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	got, err := CsvString2Strings(ctx, text)
+	got, err := CsvStr2Strs(ctx, text)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -252,14 +252,14 @@ func TestCsvEmpty(t *testing.T) {
 		t.Errorf("空行集往返 = %v", got)
 	}
 	//空字符串解析
-	if got, err = CsvString2Strings(ctx, ""); err != nil {
+	if got, err = CsvStr2Strs(ctx, ""); err != nil {
 		t.Errorf("空串解析异常: %+v", err)
 	}
 	if len(got) != 0 {
 		t.Errorf("空串 = %v", got)
 	}
 	//空结构体列表：仍应输出表头
-	text, err = CsvStruct2String(ctx, []csvDemo{})
+	text, err = CsvStruct2Str(ctx, []csvDemo{})
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -270,32 +270,32 @@ func TestCsvEmpty(t *testing.T) {
 
 func TestCsvError(t *testing.T) {
 	ctx := GenCtx()
-	//列数不一致不再报错：本库写入端(CsvStrings2Data)对参差不齐的行照写不误，
+	//列数不一致不再报错：本库写入端(CsvStrs2Data)对参差不齐的行照写不误，
 	//读取端若按首行列数强校验，会导致本库自己写出的CSV自己读不回来，
-	//故读取端放宽为不校验列数（详见 CsvReader2Strings 注释与 TestCsvRaggedRoundTrip）
-	if got, err := CsvString2Strings(ctx, "a,b\nc,d,e\n"); err != nil {
+	//故读取端放宽为不校验列数（详见 CsvReader2Strs 注释与 TestCsvRaggedRoundTrip）
+	if got, err := CsvStr2Strs(ctx, "a,b\nc,d,e\n"); err != nil {
 		t.Errorf("列数不一致不应再返回error: %+v", err)
 	} else if len(got) != 2 || len(got[0]) != 2 || len(got[1]) != 3 {
 		t.Errorf("列数不一致的行未按原样读回: %v", got)
 	}
 	//但真正的语法错误（引号未闭合等）仍必须报错，放宽列数校验不等于放弃校验
 	for _, bad := range []string{"a,\"b\nc,d\n", "a,\"bc\n", "a,\"b\"x,c\n"} {
-		if _, err := CsvString2Strings(ctx, bad); err == nil {
+		if _, err := CsvStr2Strs(ctx, bad); err == nil {
 			t.Errorf("非法CSV %q 应返回error", bad)
 		}
 	}
 	//类型不匹配
 	var list []csvDemo
-	if err := CsvString2Struct(ctx, "id,name\n不是数字,a\n", &list); err == nil {
+	if err := CsvStr2Struct(ctx, "id,name\n不是数字,a\n", &list); err == nil {
 		t.Errorf("类型不匹配应返回error")
 	}
 	//非指针目标：必须报错而非静默写入
 	var fresh []csvDemo
-	if err := CsvString2Struct(ctx, "id,name\n1,a\n", fresh); err == nil {
+	if err := CsvStr2Struct(ctx, "id,name\n1,a\n", fresh); err == nil {
 		t.Errorf("非指针目标应返回error")
 	}
 	//nil 目标不得panic，须转为error
-	if err := CsvString2Struct(ctx, "id,name\n1,a\n", nil); err == nil {
+	if err := CsvStr2Struct(ctx, "id,name\n1,a\n", nil); err == nil {
 		t.Errorf("nil 目标应返回error")
 	}
 	if err := CsvData2Struct(ctx, []byte("id,name\n1,a\n"), nil); err == nil {
@@ -306,12 +306,12 @@ func TestCsvError(t *testing.T) {
 	}
 	//不存在的文件：ReadFile2Data 返回nil数据，转换应报错或返回空而非panic
 	dir := newTestDir(t)
-	if _, err := CsvFile2Strings(ctx, path.Join(dir, "nope.csv")); err != nil {
+	if _, err := CsvFile2Strs(ctx, path.Join(dir, "nope.csv")); err != nil {
 		t.Logf("不存在的文件返回error: %v", err)
 	}
 	//非切片目标
 	var single csvDemo
-	if err := CsvString2Struct(ctx, "id,name\n1,a\n", &single); err == nil {
+	if err := CsvStr2Struct(ctx, "id,name\n1,a\n", &single); err == nil {
 		t.Errorf("非切片目标应返回error")
 	}
 }
@@ -325,14 +325,14 @@ func TestCsvStruct2XxxIllegalInput(t *testing.T) {
 	if _, err := CsvStruct2Data(ctx, nil); err == nil {
 		t.Errorf("CsvStruct2Data(nil) 应返回error")
 	}
-	if _, err := CsvStruct2String(ctx, nil); err == nil {
-		t.Errorf("CsvStruct2String(nil) 应返回error")
+	if _, err := CsvStruct2Str(ctx, nil); err == nil {
+		t.Errorf("CsvStruct2Str(nil) 应返回error")
 	}
 	if err := CsvStruct2Writer(ctx, nil, &bytes.Buffer{}); err == nil {
 		t.Errorf("CsvStruct2Writer(nil) 应返回error")
 	}
-	if _, err := CsvStruct2Strings(ctx, nil); err == nil {
-		t.Errorf("CsvStruct2Strings(nil) 应返回error")
+	if _, err := CsvStruct2Strs(ctx, nil); err == nil {
+		t.Errorf("CsvStruct2Strs(nil) 应返回error")
 	}
 	//nil 时不得产生半截文件
 	dir := newTestDir(t)
@@ -349,8 +349,8 @@ func TestCsvStruct2XxxIllegalInput(t *testing.T) {
 		if _, err := CsvStruct2Data(ctx, bad); err == nil {
 			t.Errorf("CsvStruct2Data(%#v) 应返回error", bad)
 		}
-		if _, err := CsvStruct2String(ctx, bad); err == nil {
-			t.Errorf("CsvStruct2String(%#v) 应返回error", bad)
+		if _, err := CsvStruct2Str(ctx, bad); err == nil {
+			t.Errorf("CsvStruct2Str(%#v) 应返回error", bad)
 		}
 		if err := CsvStruct2Writer(ctx, bad, &bytes.Buffer{}); err == nil {
 			t.Errorf("CsvStruct2Writer(%#v) 应返回error", bad)
@@ -365,8 +365,8 @@ func TestCsvStruct2XxxIllegalInput(t *testing.T) {
 	if len(data) == 0 {
 		t.Errorf("CsvStruct2Data(空切片) 应输出表头")
 	}
-	if text, err := CsvStruct2String(ctx, []csvDemo{}); err != nil || text == "" {
-		t.Errorf("CsvStruct2String(空切片) = %q, err=%v", text, err)
+	if text, err := CsvStruct2Str(ctx, []csvDemo{}); err != nil || text == "" {
+		t.Errorf("CsvStruct2Str(空切片) = %q, err=%v", text, err)
 	}
 	var buf bytes.Buffer
 	if err := CsvStruct2Writer(ctx, []csvDemo{}, &buf); err != nil || buf.Len() == 0 {

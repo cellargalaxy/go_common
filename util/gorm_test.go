@@ -3,6 +3,7 @@ package util
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/utils/tests"
 )
@@ -34,9 +34,9 @@ func captureLog(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-func TestDefaultSqlLen(t *testing.T) {
-	if DefaultSqlLen != 512 {
-		t.Errorf("DefaultSqlLen = %d, 期望 512", DefaultSqlLen)
+func TestLogSqlLen(t *testing.T) {
+	if LogSqlLen != 512 {
+		t.Errorf("LogSqlLen = %d, 期望 512", LogSqlLen)
 	}
 }
 
@@ -57,8 +57,8 @@ func TestNewGormLog(t *testing.T) {
 // 默认配置的语义：忽略RecordNotFound，且只展示删/查/其他
 func TestNewDefaultGormLog(t *testing.T) {
 	got := NewDefaultGormLog()
-	if got.SqlLen != DefaultSqlLen {
-		t.Errorf("SqlLen = %d, 期望 %d", got.SqlLen, DefaultSqlLen)
+	if got.SqlLen != LogSqlLen {
+		t.Errorf("SqlLen = %d, 期望 %d", got.SqlLen, LogSqlLen)
 	}
 	if got.InsertShow {
 		t.Errorf("默认不应展示INSERT")
@@ -123,7 +123,7 @@ func TestGormLogInfoWarnError(t *testing.T) {
 func TestGormLogTraceFilterByType(t *testing.T) {
 	ctx := GenCtx()
 	//只开 SELECT
-	gormLog := NewGormLog(nil, DefaultSqlLen, false, false, true, false, false)
+	gormLog := NewGormLog(nil, LogSqlLen, false, false, true, false, false)
 
 	out := captureLog(t, func() {
 		gormLog.Trace(ctx, time.Now(), func() (string, int64) { return "SELECT * FROM t", 1 }, nil)
@@ -142,7 +142,7 @@ func TestGormLogTraceFilterByType(t *testing.T) {
 	}
 
 	//全开时各类型都应输出
-	allOn := NewGormLog(nil, DefaultSqlLen, true, true, true, true, true)
+	allOn := NewGormLog(nil, LogSqlLen, true, true, true, true, true)
 	for _, sql := range []string{"INSERT INTO t VALUES(1)", "DELETE FROM t", "UPDATE t SET a=1", "SELECT 1", "SHOW TABLES"} {
 		out = captureLog(t, func() {
 			allOn.Trace(ctx, time.Now(), func() (string, int64) { return sql, 1 }, nil)
@@ -157,7 +157,7 @@ func TestGormLogTraceFilterByType(t *testing.T) {
 func TestGormLogTraceIgnoreErrs(t *testing.T) {
 	ctx := GenCtx()
 	//关闭所有语句展示，以便区分"错误日志"与"语句日志"
-	gormLog := NewGormLog([]error{gorm.ErrRecordNotFound}, DefaultSqlLen, false, false, false, false, false)
+	gormLog := NewGormLog([]error{gorm.ErrRecordNotFound}, LogSqlLen, false, false, false, false, false)
 
 	//被忽略的错误：不应出现错误日志
 	out := captureLog(t, func() {
@@ -187,7 +187,7 @@ func TestGormLogTraceIgnoreErrs(t *testing.T) {
 	}
 
 	//空忽略名单：任何错误都要打
-	noIgnore := NewGormLog(nil, DefaultSqlLen, false, false, false, false, false)
+	noIgnore := NewGormLog(nil, LogSqlLen, false, false, false, false, false)
 	out = captureLog(t, func() {
 		noIgnore.Trace(ctx, time.Now(), func() (string, int64) { return "SELECT 3", 0 }, gorm.ErrRecordNotFound)
 	})
@@ -235,7 +235,7 @@ func TestGormLogTraceSqlTruncate(t *testing.T) {
 // Trace 须记录耗时，且空SQL不能panic
 func TestGormLogTraceEdge(t *testing.T) {
 	ctx := GenCtx()
-	gormLog := NewGormLog(nil, DefaultSqlLen, true, true, true, true, true)
+	gormLog := NewGormLog(nil, LogSqlLen, true, true, true, true, true)
 
 	//耗时字段须出现
 	out := captureLog(t, func() {
@@ -258,9 +258,9 @@ func TestGormLogTraceEdge(t *testing.T) {
 	}
 }
 
-// ==== GormService 的无DB守卫路径 ====
-// 注：增删改的真实落库需要数据库驱动；不触达DB的早返回与参数校验分支在此覆盖，
-// 而 Select/SelectOne 的SQL构造逻辑改用gorm自带的 DummyDialector + DryRun 覆盖（见下方）。
+// ==== Transaction 与各 Handler ====
+// 增删改查的真实落库需要数据库驱动，这里统一用 gorm 自带的 DummyDialector + DryRun
+// 覆盖SQL构造与影响行数，不触达DB的早返回与参数校验分支一并覆盖。
 
 type fakeGormObject struct {
 	Id   int64
@@ -270,469 +270,295 @@ type fakeGormObject struct {
 func (this fakeGormObject) TableName() string { return "fake_object" }
 
 type fakeGormInquiry struct {
-	fakeGormObject
+	Id       int64
 	PageNum  int
 	PageSize int
 }
 
-func (this fakeGormInquiry) GetPageNum() int  { return this.PageNum }
-func (this fakeGormInquiry) GetPageSize() int { return this.PageSize }
-
-// fakeGormHandler 的 Where 返回nil，用于驱动"条件为空"的守卫分支
-type fakeGormHandler struct {
-	whereNil bool
+// fakeInquiryHandler 记录每个钩子被调用的次数与最终SQL，用于断言 Where/Order/Limit 的编排顺序
+type fakeInquiryHandler struct {
+	whereNil  bool
+	whereCall int
+	orderCall int
+	limitCall int
 }
 
-func (this *fakeGormHandler) GetName(ctx context.Context) string { return "假对象" }
-func (this *fakeGormHandler) GetDb(ctx context.Context, where *gorm.DB) *gorm.DB {
-	return where
-}
-func (this *fakeGormHandler) Where(ctx context.Context, where *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
+func (this *fakeInquiryHandler) Where(ctx context.Context, tx *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
+	this.whereCall++
 	if this.whereNil {
 		return nil
-	}
-	return where
-}
-
-func TestGormServiceInsertEmpty(t *testing.T) {
-	ctx := GenCtx()
-	service := &GormService[fakeGormObject, fakeGormInquiry]{GormHandler: &fakeGormHandler{}}
-
-	//空入参须直接返回，不触达数据库（否则这里会因DB为nil而panic）
-	got, err := service.Insert(ctx)
-	if err != nil {
-		t.Errorf("空插入应无错误: %+v", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("空插入返回 = %v", got)
-	}
-}
-
-func TestGormServiceUpdateNil(t *testing.T) {
-	ctx := GenCtx()
-	service := &GormService[fakeGormObject, fakeGormInquiry]{GormHandler: &fakeGormHandler{}}
-
-	//nil 对象须直接返回，不触达数据库
-	got, count, err := service.Update(ctx, nil)
-	if err != nil {
-		t.Errorf("nil 更新应无错误: %+v", err)
-	}
-	if got != nil {
-		t.Errorf("nil 更新返回 = %v", got)
-	}
-	if count != 0 {
-		t.Errorf("nil 更新影响行数 = %d, 期望 0", count)
-	}
-}
-
-// Where 返回nil时，Delete 必须拒绝执行——否则会退化成全表删除
-func TestGormServiceDeleteNilWhere(t *testing.T) {
-	ctx := GenCtx()
-	service := &GormService[fakeGormObject, fakeGormInquiry]{GormHandler: &fakeGormHandler{whereNil: true}}
-
-	err := service.Delete(ctx, fakeGormInquiry{})
-	if err == nil {
-		t.Errorf("删除条件为空时必须报错，避免误删全表")
-	}
-	if !strings.Contains(err.Error(), "条件为空") {
-		t.Errorf("错误信息 = %v, 应说明条件为空", err)
-	}
-}
-
-// GormObject/GormInquiry 接口实现须自洽
-func TestGormInterfaces(t *testing.T) {
-	var object GormObject = fakeGormObject{}
-	if got := object.TableName(); got != "fake_object" {
-		t.Errorf("TableName = %q", got)
-	}
-	var inquiry GormInquiry = fakeGormInquiry{PageNum: 2, PageSize: 20}
-	if got := inquiry.GetPageNum(); got != 2 {
-		t.Errorf("GetPageNum = %d", got)
-	}
-	if got := inquiry.GetPageSize(); got != 20 {
-		t.Errorf("GetPageSize = %d", got)
-	}
-	//Inquiry 须同时满足 GormObject
-	if got := inquiry.TableName(); got != "fake_object" {
-		t.Errorf("Inquiry.TableName = %q", got)
-	}
-}
-
-// ==== Select / SelectOne ====
-// 用 gorm 自带的 DummyDialector + DryRun 覆盖SQL构造逻辑：
-// DryRun 只生成SQL不真正执行，因此无需数据库、也无需引入额外测试driver。
-
-// dryRunHandler 提供一个 DryRun 的 *gorm.DB，并记录最终用于查询的 where，
-// 以便断言分页子句是否被正确拼装
-type dryRunHandler struct {
-	db       *gorm.DB
-	captured *gorm.DB
-	forceErr error
-	whereNil bool
-}
-
-func (this *dryRunHandler) GetName(ctx context.Context) string { return "假对象" }
-func (this *dryRunHandler) GetDb(ctx context.Context, where *gorm.DB) *gorm.DB {
-	if where != nil {
-		return where
-	}
-	//每次都用全新会话，避免用例之间条件串味
-	return this.db.Session(&gorm.Session{DryRun: true, NewDB: true})
-}
-func (this *dryRunHandler) Where(ctx context.Context, where *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
-	if this.whereNil {
-		return nil
-	}
-	if where == nil {
-		return nil
-	}
-	if this.forceErr != nil {
-		where.AddError(this.forceErr)
 	}
 	if inquiry.Id != 0 {
-		where = where.Where("id = ?", inquiry.Id)
+		tx = tx.Where("id = ?", inquiry.Id)
 	}
-	this.captured = where
-	return where
+	return tx
+}
+func (this *fakeInquiryHandler) Order(ctx context.Context, tx *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
+	this.orderCall++
+	return tx.Order("id DESC")
+}
+func (this *fakeInquiryHandler) Limit(ctx context.Context, tx *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
+	this.limitCall++
+	if inquiry.PageSize <= 0 {
+		return tx
+	}
+	return tx.Limit(inquiry.PageSize).Offset((inquiry.PageNum - 1) * inquiry.PageSize)
 }
 
-func newDryRunService(t *testing.T, handler *dryRunHandler) *GormService[fakeGormObject, fakeGormInquiry] {
-	t.Helper()
-	db, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{DryRun: true})
-	if err != nil {
-		t.Fatalf("打开DryRun数据库异常: %+v", err)
-	}
-	handler.db = db
-	return &GormService[fakeGormObject, fakeGormInquiry]{GormHandler: handler}
-}
-
-// 分页语义：pageSize 决定 LIMIT，pageNum 决定 OFFSET=(pageNum-1)*pageSize
-func TestGormServiceSelectPaging(t *testing.T) {
-	ctx := GenCtx()
-	cases := []struct {
-		pageNum, pageSize int
-		wantLimit         bool
-		wantLimitValue    int
-		wantOffset        int
-	}{
-		//第3页、每页10条 -> LIMIT 10 OFFSET 20
-		{3, 10, true, 10, 20},
-		//第1页 -> OFFSET 0
-		{1, 10, true, 10, 0},
-		//pageSize<=0 表示不分页，不应拼 LIMIT
-		{0, 0, false, 0, 0},
-		//只有pageSize：仅限制条数，不偏移
-		{0, 5, true, 5, 0},
-	}
-	for _, c := range cases {
-		handler := &dryRunHandler{}
-		service := newDryRunService(t, handler)
-		_, _, err := service.Select(ctx, fakeGormInquiry{
-			fakeGormObject: fakeGormObject{Id: 7},
-			PageNum:        c.pageNum,
-			PageSize:       c.pageSize,
-		})
-		if err != nil {
-			t.Fatalf("pageNum=%d pageSize=%d 查询异常: %+v", c.pageNum, c.pageSize, err)
-		}
-		if handler.captured == nil {
-			t.Fatalf("pageNum=%d pageSize=%d 未捕获到查询条件", c.pageNum, c.pageSize)
-		}
-		limitClause, ok := handler.captured.Statement.Clauses["LIMIT"]
-		if !c.wantLimit {
-			if ok {
-				t.Errorf("pageNum=%d pageSize=%d 不应拼装LIMIT子句", c.pageNum, c.pageSize)
-			}
-			continue
-		}
-		if !ok {
-			t.Fatalf("pageNum=%d pageSize=%d 缺少LIMIT子句", c.pageNum, c.pageSize)
-		}
-		limit, ok := limitClause.Expression.(clause.Limit)
-		if !ok {
-			t.Fatalf("LIMIT子句类型 = %T", limitClause.Expression)
-		}
-		if limit.Limit == nil {
-			t.Fatalf("pageNum=%d pageSize=%d LIMIT值为空", c.pageNum, c.pageSize)
-		}
-		if *limit.Limit != c.wantLimitValue {
-			t.Errorf("pageNum=%d pageSize=%d LIMIT = %d, 期望 %d", c.pageNum, c.pageSize, *limit.Limit, c.wantLimitValue)
-		}
-		if limit.Offset != c.wantOffset {
-			t.Errorf("pageNum=%d pageSize=%d OFFSET = %d, 期望 %d", c.pageNum, c.pageSize, limit.Offset, c.wantOffset)
-		}
-	}
-}
-
-// 查询条件须真正下推到SQL，否则会退化成全表查询
-func TestGormServiceSelectWhereApplied(t *testing.T) {
-	ctx := GenCtx()
-	handler := &dryRunHandler{}
-	service := newDryRunService(t, handler)
-
-	list, count, err := service.Select(ctx, fakeGormInquiry{fakeGormObject: fakeGormObject{Id: 7}})
-	if err != nil {
-		t.Fatalf("查询异常: %+v", err)
-	}
-	//DryRun 不真正执行，结果集为空、count为0，但不得报错
-	if len(list) != 0 {
-		t.Errorf("DryRun 结果集 = %v, 期望空", list)
-	}
-	if count != 0 {
-		t.Errorf("DryRun count = %d, 期望 0", count)
-	}
-	//WHERE 必须带上条件
-	whereClause, ok := handler.captured.Statement.Clauses["WHERE"]
-	if !ok {
-		t.Fatalf("缺少WHERE子句，查询条件未下推")
-	}
-	where, ok := whereClause.Expression.(clause.Where)
-	if !ok {
-		t.Fatalf("WHERE子句类型 = %T", whereClause.Expression)
-	}
-	if len(where.Exprs) == 0 {
-		t.Errorf("WHERE 条件为空，等同全表查询")
-	}
-	//表名须取自 TableName()
-	if got := handler.captured.Statement.Table; got != "fake_object" {
-		t.Errorf("查询表名 = %q, 期望 fake_object", got)
-	}
-}
-
-// 底层错误必须被包装返回，不能被吞掉
-func TestGormServiceSelectError(t *testing.T) {
-	ctx := GenCtx()
-	handler := &dryRunHandler{forceErr: gorm.ErrInvalidField}
-	service := newDryRunService(t, handler)
-
-	list, _, err := service.Select(ctx, fakeGormInquiry{})
-	if err == nil {
-		t.Fatalf("底层错误未返回")
-	}
-	if !strings.Contains(err.Error(), "异常") {
-		t.Errorf("错误信息 = %v, 应说明查询异常", err)
-	}
-	if list != nil {
-		t.Errorf("出错时结果集 = %v, 期望 nil", list)
-	}
-}
-
-// ErrRecordNotFound 不算错误：应返回空结果而非error，否则调用方每次查空都要处理异常
-func TestGormServiceSelectRecordNotFound(t *testing.T) {
-	ctx := GenCtx()
-	handler := &dryRunHandler{forceErr: gorm.ErrRecordNotFound}
-	service := newDryRunService(t, handler)
-
-	list, count, err := service.Select(ctx, fakeGormInquiry{})
-	if err != nil {
-		t.Errorf("RecordNotFound 应被视为空结果，而非错误: %+v", err)
-	}
-	if len(list) != 0 {
-		t.Errorf("结果集 = %v, 期望空", list)
-	}
-	if count != 0 {
-		t.Errorf("count = %d, 期望 0", count)
-	}
-}
-
-// SelectOne 是 Select 的包装：空结果返回 nil,nil；出错则透传error
-func TestGormServiceSelectOne(t *testing.T) {
-	ctx := GenCtx()
-
-	//空结果：须返回 nil 且不报错
-	handler := &dryRunHandler{}
-	service := newDryRunService(t, handler)
-	got, err := service.SelectOne(ctx, fakeGormInquiry{fakeGormObject: fakeGormObject{Id: 7}})
-	if err != nil {
-		t.Errorf("空结果不应报错: %+v", err)
-	}
-	if got != nil {
-		t.Errorf("空结果 = %v, 期望 nil", got)
-	}
-
-	//出错：须透传error且不返回对象
-	errHandler := &dryRunHandler{forceErr: gorm.ErrInvalidField}
-	errService := newDryRunService(t, errHandler)
-	got, err = errService.SelectOne(ctx, fakeGormInquiry{})
-	if err == nil {
-		t.Errorf("底层错误未透传")
-	}
-	if got != nil {
-		t.Errorf("出错时返回 = %v, 期望 nil", got)
-	}
-}
-
-// Where 返回nil时 Select 的行为：与 Delete 的显式守卫形成对比。
-// 原用例只在未panic时 t.Logf 提示，无论实现怎么变都不会失败，等于没有校验；
-// 这里改为断言"要么panic、要么返回error"，即绝不允许静默当成无条件查询成功返回数据。
-func TestGormServiceSelectNilWhereNoGuard(t *testing.T) {
-	ctx := GenCtx()
-	handler := &dryRunHandler{whereNil: true}
-	service := newDryRunService(t, handler)
-
-	var panicked bool
-	var err error
-	var list []*fakeGormObject
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-			}
-		}()
-		list, _, err = service.Select(ctx, fakeGormInquiry{})
-	}()
-
-	//Delete 侧已有显式守卫（见 TestGormServiceDeleteNilWhere）。
-	//Select 侧至少不能"无守卫且无错误地"返回结果集，否则等同于放行无条件查询。
-	if !panicked && err == nil {
-		t.Errorf("Where返回nil时 Select 既未panic也未报错（结果集=%v），"+
-			"相当于放行无条件查询，应与Delete一致补充显式守卫", list)
-	}
-}
-
-// ==== Insert / Update / Delete 的SQL构造 ====
-// 同样用 DryRun 覆盖：只校验生成的SQL语义，不需要真实数据库
-//
-// 这里另起一套 RecordObject/RecordInquiry 夹具：内嵌类型名必须是导出的，
-// 否则 gorm 反射读取"通过未导出内嵌字段提升上来的主键"会panic
-// （reflect.Value.Interface: cannot return value obtained from unexported field）
-
-type RecordObject struct {
-	Id   int64
-	Name string
-}
-
-func (this RecordObject) TableName() string { return "record_object" }
-
-type RecordInquiry struct {
-	RecordObject
-	PageNum  int
-	PageSize int
-}
-
-func (this RecordInquiry) GetPageNum() int  { return this.PageNum }
-func (this RecordInquiry) GetPageSize() int { return this.PageSize }
-
-// recordHandler 记录最终执行的SQL，用于断言语句类型与目标表
-type recordHandler struct {
-	db   *gorm.DB
+// sqlRecorder 记录 DryRun 下构造出的SQL
+type sqlRecorder struct {
 	sqls []string
 }
 
-func (this *recordHandler) GetName(ctx context.Context) string { return "假对象" }
-func (this *recordHandler) GetDb(ctx context.Context, where *gorm.DB) *gorm.DB {
-	if where != nil {
-		return where
-	}
-	return this.db.Session(&gorm.Session{DryRun: true, NewDB: true})
-}
-func (this *recordHandler) Where(ctx context.Context, where *gorm.DB, inquiry RecordInquiry) *gorm.DB {
-	if where == nil {
-		//Delete 传入的是nil，需要自行起一个会话，否则无法构造SQL
-		where = this.db.Session(&gorm.Session{DryRun: true, NewDB: true}).Model(&RecordObject{})
-	}
-	if inquiry.Id != 0 {
-		where = where.Where("id = ?", inquiry.Id)
-	}
-	return where
-}
-func (this *recordHandler) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+func (this *sqlRecorder) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	sql, _ := fc()
 	this.sqls = append(this.sqls, sql)
 }
-func (this *recordHandler) LogMode(logger.LogLevel) logger.Interface      { return this }
-func (this *recordHandler) Info(context.Context, string, ...interface{})  {}
-func (this *recordHandler) Warn(context.Context, string, ...interface{})  {}
-func (this *recordHandler) Error(context.Context, string, ...interface{}) {}
+func (this *sqlRecorder) LogMode(logger.LogLevel) logger.Interface      { return this }
+func (this *sqlRecorder) Info(context.Context, string, ...interface{})  {}
+func (this *sqlRecorder) Warn(context.Context, string, ...interface{})  {}
+func (this *sqlRecorder) Error(context.Context, string, ...interface{}) {}
 
-func newRecordService(t *testing.T) (*GormService[RecordObject, RecordInquiry], *recordHandler) {
+// dryRunConnPool 只提供事务的开启与提交语义，DryRun下不会真的执行SQL，
+// 用于覆盖 Transaction；gorm自带的 DummyDialector 不带连接池，Begin 会直接报 invalid transaction
+type dryRunConnPool struct{}
+
+func (this *dryRunConnPool) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+	return nil, nil
+}
+func (this *dryRunConnPool) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return nil, nil
+}
+func (this *dryRunConnPool) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return nil, nil
+}
+func (this *dryRunConnPool) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return nil
+}
+func (this *dryRunConnPool) BeginTx(ctx context.Context, opts *sql.TxOptions) (gorm.ConnPool, error) {
+	return &dryRunTx{}, nil
+}
+
+// dryRunTx 与 dryRunConnPool 必须是不同类型：只有事务对象才实现 Commit/Rollback，
+// 否则gorm会把外层连接池也当成"已在事务中"，转而走SavePoint，DummyDialector不支持而报 unsupported driver
+type dryRunTx struct {
+	dryRunConnPool
+}
+
+func (this *dryRunTx) Commit() error   { return nil }
+func (this *dryRunTx) Rollback() error { return nil }
+
+func newDryRunDb(t *testing.T) (*gorm.DB, *sqlRecorder) {
 	t.Helper()
-	handler := &recordHandler{}
-	db, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{DryRun: true, Logger: handler})
+	recorder := &sqlRecorder{}
+	db, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{DryRun: true, Logger: recorder, ConnPool: &dryRunConnPool{}})
 	if err != nil {
 		t.Fatalf("打开DryRun数据库异常: %+v", err)
 	}
-	handler.db = db
-	return &GormService[RecordObject, RecordInquiry]{GormHandler: handler}, handler
+	return db, recorder
 }
 
-// 非空插入须生成 INSERT，且落到正确的表
-func TestGormServiceInsertSql(t *testing.T) {
-	ctx := GenCtx()
-	service, handler := newRecordService(t)
+func (this *sqlRecorder) contains(keyword string) bool {
+	for i := range this.sqls {
+		if strings.Contains(this.sqls[i], keyword) {
+			return true
+		}
+	}
+	return false
+}
 
-	got, err := service.Insert(ctx, &RecordObject{Id: 1, Name: "甲"}, &RecordObject{Id: 2, Name: "乙"})
-	if err != nil {
+// 空入参须直接返回，不触达数据库（否则DB为nil时会panic）
+func TestInsertHandlerEmpty(t *testing.T) {
+	ctx := GenCtx()
+	handler := NewInsertHandler[fakeGormObject]("假对象")
+
+	if err := handler.Transaction(ctx, nil); err != nil {
+		t.Errorf("空插入应无错误: %+v", err)
+	}
+	if handler.Count != 0 {
+		t.Errorf("空插入影响行数 = %d, 期望 0", handler.Count)
+	}
+}
+
+func TestInsertHandlerSql(t *testing.T) {
+	ctx := GenCtx()
+	db, recorder := newDryRunDb(t)
+	handler := NewInsertHandler("假对象", &fakeGormObject{Id: 1, Name: "a"}, &fakeGormObject{Id: 2, Name: "b"})
+
+	if err := handler.Transaction(ctx, db); err != nil {
 		t.Fatalf("插入异常: %+v", err)
 	}
-	//入参须原样返回，供调用方拿回带自增ID的对象
-	if len(got) != 2 {
-		t.Errorf("返回对象数 = %d, 期望 2", len(got))
-	}
-	if len(handler.sqls) == 0 {
-		t.Fatalf("未生成任何SQL")
-	}
-	sql := handler.sqls[len(handler.sqls)-1]
-	if !strings.HasPrefix(sql, "INSERT") {
-		t.Errorf("生成的SQL = %q, 期望以 INSERT 开头", sql)
-	}
-	if !strings.Contains(sql, "record_object") {
-		t.Errorf("SQL未落到 record_object 表: %q", sql)
-	}
-	//两条记录须在同一条语句里批量插入
-	if !strings.Contains(sql, "甲") || !strings.Contains(sql, "乙") {
-		t.Errorf("批量插入未包含全部记录: %q", sql)
+	if !recorder.contains("INSERT") || !recorder.contains("fake_object") {
+		t.Errorf("未生成落到 fake_object 的INSERT: %v", recorder.sqls)
 	}
 }
 
-// 更新须生成 UPDATE；Select("*") 意味着零值字段也要被写入
-func TestGormServiceUpdateSql(t *testing.T) {
+// nil 对象须直接返回，不触达数据库
+func TestUpdateHandlerNil(t *testing.T) {
 	ctx := GenCtx()
-	service, handler := newRecordService(t)
+	handler := NewUpdateHandler[fakeGormObject]("假对象", nil)
 
-	object := &RecordObject{Id: 5, Name: ""}
-	got, _, err := service.Update(ctx, object)
-	if err != nil {
+	if err := handler.Transaction(ctx, nil); err != nil {
+		t.Errorf("nil更新应无错误: %+v", err)
+	}
+	if handler.Count != 0 {
+		t.Errorf("nil更新影响行数 = %d, 期望 0", handler.Count)
+	}
+}
+
+func TestUpdateHandlerSql(t *testing.T) {
+	ctx := GenCtx()
+	db, recorder := newDryRunDb(t)
+	handler := NewUpdateHandler("假对象", &fakeGormObject{Id: 1, Name: "a"})
+
+	if err := handler.Transaction(ctx, db); err != nil {
 		t.Fatalf("更新异常: %+v", err)
 	}
-	if got != object {
-		t.Errorf("须原样返回入参对象")
-	}
-	if len(handler.sqls) == 0 {
-		t.Fatalf("未生成任何SQL")
-	}
-	sql := handler.sqls[len(handler.sqls)-1]
-	if !strings.HasPrefix(sql, "UPDATE") {
-		t.Errorf("生成的SQL = %q, 期望以 UPDATE 开头", sql)
-	}
-	//实现里用了 Select("*")，因此空字符串的 name 也必须出现在SET中，
-	//否则"清空某字段"的更新会静默丢失
-	if !strings.Contains(sql, "name") {
-		t.Errorf("Select(\"*\") 应使零值字段也被更新, SQL = %q", sql)
+	if !recorder.contains("UPDATE") || !recorder.contains("fake_object") {
+		t.Errorf("未生成落到 fake_object 的UPDATE: %v", recorder.sqls)
 	}
 }
 
-// 删除须生成 DELETE 且带上WHERE，避免全表删除
-func TestGormServiceDeleteSql(t *testing.T) {
+// InquiryHandler 为nil时必须报错，而不是空指针panic
+func TestDeleteHandlerNilInquiryHandler(t *testing.T) {
 	ctx := GenCtx()
-	service, handler := newRecordService(t)
+	db, _ := newDryRunDb(t)
+	handler := NewDeleteHandler[fakeGormObject, fakeGormInquiry]("假对象", fakeGormInquiry{}, nil)
 
-	err := service.Delete(ctx, RecordInquiry{RecordObject: RecordObject{Id: 9}})
-	if err != nil {
+	err := handler.Transaction(ctx, db)
+	if err == nil {
+		t.Fatalf("查询处理器为空时必须报错")
+	}
+	if !strings.Contains(err.Error(), "查询处理器为空") {
+		t.Errorf("错误信息 = %v, 应说明查询处理器为空", err)
+	}
+}
+
+func TestDeleteHandlerSql(t *testing.T) {
+	ctx := GenCtx()
+	db, recorder := newDryRunDb(t)
+	inquiryHandler := &fakeInquiryHandler{}
+	handler := NewDeleteHandler[fakeGormObject]("假对象", fakeGormInquiry{Id: 7}, inquiryHandler)
+
+	if err := handler.Transaction(ctx, db.Model(&fakeGormObject{})); err != nil {
 		t.Fatalf("删除异常: %+v", err)
 	}
-	if len(handler.sqls) == 0 {
-		t.Fatalf("未生成任何SQL")
+	if !recorder.contains("DELETE") || !recorder.contains("fake_object") {
+		t.Errorf("未生成落到 fake_object 的DELETE: %v", recorder.sqls)
 	}
-	sql := handler.sqls[len(handler.sqls)-1]
-	if !strings.HasPrefix(sql, "DELETE") {
-		t.Errorf("生成的SQL = %q, 期望以 DELETE 开头", sql)
+	//Where/Order/Limit 三个钩子都必须被调用，缺一会让条件或分页静默失效
+	if inquiryHandler.whereCall != 1 || inquiryHandler.orderCall != 1 || inquiryHandler.limitCall != 1 {
+		t.Errorf("钩子调用次数 where=%d order=%d limit=%d, 期望各1次",
+			inquiryHandler.whereCall, inquiryHandler.orderCall, inquiryHandler.limitCall)
 	}
-	//必须带WHERE，否则是全表删除
-	if !strings.Contains(strings.ToUpper(sql), "WHERE") {
-		t.Errorf("DELETE 未带WHERE，存在全表删除风险: %q", sql)
+}
+
+func TestSelectHandlerNilInquiryHandler(t *testing.T) {
+	ctx := GenCtx()
+	db, _ := newDryRunDb(t)
+	handler := NewSelectHandler[fakeGormObject, fakeGormInquiry]("假对象", fakeGormInquiry{}, nil)
+
+	err := handler.Transaction(ctx, db)
+	if err == nil {
+		t.Fatalf("查询处理器为空时必须报错")
 	}
-	if !strings.Contains(sql, "9") {
-		t.Errorf("DELETE 未带上查询条件的值: %q", sql)
+	if !strings.Contains(err.Error(), "查询处理器为空") {
+		t.Errorf("错误信息 = %v, 应说明查询处理器为空", err)
+	}
+}
+
+// 分页语义：pageSize 决定 LIMIT，pageNum 决定 OFFSET=(pageNum-1)*pageSize
+func TestSelectHandlerPaging(t *testing.T) {
+	ctx := GenCtx()
+	db, recorder := newDryRunDb(t)
+	inquiryHandler := &fakeInquiryHandler{}
+	handler := NewSelectHandler[fakeGormObject]("假对象", fakeGormInquiry{Id: 7, PageNum: 2, PageSize: 20}, inquiryHandler)
+
+	if err := handler.Transaction(ctx, db); err != nil {
+		t.Fatalf("查询异常: %+v", err)
+	}
+	if !recorder.contains("SELECT") || !recorder.contains("fake_object") {
+		t.Errorf("未生成落到 fake_object 的SELECT: %v", recorder.sqls)
+	}
+	if !recorder.contains("LIMIT 20") {
+		t.Errorf("未按 pageSize 生成LIMIT: %v", recorder.sqls)
+	}
+	if !recorder.contains("OFFSET 20") {
+		t.Errorf("未按 pageNum 生成OFFSET: %v", recorder.sqls)
+	}
+	//Count 先于 Order/Limit 执行，故 Where 会被调用一次，Order/Limit 各一次
+	if inquiryHandler.whereCall != 1 || inquiryHandler.orderCall != 1 || inquiryHandler.limitCall != 1 {
+		t.Errorf("钩子调用次数 where=%d order=%d limit=%d, 期望各1次",
+			inquiryHandler.whereCall, inquiryHandler.orderCall, inquiryHandler.limitCall)
+	}
+}
+
+// 无结果时 GetOne 必须返回nil而不是越界panic
+func TestSelectHandlerGetOne(t *testing.T) {
+	ctx := GenCtx()
+	db, _ := newDryRunDb(t)
+	handler := NewSelectHandler[fakeGormObject]("假对象", fakeGormInquiry{}, &fakeInquiryHandler{})
+
+	if got := handler.GetOne(); got != nil {
+		t.Errorf("空结果 GetOne = %v, 期望 nil", got)
+	}
+	if err := handler.Transaction(ctx, db); err != nil {
+		t.Fatalf("查询异常: %+v", err)
+	}
+	if got := handler.GetOne(); got != nil {
+		t.Errorf("DryRun无数据时 GetOne = %v, 期望 nil", got)
+	}
+	//Object 初始化为空切片而非nil，调用方可直接range
+	if handler.Object == nil {
+		t.Errorf("Object 未初始化为空切片")
+	}
+	//有数据时须返回首个元素
+	handler.Object = []*fakeGormObject{{Id: 1}, {Id: 2}}
+	if got := handler.GetOne(); got == nil || got.Id != 1 {
+		t.Errorf("GetOne = %v, 期望首个元素", got)
+	}
+}
+
+// Transaction 须按顺序执行全部handler，任一报错则中断并向上抛出
+type errHandler struct {
+	called int
+	err    error
+}
+
+func (this *errHandler) Transaction(ctx context.Context, tx *gorm.DB) error {
+	this.called++
+	return this.err
+}
+
+func TestTransaction(t *testing.T) {
+	ctx := GenCtx()
+	db, _ := newDryRunDb(t)
+
+	first := &errHandler{}
+	second := &errHandler{}
+	if err := Transaction(ctx, db, first, second); err != nil {
+		t.Fatalf("事务异常: %+v", err)
+	}
+	if first.called != 1 || second.called != 1 {
+		t.Errorf("handler 调用次数 = %d/%d, 期望各1次", first.called, second.called)
+	}
+
+	//前一个handler报错时，后续handler不得再执行
+	failed := &errHandler{err: errors.Errorf("处理失败")}
+	skipped := &errHandler{}
+	err := Transaction(ctx, db, failed, skipped)
+	if err == nil {
+		t.Fatalf("handler报错时事务必须返回错误")
+	}
+	if !strings.Contains(err.Error(), "处理失败") {
+		t.Errorf("错误未透传: %v", err)
+	}
+	if skipped.called != 0 {
+		t.Errorf("前置handler报错后仍执行了后续handler")
+	}
+
+	//无handler时须正常返回
+	if err = Transaction(ctx, db); err != nil {
+		t.Errorf("空handler事务异常: %+v", err)
 	}
 }

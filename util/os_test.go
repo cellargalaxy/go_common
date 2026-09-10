@@ -13,10 +13,10 @@ import (
 )
 
 func TestInitOsAndGetServerName(t *testing.T) {
-	old := defaultServerName
-	t.Cleanup(func() { defaultServerName = old })
+	old := serverName
+	t.Cleanup(func() { serverName = old })
 
-	InitOs("mysvc")
+	initOs("mysvc")
 	if got := GetServerName(); got != "mysvc" {
 		t.Errorf("GetServerName = %q, 期望 mysvc", got)
 	}
@@ -43,18 +43,18 @@ func TestGetEnv(t *testing.T) {
 	}
 }
 
-func TestGetEnvString(t *testing.T) {
+func TestGetEnvStr(t *testing.T) {
 	//不存在时用默认值
-	if got := GetEnvString("GO_COMMON_NOT_EXIST_KEY", "def"); got != "def" {
-		t.Errorf("GetEnvString = %q, 期望 def", got)
+	if got := GetEnvStr("GO_COMMON_NOT_EXIST_KEY", "def"); got != "def" {
+		t.Errorf("GetEnvStr = %q, 期望 def", got)
 	}
 	t.Setenv("GO_COMMON_STR", "actual")
-	if got := GetEnvString("GO_COMMON_STR", "def"); got != "actual" {
-		t.Errorf("GetEnvString = %q, 期望 actual", got)
+	if got := GetEnvStr("GO_COMMON_STR", "def"); got != "actual" {
+		t.Errorf("GetEnvStr = %q, 期望 actual", got)
 	}
 	//空字符串视为未设置，回落默认值
 	t.Setenv("GO_COMMON_STR", "")
-	if got := GetEnvString("GO_COMMON_STR", "def"); got != "def" {
+	if got := GetEnvStr("GO_COMMON_STR", "def"); got != "def" {
 		t.Errorf("空值应回落默认值, got %q", got)
 	}
 }
@@ -75,7 +75,7 @@ func TestGetEnvInt(t *testing.T) {
 	}
 	//非法值必须回落默认值而非0
 	//注意：" 1 " 这类仅首尾带空白的合法数字不属于非法值——
-	//同文件 GetEnvBool 明确容忍 " true "，String2Int/String2Float 也都做了TrimSpace，
+	//同文件 GetEnvBool 明确容忍 " true "，Str2Int/Str2Float 也都做了TrimSpace，
 	//env经shell/.env/ConfigMap传入时带空白极常见，静默退回默认值会让配置"看似生效实则未生效"。
 	//该场景的正向断言见 TestGetEnvIntFloatTrimSpace。
 	for _, bad := range []string{"", "abc", "1.5", "1e3", "1_000", "0x1F"} {
@@ -116,14 +116,14 @@ func TestGetEnvInt(t *testing.T) {
 	}
 
 	//关键差异：超出int64范围时 GetEnvInt 检查了error，故回落默认值；
-	//而 String2Int 丢弃error，沿用ParseInt的钳制值(MaxInt64)。
+	//而 Str2Int 丢弃error，沿用ParseInt的钳制值(MaxInt64)。
 	//两者语义不同是有意的，这里同时锁定，避免日后被"统一"成同一种而破坏调用方预期。
 	t.Setenv("GO_COMMON_INT", "99999999999999999999")
 	if got := GetEnvInt[int64]("GO_COMMON_INT", 42); got != 42 {
 		t.Errorf("溢出值 = %d, 期望回落默认值 42（不应钳制为MaxInt64）", got)
 	}
-	if got := String2Int[int64]("99999999999999999999"); got != math.MaxInt64 {
-		t.Errorf("String2Int 溢出应钳制为 MaxInt64, got %d", got)
+	if got := Str2Int[int64]("99999999999999999999"); got != math.MaxInt64 {
+		t.Errorf("Str2Int 溢出应钳制为 MaxInt64, got %d", got)
 	}
 
 	//前导零与正号
@@ -305,8 +305,9 @@ func TestExecCommand(t *testing.T) {
 	if len(stdout) != 1 || stdout[0] != "hello" {
 		t.Errorf("stdout = %v, 期望 [hello]", stdout)
 	}
-	if len(stderr) != 0 {
-		t.Errorf("stderr = %v, 期望空", stderr)
+	//这里只断言stdout不串到stderr：部分环境的shell启动本身就会往stderr打告警
+	if Contain(ctx, stderr, "hello") {
+		t.Errorf("stdout 串到了 stderr: %v", stderr)
 	}
 
 	//多行输出须按行切分
@@ -332,8 +333,8 @@ func TestExecCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if len(stderr) != 1 || stderr[0] != "oops" {
-		t.Errorf("stderr = %v, 期望 [oops]", stderr)
+	if !Contain(ctx, stderr, "oops") {
+		t.Errorf("stderr = %v, 期望含 oops", stderr)
 	}
 	if len(stdout) != 0 {
 		t.Errorf("stdout = %v, 期望空", stdout)

@@ -10,9 +10,9 @@ func TestXlsxRoundTrip(t *testing.T) {
 	ctx := GenCtx()
 	lines := [][]string{{"id", "name"}, {"1", "a"}, {"2", "b"}}
 
-	data, err := XlsxStrings2Data(ctx, lines)
+	data, err := XlsxStrs2Data(ctx, lines)
 	if err != nil {
-		t.Fatalf("XlsxStrings2Data 异常: %+v", err)
+		t.Fatalf("XlsxStrs2Data 异常: %+v", err)
 	}
 	//须产出真实的xlsx（zip格式，以PK开头）
 	if len(data) == 0 {
@@ -22,9 +22,9 @@ func TestXlsxRoundTrip(t *testing.T) {
 		t.Errorf("生成的数据不是xlsx(zip)格式: %v", data[:4])
 	}
 
-	got, err := XlsxData2Strings(ctx, data)
+	got, err := XlsxData2Strs(ctx, data)
 	if err != nil {
-		t.Fatalf("XlsxData2Strings 异常: %+v", err)
+		t.Fatalf("XlsxData2Strs 异常: %+v", err)
 	}
 	if len(got) != 3 {
 		t.Fatalf("行数 = %d, 期望 3", len(got))
@@ -48,15 +48,15 @@ func TestXlsxFileRoundTrip(t *testing.T) {
 	filePath := path.Join(dir, "out.xlsx")
 	lines := [][]string{{"h1", "h2"}, {"v1", "v2"}}
 
-	if err := XlsxStrings2File(ctx, lines, filePath); err != nil {
-		t.Fatalf("XlsxStrings2File 异常: %+v", err)
+	if err := XlsxStrs2File(ctx, lines, filePath); err != nil {
+		t.Fatalf("XlsxStrs2File 异常: %+v", err)
 	}
 	if GetFileInfo(ctx, filePath) == nil {
 		t.Fatalf("xlsx文件未生成")
 	}
-	got, err := XlsxFile2Strings(ctx, filePath)
+	got, err := XlsxFile2Strs(ctx, filePath)
 	if err != nil {
-		t.Fatalf("XlsxFile2Strings 异常: %+v", err)
+		t.Fatalf("XlsxFile2Strs 异常: %+v", err)
 	}
 	if len(got) != 2 || got[0][0] != "h1" || got[1][1] != "v2" {
 		t.Errorf("文件往返结果 = %v", got)
@@ -72,11 +72,11 @@ func TestXlsxContentFidelity(t *testing.T) {
 		{strings.Repeat("长", 200), ""},
 		{"  前后空格  ", "=SUM(A1)"},
 	}
-	data, err := XlsxStrings2Data(ctx, lines)
+	data, err := XlsxStrs2Data(ctx, lines)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	got, err := XlsxData2Strings(ctx, data)
+	got, err := XlsxData2Strs(ctx, data)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -105,11 +105,11 @@ func TestXlsxContentFidelity(t *testing.T) {
 }
 
 // 关键回归：非法数据不得panic（曾因先defer关闭再判err而空指针panic）
-func TestXlsxData2StringsInvalid(t *testing.T) {
+func TestXlsxData2StrsInvalid(t *testing.T) {
 	ctx := GenCtx()
 	defer func() {
 		if r := recover(); r != nil {
-			t.Errorf("XlsxData2Strings 非法数据触发panic: %v", r)
+			t.Errorf("XlsxData2Strs 非法数据触发panic: %v", r)
 		}
 	}()
 	for _, bad := range [][]byte{
@@ -118,7 +118,7 @@ func TestXlsxData2StringsInvalid(t *testing.T) {
 		nil,
 		{0x50, 0x4b, 0x03, 0x04}, //仅zip头，内容不完整
 	} {
-		got, err := XlsxData2Strings(ctx, bad)
+		got, err := XlsxData2Strs(ctx, bad)
 		if err == nil && len(got) > 0 {
 			t.Errorf("非法数据未报错且返回了内容: %v", got)
 		}
@@ -128,11 +128,11 @@ func TestXlsxData2StringsInvalid(t *testing.T) {
 func TestXlsxEmpty(t *testing.T) {
 	ctx := GenCtx()
 	//空行集也应能生成合法xlsx并读回空
-	data, err := XlsxStrings2Data(ctx, [][]string{})
+	data, err := XlsxStrs2Data(ctx, [][]string{})
 	if err != nil {
 		t.Fatalf("空行集生成异常: %+v", err)
 	}
-	got, err := XlsxData2Strings(ctx, data)
+	got, err := XlsxData2Strs(ctx, data)
 	if err != nil {
 		t.Fatalf("空xlsx读取异常: %+v", err)
 	}
@@ -140,11 +140,11 @@ func TestXlsxEmpty(t *testing.T) {
 		t.Errorf("空xlsx = %v", got)
 	}
 	//含空串格
-	data, err = XlsxStrings2Data(ctx, [][]string{{"", ""}, {"x", ""}})
+	data, err = XlsxStrs2Data(ctx, [][]string{{"", ""}, {"x", ""}})
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if got, err = XlsxData2Strings(ctx, data); err != nil {
+	if got, err = XlsxData2Strs(ctx, data); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	//至少要能找到 x
@@ -164,15 +164,15 @@ func TestXlsxEmpty(t *testing.T) {
 // 与CSV路径联动：同一份结构体数据经csv转strings后写xlsx，内容须一致
 func TestXlsxWithCsvStrings(t *testing.T) {
 	ctx := GenCtx()
-	strs, err := CsvStruct2Strings(ctx, csvDemoList())
+	strs, err := CsvStruct2Strs(ctx, csvDemoList())
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	data, err := XlsxStrings2Data(ctx, strs)
+	data, err := XlsxStrs2Data(ctx, strs)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	got, err := XlsxData2Strings(ctx, data)
+	got, err := XlsxData2Strs(ctx, data)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -197,26 +197,26 @@ func TestXlsxSheetNameConstant(t *testing.T) {
 	}
 	ctx := GenCtx()
 	//本包生成的文件必定含Sheet1，故自产自销可读
-	data, err := XlsxStrings2Data(ctx, [][]string{{"a"}})
+	data, err := XlsxStrs2Data(ctx, [][]string{{"a"}})
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if _, err = XlsxData2Strings(ctx, data); err != nil {
+	if _, err = XlsxData2Strs(ctx, data); err != nil {
 		t.Errorf("本包生成的xlsx应可读回: %+v", err)
 	}
 }
 
 // 不存在的文件不得panic
-func TestXlsxFile2StringsMissing(t *testing.T) {
+func TestXlsxFile2StrsMissing(t *testing.T) {
 	ctx := GenCtx()
 	dir := newTestDir(t)
 	missing := path.Join(dir, "nope.xlsx")
-	got, err := XlsxFile2Strings(ctx, missing)
+	got, err := XlsxFile2Strs(ctx, missing)
 	if err == nil && len(got) > 0 {
 		t.Errorf("不存在的文件返回了内容: %v", got)
 	}
 	//只读操作不得创建文件
 	if GetPathInfo(ctx, missing) != nil {
-		t.Errorf("XlsxFile2Strings 创建了文件")
+		t.Errorf("XlsxFile2Strs 创建了文件")
 	}
 }

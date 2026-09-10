@@ -33,7 +33,7 @@ func TestNewHttpResp(t *testing.T) {
 		t.Errorf("NewHttpResp = %+v", resp)
 	}
 	//nil data 也应保留
-	if resp = NewHttpResp(model.SuccessCode, "", nil); resp.Data != nil {
+	if resp = NewHttpResp(http.StatusOK, "", nil); resp.Data != nil {
 		t.Errorf("nil data = %v", resp.Data)
 	}
 }
@@ -41,8 +41,8 @@ func TestNewHttpResp(t *testing.T) {
 func TestNewHttpRespByMsg(t *testing.T) {
 	//空msg视为成功
 	resp := NewHttpRespByMsg("d", "")
-	if resp.Code != model.SuccessCode {
-		t.Errorf("空msg Code = %d, 期望 SuccessCode(%d)", resp.Code, model.SuccessCode)
+	if resp.Code != http.StatusOK {
+		t.Errorf("空msg Code = %d, 期望 SuccessCode(%d)", resp.Code, http.StatusOK)
 	}
 	if resp.Msg != "" {
 		t.Errorf("空msg 时 Msg = %q", resp.Msg)
@@ -52,8 +52,8 @@ func TestNewHttpRespByMsg(t *testing.T) {
 	}
 	//非空msg视为失败，且data须保留
 	resp = NewHttpRespByMsg("d", "出错了")
-	if resp.Code != model.FailCode {
-		t.Errorf("非空msg Code = %d, 期望 FailCode(%d)", resp.Code, model.FailCode)
+	if resp.Code != http.StatusInternalServerError {
+		t.Errorf("非空msg Code = %d, 期望 FailCode(%d)", resp.Code, http.StatusInternalServerError)
 	}
 	if resp.Msg != "出错了" {
 		t.Errorf("Msg = %q", resp.Msg)
@@ -66,12 +66,12 @@ func TestNewHttpRespByMsg(t *testing.T) {
 func TestNewHttpRespByErr(t *testing.T) {
 	//nil error 视为成功
 	resp := NewHttpRespByErr("d", nil)
-	if resp.Code != model.SuccessCode || resp.Msg != "" {
+	if resp.Code != http.StatusOK || resp.Msg != "" {
 		t.Errorf("nil err = %+v", resp)
 	}
 	//非nil error：错误信息须落到Msg
 	resp = NewHttpRespByErr(nil, errors.Errorf("业务异常"))
-	if resp.Code != model.FailCode {
+	if resp.Code != http.StatusInternalServerError {
 		t.Errorf("Code = %d, 期望 FailCode", resp.Code)
 	}
 	if !strings.Contains(resp.Msg, "业务异常") {
@@ -113,15 +113,15 @@ func TestPing(t *testing.T) {
 		t.Errorf("HTTP状态码 = %d", w.Code)
 	}
 	//须返回成功码与服务名，且时间戳合理。
-	//直接复用 model.PingResponse，避免测试里重复声明json标签而与实现脱节
+	//直接复用 model.PingData，避免测试里重复声明json标签而与实现脱节
 	var resp struct {
-		Code int                `json:"code"`
-		Data model.PingResponse `json:"data"`
+		Code int            `json:"code"`
+		Data model.PingData `json:"data"`
 	}
-	if err := JsonString2Struct(w.Body.String(), &resp); err != nil {
+	if err := JsonStr2Struct(w.Body.String(), &resp); err != nil {
 		t.Fatalf("响应体解析失败: %+v, body=%s", err, w.Body.String())
 	}
-	if resp.Code != model.SuccessCode {
+	if resp.Code != http.StatusOK {
 		t.Errorf("Code = %d, 期望 SuccessCode", resp.Code)
 	}
 	if resp.Data.ServerName != GetServerName() {
@@ -141,14 +141,14 @@ func TestSetGinLogId(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	setGinLogId(c)
+	setGinLogId(c, GetLogId(c))
 
 	logId := GetLogId(c)
 	if logId <= 0 {
 		t.Errorf("未生成 logId: %d", logId)
 	}
-	if got := w.Header().Get(LogIdKey); got != Int2String(logId) {
-		t.Errorf("响应头 logId = %q, 期望 %q", got, Int2String(logId))
+	if got := w.Header().Get(LogIdKey); got != Int2Str(logId) {
+		t.Errorf("响应头 logId = %q, 期望 %q", got, Int2Str(logId))
 	}
 
 	//已有logId时须沿用，保证链路ID贯通
@@ -156,7 +156,7 @@ func TestSetGinLogId(t *testing.T) {
 	c, _ = gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 	c.Set(LogIdKey, int64(123456789012345678))
-	setGinLogId(c)
+	setGinLogId(c, GetLogId(c))
 	if got := GetLogId(c); got != 123456789012345678 {
 		t.Errorf("已有 logId 被覆盖: %d", got)
 	}
@@ -244,7 +244,7 @@ func TestValidateGinReject(t *testing.T) {
 	//无token
 	w, c := newGinCtx(http.MethodGet, "/")
 	ValidateGin(c, secret)
-	assertGinAbort(t, w, c, "无token", model.FailCode, "Authorization非法")
+	assertGinAbort(t, w, c, "无token", http.StatusUnauthorized, "Authorization非法")
 
 	//错误密钥签发的token
 	var claims model.Claims
@@ -257,7 +257,7 @@ func TestValidateGinReject(t *testing.T) {
 	w, c = newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+badToken)
 	ValidateGin(c, secret)
-	assertGinAbort(t, w, c, "错误密钥", model.FailCode, "")
+	assertGinAbort(t, w, c, "错误密钥", http.StatusInternalServerError, "")
 
 	//已过期token
 	var expired model.Claims
@@ -270,7 +270,7 @@ func TestValidateGinReject(t *testing.T) {
 	w, c = newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+expiredToken)
 	ValidateGin(c, secret)
-	assertGinAbort(t, w, c, "过期token", model.FailCode, "")
+	assertGinAbort(t, w, c, "过期token", http.StatusInternalServerError, "")
 }
 
 // 合法token须放行
@@ -330,7 +330,7 @@ func TestValidateGinUri(t *testing.T) {
 	w, c := newGinCtx(http.MethodGet, "/api/v1/other")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+newToken("/api/v1/do"))
 	ValidateGin(c, secret)
-	assertGinAbort(t, w, c, "uri不匹配", model.IllegalUriCode, "请求非法uri")
+	assertGinAbort(t, w, c, "uri不匹配", http.StatusBadRequest, "请求非法uri")
 }
 
 // reqId 防重放：同一reqId第二次必须被拒绝
@@ -340,7 +340,7 @@ func TestValidateGinReplay(t *testing.T) {
 	var claims model.Claims
 	claims.IssuedAt = time.Now().Unix()
 	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
-	claims.ReqId = GenStringId()
+	claims.ReqId = GenId()
 	token, err := EnJwt(ctx, secret, claims)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -357,7 +357,7 @@ func TestValidateGinReplay(t *testing.T) {
 	w, c := newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
 	ValidateGin(c, secret)
-	assertGinAbort(t, w, c, "重放请求", model.ReRequestCode, "请求非法重放")
+	assertGinAbort(t, w, c, "重放请求", http.StatusConflict, "请求非法重放")
 }
 
 func TestNewGinGet(t *testing.T) {
@@ -399,10 +399,10 @@ func TestNewGinGet(t *testing.T) {
 	})
 	handler(c)
 	var resp model.HttpResp
-	if err := JsonString2Struct(w.Body.String(), &resp); err != nil {
+	if err := JsonStr2Struct(w.Body.String(), &resp); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if resp.Code != model.FailCode {
+	if resp.Code != http.StatusInternalServerError {
 		t.Errorf("参数非法 Code = %d, 期望 FailCode", resp.Code)
 	}
 }
@@ -437,10 +437,10 @@ func TestNewGinPost(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 	handler(c)
 	var resp model.HttpResp
-	if err := JsonString2Struct(w.Body.String(), &resp); err != nil {
+	if err := JsonStr2Struct(w.Body.String(), &resp); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if resp.Code != model.FailCode {
+	if resp.Code != http.StatusInternalServerError {
 		t.Errorf("非法JSON Code = %d, 期望 FailCode", resp.Code)
 	}
 }
@@ -460,7 +460,7 @@ func assertGinAbort(t *testing.T, w *httptest.ResponseRecorder, c *gin.Context, 
 		t.Errorf("[%s] 请求未被中断", scene)
 	}
 	var resp model.HttpResp
-	if err := JsonString2Struct(w.Body.String(), &resp); err != nil {
+	if err := JsonStr2Struct(w.Body.String(), &resp); err != nil {
 		t.Errorf("[%s] 响应体解析失败: %+v, body=%s", scene, err, w.Body.String())
 		return
 	}

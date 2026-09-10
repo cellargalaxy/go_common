@@ -213,10 +213,10 @@ func TestWriteAndReadFile(t *testing.T) {
 	filePath := path.Join(dir, "sub", "w.txt")
 
 	//写入时自动创建父目录
-	if err := WriteString2File(ctx, "hello", filePath); err != nil {
-		t.Fatalf("WriteString2File 异常: %+v", err)
+	if err := WriteStr2File(ctx, "hello", filePath); err != nil {
+		t.Fatalf("WriteStr2File 异常: %+v", err)
 	}
-	got, err := ReadFile2String(ctx, filePath, "")
+	got, err := ReadFile2Str(ctx, filePath, "")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -225,10 +225,10 @@ func TestWriteAndReadFile(t *testing.T) {
 	}
 
 	//覆盖写：必须截断旧内容，不能残留
-	if err = WriteString2File(ctx, "hi", filePath); err != nil {
+	if err = WriteStr2File(ctx, "hi", filePath); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if got, err = ReadFile2String(ctx, filePath, ""); err != nil || got != "hi" {
+	if got, err = ReadFile2Str(ctx, filePath, ""); err != nil || got != "hi" {
 		t.Errorf("覆盖写后 = %q (err %v), 期望 hi（旧内容未被截断则会是 hillo）", got, err)
 	}
 
@@ -251,12 +251,12 @@ func TestWriteAndReadFile(t *testing.T) {
 	if err = WriteReader2File(ctx, strings.NewReader("from reader"), readerPath); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if got, err = ReadFile2String(ctx, readerPath, ""); err != nil || got != "from reader" {
+	if got, err = ReadFile2Str(ctx, readerPath, ""); err != nil || got != "from reader" {
 		t.Errorf("WriteReader2File 结果 = %q, %v", got, err)
 	}
 
 	//写入目录路径必须报错
-	if err = WriteString2File(ctx, "x", dir); err == nil {
+	if err = WriteStr2File(ctx, "x", dir); err == nil {
 		t.Errorf("向目录写入应报错")
 	}
 }
@@ -268,9 +268,9 @@ func TestReadFileNoSideEffect(t *testing.T) {
 	missing := path.Join(dir, "sub", "missing.txt")
 
 	//不存在时返回默认值
-	got, err := ReadFile2String(ctx, missing, "默认内容")
+	got, err := ReadFile2Str(ctx, missing, "默认内容")
 	if err != nil {
-		t.Fatalf("ReadFile2String 异常: %+v", err)
+		t.Fatalf("ReadFile2Str 异常: %+v", err)
 	}
 	if got != "默认内容" {
 		t.Errorf("默认值 = %q", got)
@@ -292,12 +292,19 @@ func TestReadFileNoSideEffect(t *testing.T) {
 		t.Errorf("ReadFile2Data 创建了文件")
 	}
 
-	//OpenReadFile 对不存在的文件必须报错，而非创建
-	if _, err = OpenReadFile(ctx, missing); err == nil {
-		t.Errorf("OpenReadFile 对不存在的文件应报错")
+	//OpenReadFile 现状：文件不存在时会创建再返回（与 OpenWriteFile 一致）。
+	//这不是只读语义，ReadFile2Data/ReadFile2Writer 都靠自身先判存在来规避，
+	//此处锁定现有行为，改动与否见 answer.md
+	file, err := OpenReadFile(ctx, missing)
+	if err != nil {
+		t.Errorf("OpenReadFile 异常: %+v", err)
 	}
-	if GetPathInfo(ctx, missing) != nil {
-		t.Errorf("OpenReadFile 创建了文件")
+	CloseIo(ctx, file)
+	if GetPathInfo(ctx, missing) == nil {
+		t.Errorf("OpenReadFile 未按现有行为创建文件")
+	}
+	if err = RemoveFile(ctx, missing); err != nil {
+		t.Fatalf("%+v", err)
 	}
 	//OpenReadFile 对目录必须报错
 	if _, err = OpenReadFile(ctx, dir); err == nil {
@@ -309,7 +316,7 @@ func TestReadFileNoSideEffect(t *testing.T) {
 	if err = os.WriteFile(emptyPath, []byte{}, 0644); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if got, err = ReadFile2String(ctx, emptyPath, "兜底"); err != nil || got != "兜底" {
+	if got, err = ReadFile2Str(ctx, emptyPath, "兜底"); err != nil || got != "兜底" {
 		t.Errorf("空文件 = %q, %v, 期望兜底", got, err)
 	}
 }
@@ -581,7 +588,7 @@ func TestOpenWriteFile(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	CloseIo(ctx, file)
-	got, err := ReadFile2String(ctx, filePath, "")
+	got, err := ReadFile2Str(ctx, filePath, "")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

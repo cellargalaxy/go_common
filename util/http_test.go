@@ -17,13 +17,6 @@ type JsonMockResponse struct {
 	Id int `json:"id"`
 }
 
-func (this *JsonMockResponse) HttpSuccess(ctx context.Context) error {
-	if this.Id <= 0 {
-		return errors.Errorf("业务校验失败：id 非正数")
-	}
-	return nil
-}
-
 func TestHttpConstants(t *testing.T) {
 	//这些默认值影响线上超时与重试行为，改动需谨慎
 	if TimeoutDefault != time.Second*3 {
@@ -41,81 +34,16 @@ func TestHttpConstants(t *testing.T) {
 	if !strings.Contains(UserAgentDefault, "Mozilla") {
 		t.Errorf("UserAgentDefault = %q", UserAgentDefault)
 	}
-	if len(SpiderSleepDefault) != 3 {
-		t.Errorf("SpiderSleepDefault = %v", SpiderSleepDefault)
-	}
 }
 
-func TestGetSleepTime(t *testing.T) {
-	sleeps := []time.Duration{time.Second, 2 * time.Second, 3 * time.Second}
-	//按下标取值
-	for i, want := range sleeps {
-		if got := GetSleepTime(sleeps, i); got != want {
-			t.Errorf("GetSleepTime(%d) = %v, 期望 %v", i, got, want)
-		}
-	}
-	//越界取最后一个
-	if got := GetSleepTime(sleeps, 99); got != 3*time.Second {
-		t.Errorf("越界 = %v, 期望 3s", got)
-	}
-	//空列表返回1纳秒（非0，避免退避为0导致空转）
-	if got := GetSleepTime(nil, 0); got != 1 {
-		t.Errorf("空列表 = %v, 期望 1", got)
-	}
-	if got := GetSleepTime([]time.Duration{}, 5); got != 1 {
-		t.Errorf("空切片 = %v, 期望 1", got)
-	}
-	//命中0值须被抬升为1
-	if got := GetSleepTime([]time.Duration{0, time.Second}, 0); got != 1 {
-		t.Errorf("0值 = %v, 期望被抬升为 1", got)
-	}
-	//负数同样被抬升
-	if got := GetSleepTime([]time.Duration{-time.Second}, 0); got != 1 {
-		t.Errorf("负数 = %v, 期望 1", got)
-	}
-	//负下标不得panic：CreateHttpClient 的 SetRetryAfter 会传 attempt-1，
-	//attempt为0时即为-1，此处按首个退避时间兜底
-	if got := GetSleepTime(sleeps, -1); got != time.Second {
-		t.Errorf("负下标 = %v, 期望 1s（首个退避时间）", got)
-	}
-	if got := GetSleepTime(sleeps, -99); got != time.Second {
-		t.Errorf("负下标 = %v, 期望 1s", got)
-	}
-}
-
-func TestGenHttpText(t *testing.T) {
-	ctx := GenCtx()
-	//仅名称
-	if got := genHttpText(ctx, "接口", nil); got != "接口" {
-		t.Errorf("genHttpText = %q", got)
-	}
-	//名称+文案，用中文逗号连接
-	if got := genHttpText(ctx, "接口", nil, "异常"); got != "接口，异常" {
-		t.Errorf("genHttpText = %q, 期望 接口，异常", got)
-	}
-	//多段文案
-	if got := genHttpText(ctx, "接口", nil, "异常", "重试"); got != "接口，异常，重试" {
-		t.Errorf("genHttpText = %q", got)
-	}
-	//带值时追加冒号
-	got := genHttpText(ctx, "接口", 404, "响应码失败")
-	if !strings.Contains(got, "404") || !strings.HasPrefix(got, "接口，响应码失败") {
-		t.Errorf("genHttpText = %q", got)
-	}
-	//value为nil不应输出nil字样
-	if got = genHttpText(ctx, "接口", nil, "文案"); strings.Contains(got, "nil") {
-		t.Errorf("genHttpText 输出了nil: %q", got)
-	}
-}
-
-func TestDealHttpResponse(t *testing.T) {
+func TestDealHttpClientResp(t *testing.T) {
 	ctx := GenCtx()
 	//传入错误须原样报错
-	if _, err := DealHttpResponse(ctx, "接口", nil, errors.Errorf("网络错误")); err == nil {
+	if _, err := DealHttpClientResp(ctx, "接口", nil, errors.Errorf("网络错误")); err == nil {
 		t.Errorf("传入err时应返回error")
 	}
 	//响应为空须报错
-	if _, err := DealHttpResponse(ctx, "接口", nil, nil); err == nil {
+	if _, err := DealHttpClientResp(ctx, "接口", nil, nil); err == nil {
 		t.Errorf("响应为空应返回error")
 	}
 
@@ -126,7 +54,7 @@ func TestDealHttpResponse(t *testing.T) {
 	}))
 	defer server.Close()
 	resp, err := resty.New().R().SetContext(ctx).Get(server.URL)
-	body, err := DealHttpResponse(ctx, "接口", resp, err)
+	body, err := DealHttpClientResp(ctx, "接口", resp, err)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -140,7 +68,7 @@ func TestDealHttpResponse(t *testing.T) {
 	}))
 	defer bad.Close()
 	resp, err = resty.New().R().SetContext(ctx).Get(bad.URL)
-	body, err = DealHttpResponse(ctx, "接口", resp, err)
+	body, err = DealHttpClientResp(ctx, "接口", resp, err)
 	if err == nil {
 		t.Errorf("500 响应应返回error")
 	}
@@ -152,116 +80,9 @@ func TestDealHttpResponse(t *testing.T) {
 	}
 }
 
-// HttpApi：成功、JSON非法、业务校验失败三条路径
-func TestHttpApi(t *testing.T) {
-	ctx := GenCtx()
-
-	//正常
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"id":7}`))
-	}))
-	defer server.Close()
-	var object JsonMockResponse
-	if err := HttpApi(ctx, "接口", &object, func() (*resty.Response, error) {
-		return GetHttpRequest(ctx).Get(server.URL)
-	}); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if object.Id != 7 {
-		t.Errorf("Id = %d, 期望 7", object.Id)
-	}
-
-	//响应非法JSON：须报错
-	badJson := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`不是json`))
-	}))
-	defer badJson.Close()
-	var object2 JsonMockResponse
-	if err := HttpApi(ctx, "接口", &object2, func() (*resty.Response, error) {
-		return GetHttpRequest(ctx).Get(badJson.URL)
-	}); err == nil {
-		t.Errorf("非法JSON应返回error")
-	}
-
-	//业务校验失败（HttpSuccess返回错误）：须透出
-	zeroId := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"id":0}`))
-	}))
-	defer zeroId.Close()
-	var object3 JsonMockResponse
-	err := HttpApi(ctx, "接口", &object3, func() (*resty.Response, error) {
-		return GetHttpRequest(ctx).Get(zeroId.URL)
-	})
-	if err == nil {
-		t.Errorf("业务校验失败应返回error")
-	}
-	if !strings.Contains(err.Error(), "业务校验失败") {
-		t.Errorf("未透出业务错误: %v", err)
-	}
-}
-
-// HttpApiTry：失败须重试到成功；重试次数不少于 len(sleeps)+1
-func TestHttpApiTry(t *testing.T) {
-	ctx := GenCtx()
-	var hits atomic.Int64
-
-	//前两次失败、第三次成功
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if hits.Add(1) < 3 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Write([]byte(`{"id":7}`))
-	}))
-	defer server.Close()
-
-	var object JsonMockResponse
-	//用极短的退避避免用例变慢
-	sleeps := []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
-	if err := HttpApiTry(ctx, "接口", 0, sleeps, &object, func() (*resty.Response, error) {
-		return resty.New().R().SetContext(ctx).Get(server.URL)
-	}); err != nil {
-		t.Fatalf("重试后应成功: %+v", err)
-	}
-	if object.Id != 7 {
-		t.Errorf("Id = %d", object.Id)
-	}
-	if got := hits.Load(); got < 3 {
-		t.Errorf("实际请求次数 = %d, 期望至少 3（未按预期重试）", got)
-	}
-}
-
-// 一直失败时须在重试上限后返回错误，而不是无限重试
-func TestHttpApiTryExhausted(t *testing.T) {
-	ctx := GenCtx()
-	var hits atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	var object JsonMockResponse
-	sleeps := []time.Duration{time.Millisecond, time.Millisecond}
-	err := HttpApiTry(ctx, "接口", 0, sleeps, &object, func() (*resty.Response, error) {
-		return resty.New().R().SetContext(ctx).Get(server.URL)
-	})
-	if err == nil {
-		t.Errorf("持续失败应返回error")
-	}
-	//try 至少为 len(sleeps)+1 = 3
-	if got := hits.Load(); got < 3 {
-		t.Errorf("请求次数 = %d, 期望至少 3", got)
-	}
-	//不应无限重试
-	if got := hits.Load(); got > 20 {
-		t.Errorf("请求次数 = %d, 疑似无限重试", got)
-	}
-}
-
 func TestCreateHttpClient(t *testing.T) {
 	//基础参数须生效
-	client := CreateHttpClient(5*time.Second, 3, []time.Duration{time.Millisecond}, map[string]string{"X-Test": "v"}, true)
+	client := CreateHttpClient(5*time.Second, []time.Duration{time.Millisecond}, map[string]string{"X-Test": "v"}, true)
 	if client == nil {
 		t.Fatalf("CreateHttpClient 返回 nil")
 	}
@@ -273,55 +94,20 @@ func TestCreateHttpClient(t *testing.T) {
 		t.Errorf("默认UA = %q", got)
 	}
 	//自定义UA须被保留
-	custom := CreateHttpClient(time.Second, 0, nil, map[string]string{UserAgentKey: "MyUA"}, false)
+	custom := CreateHttpClient(time.Second, nil, map[string]string{UserAgentKey: "MyUA"}, false)
 	if got := custom.Header.Get(UserAgentKey); got != "MyUA" {
 		t.Errorf("自定义UA被覆盖: %q", got)
 	}
 	//nil header 不应panic
-	if got := CreateHttpClient(time.Second, 1, nil, nil, true); got == nil {
+	if got := CreateHttpClient(time.Second, nil, nil, true); got == nil {
 		t.Errorf("nil header 时返回 nil")
 	}
 	//timeout<=0 时不设置超时，也不应panic
-	if got := CreateHttpClient(0, 0, nil, nil, true); got == nil {
+	if got := CreateHttpClient(0, nil, nil, true); got == nil {
 		t.Errorf("timeout=0 时返回 nil")
 	}
 }
 
-// 客户端单例：多次获取须为同一实例，避免连接池被反复重建
-func TestGetHttpClientSingleton(t *testing.T) {
-	c1 := GetHttpClient()
-	c2 := GetHttpClient()
-	if c1 == nil || c2 == nil {
-		t.Fatalf("GetHttpClient 返回 nil")
-	}
-	if c1 != c2 {
-		t.Errorf("GetHttpClient 未复用单例")
-	}
-	s1 := GetHttpClientSpider()
-	s2 := GetHttpClientSpider()
-	if s1 != s2 {
-		t.Errorf("GetHttpClientSpider 未复用单例")
-	}
-	//普通客户端与爬虫客户端须相互独立（重试策略不同）
-	if c1 == s1 {
-		t.Errorf("普通客户端与爬虫客户端为同一实例")
-	}
-	//Request 每次须新建，且携带传入的ctx
-	ctx := GenCtx()
-	r1 := GetHttpRequest(ctx)
-	r2 := GetHttpRequest(ctx)
-	if r1 == nil || r2 == nil {
-		t.Fatalf("GetHttpRequest 返回 nil")
-	}
-	if r1 == r2 {
-		t.Errorf("GetHttpRequest 复用了同一Request对象，并发下会互相污染")
-	}
-	if GetHttpSpiderRequest(ctx) == nil {
-		t.Errorf("GetHttpSpiderRequest 返回 nil")
-	}
-}
-
-// 封禁机制：4xx（非404）会封禁地址，后续请求直接被拦下
 func TestHttpBanOnClientRequest(t *testing.T) {
 	ctx := GenCtx()
 	var hits atomic.Int64
@@ -331,7 +117,7 @@ func TestHttpBanOnClientRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := CreateHttpClient(2*time.Second, 2, []time.Duration{time.Millisecond}, nil, true)
+	client := CreateHttpClient(2*time.Second, []time.Duration{time.Millisecond, time.Millisecond}, nil, true)
 	//首次请求：会真实发出并被判定封禁
 	if _, err := client.R().SetContext(ctx).Get(server.URL); err != nil {
 		t.Logf("首次请求返回: %v", err)
@@ -345,10 +131,10 @@ func TestHttpBanOnClientRequest(t *testing.T) {
 	if err == nil {
 		t.Errorf("被封禁的地址应返回error")
 	}
-	//必须是 HttpBan 哨兵错误，调用方据此区分"封禁"与普通网络错误。
-	//原用例在不匹配时只 t.Logf，任何错误类型都能通过，等于没有校验。
-	if !errors.Is(err, HttpBan) {
-		t.Errorf("封禁错误应可被 errors.Is(err, HttpBan) 识别, got %v", err)
+	//须是封禁错误，调用方据此区分"封禁"与普通网络错误。
+	//哨兵错误现为 CreateHttpClient 内的闭包变量，包外不可见，只能按文案断言
+	if !strings.Contains(err.Error(), "HTTP请求封禁") {
+		t.Errorf("封禁错误文案 = %v, 期望含 HTTP请求封禁", err)
 	}
 	if got := hits.Load(); got != first {
 		t.Errorf("封禁后仍发出了请求: %d -> %d", first, got)
@@ -365,7 +151,7 @@ func TestHttpNotBanOn404(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := CreateHttpClient(2*time.Second, 2, []time.Duration{time.Millisecond}, nil, true)
+	client := CreateHttpClient(2*time.Second, []time.Duration{time.Millisecond, time.Millisecond}, nil, true)
 	client.R().SetContext(ctx).Get(server.URL)
 	first := hits.Load()
 	client.R().SetContext(ctx).Get(server.URL)
@@ -374,15 +160,15 @@ func TestHttpNotBanOn404(t *testing.T) {
 	}
 }
 
-func TestGetIp(t *testing.T) {
-	//GetIp 须安全返回（未取到时为空串），不能panic
-	got := GetIp()
+func TestGetIP(t *testing.T) {
+	//GetIP 须安全返回（未取到时为空串），不能panic
+	got := GetIP()
 	_ = got
 	//写入后可读回，验证原子变量读写自洽
 	old := ip.Load()
 	ip.Store("1.2.3.4")
-	if got = GetIp(); got != "1.2.3.4" {
-		t.Errorf("GetIp = %q, 期望 1.2.3.4", got)
+	if got = GetIP(); got != "1.2.3.4" {
+		t.Errorf("GetIP = %q, 期望 1.2.3.4", got)
 	}
 	//恢复原值，避免影响其他用例的日志字段
 	if old != nil {
@@ -399,55 +185,52 @@ func TestParseCurl(t *testing.T) {
   -H 'Cookie: k=v' \
   --data-raw '{"key":"value"}'`
 
-	param, err := ParseCurl(ctx, curl)
+	url, header, body, err := ParseCurl(ctx, curl)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if param.Url != "https://example.com/api?a=1" {
-		t.Errorf("Url = %q", param.Url)
+	if url != "https://example.com/api?a=1" {
+		t.Errorf("Url = %q", url)
 	}
-	if param.Header["Content-Type"] != "application/json" {
-		t.Errorf("Content-Type = %q", param.Header["Content-Type"])
+	if header["Content-Type"] != "application/json" {
+		t.Errorf("Content-Type = %q", header["Content-Type"])
 	}
-	if param.Header["Cookie"] != "k=v" {
-		t.Errorf("Cookie = %q", param.Header["Cookie"])
+	if header["Cookie"] != "k=v" {
+		t.Errorf("Cookie = %q", header["Cookie"])
 	}
-	if param.Body != `{"key":"value"}` {
-		t.Errorf("Body = %q", param.Body)
+	if body != `{"key":"value"}` {
+		t.Errorf("Body = %q", body)
 	}
 
 	//双引号形式同样须支持
-	param, err = ParseCurl(ctx, "curl \"https://example.com\"\n  -H \"A: b\"")
+	url, header, _, err = ParseCurl(ctx, "curl \"https://example.com\"\n  -H \"A: b\"")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if param.Url != "https://example.com" {
-		t.Errorf("双引号 Url = %q", param.Url)
+	if url != "https://example.com" {
+		t.Errorf("双引号 Url = %q", url)
 	}
-	if param.Header["A"] != "b" {
-		t.Errorf("双引号 Header = %v", param.Header)
+	if header["A"] != "b" {
+		t.Errorf("双引号 Header = %v", header)
 	}
 
 	//空输入：不能panic，Header须已初始化可直接写
-	param, err = ParseCurl(ctx, "")
+	url, header, body, err = ParseCurl(ctx, "")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if param == nil {
-		t.Fatalf("空输入返回 nil")
-	}
-	if param.Header == nil {
+	if header == nil {
 		t.Errorf("Header 未初始化，调用方写入会panic")
 	}
-	if param.Url != "" {
-		t.Errorf("空输入 Url = %q", param.Url)
+	if url != "" || body != "" {
+		t.Errorf("空输入 Url = %q, Body = %q", url, body)
 	}
 	//无冒号的-H须被跳过而非panic
-	if param, err = ParseCurl(ctx, "curl 'https://x.com'\n  -H 'NoColonHeader'"); err != nil {
+	if _, header, _, err = ParseCurl(ctx, "curl 'https://x.com'\n  -H 'NoColonHeader'"); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if len(param.Header) != 0 {
-		t.Errorf("非法头应被跳过: %v", param.Header)
+	if len(header) != 0 {
+		t.Errorf("非法头应被跳过: %v", header)
 	}
 }
 
@@ -478,6 +261,10 @@ func TestExecCurlLocal(t *testing.T) {
 	if _, _, err := ExecCommand(GenCtx(), "command -v curl"); err != nil {
 		t.Skip("环境无curl命令，跳过")
 	}
+	//curl 会继承环境代理，本地httptest若被代理拦截会拿到无关状态码
+	t.Setenv("http_proxy", "")
+	t.Setenv("https_proxy", "")
+	t.Setenv("no_proxy", "127.0.0.1,localhost")
 	ctx := GenCtx()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(UserAgentKey) == "" {
@@ -505,39 +292,39 @@ func TestExecCurlLocal(t *testing.T) {
 	}
 }
 
-// HttpGetIp / flushHttpGetIp：此前无任何用例直接调用。
-// HttpGetIp 依赖外网端点，不能让用例的成败取决于网络；这里只锁定"必须安全返回、
+// LoadIP / flushIP：此前无任何用例直接调用。
+// LoadIP 依赖外网端点，不能让用例的成败取决于网络；这里只锁定"必须安全返回、
 // 不panic、返回值可直接交给 ip.Store 使用"这类与网络无关的契约。
-func TestHttpGetIp(t *testing.T) {
+func TestLoadIP(t *testing.T) {
 	ctx := GenCtx()
 
 	//无论外网是否可达，都不得panic，且返回值必须是可安全使用的字符串
-	got := HttpGetIp(ctx)
+	got := LoadIP(ctx)
 	if strings.ContainsAny(got, "\x00") {
-		t.Errorf("HttpGetIp 返回含NUL字节: %q", got)
+		t.Errorf("LoadIP 返回含NUL字节: %q", got)
 	}
-	//取到内容时，应是去除首尾空白后仍非空的一行文本（flushHttpGetIp 依赖这一点做判空）
+	//取到内容时，应是去除首尾空白后仍非空的一行文本（flushIP 依赖这一点做判空）
 	if trimmed := strings.TrimSpace(got); trimmed != "" {
 		if strings.Contains(trimmed, "\n") {
-			t.Errorf("HttpGetIp 返回多行内容 %q, flushHttpGetIp 会把整段存进ip字段", trimmed)
+			t.Errorf("LoadIP 返回多行内容 %q, flushIP 会把整段存进ip字段", trimmed)
 		}
 	} else {
-		t.Logf("HttpGetIp 未取到内容（外网不可达时属正常）: %q", got)
+		t.Logf("LoadIP 未取到内容（外网不可达时属正常）: %q", got)
 	}
 
 	//ctx 已取消时必须快速返回且不panic，不能挂住调用方
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 	start := time.Now()
-	_ = HttpGetIp(cancelled)
+	_ = LoadIP(cancelled)
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Errorf("已取消ctx下 HttpGetIp 耗时 %v, 未及时返回", elapsed)
+		t.Errorf("已取消ctx下 LoadIP 耗时 %v, 未及时返回", elapsed)
 	}
 }
 
-// flushHttpGetIp 是守护任务体：只校验它对空返回值的保护逻辑，
+// flushIP 是守护任务体：只校验它对空返回值的保护逻辑，
 // 即"取到空串时不得把 ip 覆盖成空"，这是该函数唯一与网络无关的关键分支。
-func TestFlushHttpGetIpKeepsOldOnEmpty(t *testing.T) {
+func TestFlushLoadIPKeepsOldOnEmpty(t *testing.T) {
 	ctx := GenCtx()
 	old := ip.Load()
 	t.Cleanup(func() {
@@ -557,16 +344,16 @@ func TestFlushHttpGetIpKeepsOldOnEmpty(t *testing.T) {
 	cancel()
 	done := make(chan bool, 1)
 	go func() {
-		flushHttpGetIp(cancelled, nil)
+		flushIP(cancelled, nil)
 		done <- true
 	}()
 	select {
 	case <-done:
 	case <-timeAfterMs(15000):
-		t.Fatalf("flushHttpGetIp 在已取消ctx下未退出")
+		t.Fatalf("flushIP 在已取消ctx下未退出")
 	}
 
-	if got := GetIp(); got == "" {
-		t.Errorf("flushHttpGetIp 把已有IP擦成了空串，GetIp = %q", got)
+	if got := GetIP(); got == "" {
+		t.Errorf("flushIP 把已有IP擦成了空串，GetIP = %q", got)
 	}
 }

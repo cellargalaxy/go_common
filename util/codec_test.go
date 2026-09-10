@@ -273,7 +273,7 @@ func TestJwtRoundTrip(t *testing.T) {
 	claims.Ip = "1.2.3.4"
 	claims.ServerName = "svc"
 	claims.LogId = 123456
-	claims.ReqId = "req-1"
+	claims.ReqId = 654321
 
 	token, err := EnJwt(ctx, "secret", claims)
 	if err != nil {
@@ -293,7 +293,7 @@ func TestJwtRoundTrip(t *testing.T) {
 		t.Fatalf("token 无效: %v", parsed)
 	}
 	//逐字段核对
-	if got.Ip != "1.2.3.4" || got.ServerName != "svc" || got.LogId != 123456 || got.ReqId != "req-1" {
+	if got.Ip != "1.2.3.4" || got.ServerName != "svc" || got.LogId != 123456 || got.ReqId != 654321 {
 		t.Errorf("claims 还原不一致: %+v", got)
 	}
 	if got.IssuedAt != claims.IssuedAt || got.ExpiresAt != claims.ExpiresAt {
@@ -442,15 +442,15 @@ func TestEnDefaultJwt(t *testing.T) {
 func TestAuthorizationHeader(t *testing.T) {
 	ctx := GenCtx()
 	//固定头名与Bearer前缀，属对外协议不能变
-	key, value := GenAuthorizationHeader(ctx, "mytoken")
+	key, value := GenAuthHeader(ctx, "mytoken")
 	if key != "Authorization" {
 		t.Errorf("header key = %q, 期望 Authorization", key)
 	}
 	if value != "Bearer mytoken" {
 		t.Errorf("header value = %q, 期望 'Bearer mytoken'", value)
 	}
-	//EnAuthorizationJwt 应产出可解析的Bearer token
-	key, value = EnAuthorizationJwt(ctx, "secret", time.Hour)
+	//EnAuthJwt 应产出可解析的Bearer token
+	key, value = EnAuthJwt(ctx, "secret", time.Hour)
 	if key != "Authorization" {
 		t.Errorf("key = %q", key)
 	}
@@ -469,39 +469,39 @@ func TestAuthorizationHeader(t *testing.T) {
 func TestAesCbc(t *testing.T) {
 	ctx := GenCtx()
 	//往返
-	enc, err := EnAesCbcString(ctx, "aaa", "bbb")
+	enc, err := EnAesCbcStr(ctx, "aaa", "bbb")
 	if err != nil {
-		t.Fatalf("EnAesCbcString 异常: %+v", err)
+		t.Fatalf("EnAesCbcStr 异常: %+v", err)
 	}
 	//密文必须与明文不同，否则等于没加密
 	if enc == "aaa" {
 		t.Errorf("密文与明文相同，未实际加密")
 	}
-	got, err := DeAesCbcString(ctx, enc, "bbb")
+	got, err := DeAesCbcStr(ctx, enc, "bbb")
 	if err != nil {
-		t.Fatalf("DeAesCbcString 异常: %+v", err)
+		t.Fatalf("DeAesCbcStr 异常: %+v", err)
 	}
 	if got != "aaa" {
 		t.Errorf("往返结果 = %q, 期望 aaa", got)
 	}
 	//不同密钥必须产生不同密文
-	enc2, _ := EnAesCbcString(ctx, "aaa", "ccc")
+	enc2, _ := EnAesCbcStr(ctx, "aaa", "ccc")
 	if enc == enc2 {
 		t.Errorf("不同密钥产生了相同密文")
 	}
 	//不同明文必须产生不同密文
-	enc3, _ := EnAesCbcString(ctx, "aab", "bbb")
+	enc3, _ := EnAesCbcStr(ctx, "aab", "bbb")
 	if enc == enc3 {
 		t.Errorf("不同明文产生了相同密文")
 	}
 	//较长文本与多字节字符
 	for _, plain := range []string{"", "中文测试内容", strings.Repeat("x", 1000)} {
-		e, err := EnAesCbcString(ctx, plain, "key")
+		e, err := EnAesCbcStr(ctx, plain, "key")
 		if err != nil {
 			t.Errorf("加密 %d 字节异常: %+v", len(plain), err)
 			continue
 		}
-		d, err := DeAesCbcString(ctx, e, "key")
+		d, err := DeAesCbcStr(ctx, e, "key")
 		if err != nil || d != plain {
 			t.Errorf("往返失败(%d字节): got %q err %v", len(plain), d, err)
 		}
@@ -520,17 +520,17 @@ func TestAesCbc(t *testing.T) {
 // 记录已知安全短板：错误密钥解密不报错，只返回垃圾数据
 func TestAesCbcWrongSecret(t *testing.T) {
 	ctx := GenCtx()
-	enc, err := EnAesCbcString(ctx, "hello", "right")
+	enc, err := EnAesCbcStr(ctx, "hello", "right")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	got, err := DeAesCbcString(ctx, enc, "wrong")
+	got, err := DeAesCbcStr(ctx, enc, "wrong")
 	//当前实现无完整性校验，错误密钥不报错；至少不能还原出原文，也不能panic
 	if err == nil && got == "hello" {
 		t.Errorf("错误密钥竟解出了正确明文")
 	}
 	//非法密文必须报错，不能静默返回空
-	if _, err = DeAesCbcString(ctx, "!!!非法密文!!!", "key"); err == nil {
+	if _, err = DeAesCbcStr(ctx, "!!!非法密文!!!", "key"); err == nil {
 		t.Errorf("非法密文应返回error")
 	}
 }
@@ -667,16 +667,16 @@ func TestHash(t *testing.T) {
 // PKCS1 私钥签名 + 公钥验签
 func TestRsaPkcs1(t *testing.T) {
 	ctx := GenCtx()
-	sign, err := RsaSignString(ctx, "aaa", testRsaPkcs1PrivateKey)
+	sign, err := RsaSignStr(ctx, "aaa", testRsaPkcs1PrivateKey)
 	if err != nil {
-		t.Fatalf("RsaSignString 异常: %+v", err)
+		t.Fatalf("RsaSignStr 异常: %+v", err)
 	}
 	if sign == "" {
 		t.Fatalf("签名为空")
 	}
-	ok, err := RsaVerifyString(ctx, "aaa", sign, testRsaPublicKey1)
+	ok, err := RsaVerifyStr(ctx, "aaa", sign, testRsaPublicKey1)
 	if err != nil {
-		t.Fatalf("RsaVerifyString 异常: %+v", err)
+		t.Fatalf("RsaVerifyStr 异常: %+v", err)
 	}
 	if !ok {
 		t.Errorf("验签失败")
@@ -686,13 +686,13 @@ func TestRsaPkcs1(t *testing.T) {
 // PKCS8 私钥签名 + 公钥验签（两种私钥编码都要支持）
 func TestRsaPkcs8(t *testing.T) {
 	ctx := GenCtx()
-	sign, err := RsaSignString(ctx, "aaa", testRsaPkcs8PrivateKey)
+	sign, err := RsaSignStr(ctx, "aaa", testRsaPkcs8PrivateKey)
 	if err != nil {
-		t.Fatalf("RsaSignString 异常: %+v", err)
+		t.Fatalf("RsaSignStr 异常: %+v", err)
 	}
-	ok, err := RsaVerifyString(ctx, "aaa", sign, testRsaPublicKey2)
+	ok, err := RsaVerifyStr(ctx, "aaa", sign, testRsaPublicKey2)
 	if err != nil {
-		t.Fatalf("RsaVerifyString 异常: %+v", err)
+		t.Fatalf("RsaVerifyStr 异常: %+v", err)
 	}
 	if !ok {
 		t.Errorf("验签失败")
@@ -702,55 +702,55 @@ func TestRsaPkcs8(t *testing.T) {
 // 安全关键：篡改数据、篡改签名、错误公钥都必须验签失败
 func TestRsaVerifyNegative(t *testing.T) {
 	ctx := GenCtx()
-	sign, err := RsaSignString(ctx, "original", testRsaPkcs1PrivateKey)
+	sign, err := RsaSignStr(ctx, "original", testRsaPkcs1PrivateKey)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 
 	//数据被篡改
-	ok, _ := RsaVerifyString(ctx, "tampered", sign, testRsaPublicKey1)
+	ok, _ := RsaVerifyStr(ctx, "tampered", sign, testRsaPublicKey1)
 	if ok {
 		t.Errorf("数据被篡改后仍验签通过")
 	}
 	//签名被篡改
-	ok, _ = RsaVerifyString(ctx, "original", EnBase64(ctx, []byte("badsign")), testRsaPublicKey1)
+	ok, _ = RsaVerifyStr(ctx, "original", EnBase64(ctx, []byte("badsign")), testRsaPublicKey1)
 	if ok {
 		t.Errorf("签名被篡改后仍验签通过")
 	}
 	//空签名
-	if ok, _ = RsaVerifyString(ctx, "original", "", testRsaPublicKey1); ok {
+	if ok, _ = RsaVerifyStr(ctx, "original", "", testRsaPublicKey1); ok {
 		t.Errorf("空签名仍验签通过")
 	}
 
 	//非法密钥必须报错而非panic
 	for _, badKey := range []string{"", "not a key", "-----BEGIN PUBLIC KEY-----\nbad\n-----END PUBLIC KEY-----\n"} {
-		if _, err = RsaVerifyString(ctx, "d", sign, badKey); err == nil {
+		if _, err = RsaVerifyStr(ctx, "d", sign, badKey); err == nil {
 			t.Errorf("非法公钥 %.20q 应报错", badKey)
 		}
 	}
 	for _, badKey := range []string{"", "not a key", "-----BEGIN RSA PRIVATE KEY-----\nbad\n-----END RSA PRIVATE KEY-----\n"} {
-		if _, err = RsaSignString(ctx, "d", badKey); err == nil {
+		if _, err = RsaSignStr(ctx, "d", badKey); err == nil {
 			t.Errorf("非法私钥 %.20q 应报错", badKey)
 		}
 	}
 	//把公钥当私钥用（类型不匹配）须报错
-	if _, err = RsaSignString(ctx, "d", testRsaPublicKey1); err == nil {
+	if _, err = RsaSignStr(ctx, "d", testRsaPublicKey1); err == nil {
 		t.Errorf("公钥当私钥使用应报错")
 	}
 	//签名相同数据两次，PKCS1v15为确定性签名，结果应一致
-	s1, _ := RsaSignString(ctx, "same", testRsaPkcs1PrivateKey)
-	s2, _ := RsaSignString(ctx, "same", testRsaPkcs1PrivateKey)
+	s1, _ := RsaSignStr(ctx, "same", testRsaPkcs1PrivateKey)
+	s2, _ := RsaSignStr(ctx, "same", testRsaPkcs1PrivateKey)
 	if s1 != s2 {
 		t.Errorf("PKCS1v15 签名应为确定性，两次结果不同")
 	}
 	//不同数据签名必须不同
-	s3, _ := RsaSignString(ctx, "different", testRsaPkcs1PrivateKey)
+	s3, _ := RsaSignStr(ctx, "different", testRsaPkcs1PrivateKey)
 	if s1 == s3 {
 		t.Errorf("不同数据产生了相同签名")
 	}
 }
 
-// RsaSign / RsaVerify 的字节级API：此前仅有 RsaSignString/RsaVerifyString 的用例，
+// RsaSign / RsaVerify 的字节级API：此前仅有 RsaSignStr/RsaVerifyStr 的用例，
 // 这两个导出函数从未被直接调用过。它们是String版的底层实现，也是外部可直接使用的公开API，
 // 需覆盖二进制数据（含NUL与非UTF8字节）这一String版无法表达的场景。
 func TestRsaSignVerifyBytes(t *testing.T) {
@@ -783,12 +783,12 @@ func TestRsaSignVerifyBytes(t *testing.T) {
 	}
 
 	//与String版必须自洽：String版即是对字节版做Base64包装
-	strSign, err := RsaSignString(ctx, string(data), testRsaPkcs1PrivateKey)
+	strSign, err := RsaSignStr(ctx, string(data), testRsaPkcs1PrivateKey)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if got := EnBase64(ctx, sign); got != strSign {
-		t.Errorf("RsaSign 与 RsaSignString 结果不一致:\n字节版Base64=%s\nString版  =%s", got, strSign)
+		t.Errorf("RsaSign 与 RsaSignStr 结果不一致:\n字节版Base64=%s\nString版  =%s", got, strSign)
 	}
 
 	//空数据也应能签名（对空哈希签名是合法操作）
@@ -876,11 +876,11 @@ func TestRsaTestKeysAreSamePair(t *testing.T) {
 	}
 	//两个私钥常量编码不同(PKCS1 / PKCS8)，但对应同一把私钥，
 	//故两者的签名结果必须完全一致（PKCS1v15为确定性签名）
-	s1, err := RsaSignString(ctx, "probe", testRsaPkcs1PrivateKey)
+	s1, err := RsaSignStr(ctx, "probe", testRsaPkcs1PrivateKey)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	s8, err := RsaSignString(ctx, "probe", testRsaPkcs8PrivateKey)
+	s8, err := RsaSignStr(ctx, "probe", testRsaPkcs8PrivateKey)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

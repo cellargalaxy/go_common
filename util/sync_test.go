@@ -19,11 +19,11 @@ func TestNewSingleGoPool(t *testing.T) {
 	}
 	defer ClosePool(ctx, pool)
 
-	if got := pool.GetPollName(ctx); got != "mypool" {
-		t.Errorf("GetPollName = %q, 期望 mypool", got)
+	if got := pool.GetPoolName(); got != "mypool" {
+		t.Errorf("GetPoolName = %q, 期望 mypool", got)
 	}
 	//新建池未跑任务，任务名为空、非Doing
-	if got := pool.GetTaskName(ctx); got != "" {
+	if got := pool.GetTaskName(); got != "" {
 		t.Errorf("新建池 GetTaskName = %q, 期望空", got)
 	}
 	if pool.Doing(ctx) {
@@ -44,13 +44,13 @@ func TestSingleGoPoolGetName(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	defer ClosePool(ctx, pool)
-	pool.storeTaskName("T")
-	if got := pool.GetName(ctx); got != "P_T" {
+	pool.setTaskName("T")
+	if got := pool.GetName(); got != "P_T" {
 		t.Errorf("GetName = %q, 期望 P_T", got)
 	}
 	//只有池名
-	pool.storeTaskName("")
-	if got := pool.GetName(ctx); got != "P" {
+	pool.setTaskName("")
+	if got := pool.GetName(); got != "P" {
 		t.Errorf("GetName = %q, 期望 P", got)
 	}
 
@@ -60,13 +60,13 @@ func TestSingleGoPoolGetName(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	defer ClosePool(ctx, anon)
-	anon.storeTaskName("T")
-	if got := anon.GetName(ctx); got != "T" {
+	anon.setTaskName("T")
+	if got := anon.GetName(); got != "T" {
 		t.Errorf("GetName = %q, 期望 T", got)
 	}
 	//都为空时用兜底名
-	anon.storeTaskName("")
-	if got := anon.GetName(ctx); got != "SingleGoPool" {
+	anon.setTaskName("")
+	if got := anon.GetName(); got != "SingleGoPool" {
 		t.Errorf("GetName = %q, 期望 SingleGoPool", got)
 	}
 }
@@ -79,7 +79,7 @@ func TestNewOnceSingleGoPoolName(t *testing.T) {
 	nameInTask.Store("")
 
 	pool, err := NewOnceSingleGoPool(ctx, "MyTask", func(cancelCtx context.Context, pool *SingleGoPool) {
-		nameInTask.Store(pool.GetName(cancelCtx))
+		nameInTask.Store(pool.GetName())
 		started.Store(true)
 	})
 	if err != nil {
@@ -92,12 +92,12 @@ func TestNewOnceSingleGoPoolName(t *testing.T) {
 	if got, _ := nameInTask.Load().(string); got != "MyTask" {
 		t.Errorf("任务内 GetName = %q, 期望 MyTask（不应重复成 MyTask_MyTask）", got)
 	}
-	if got := pool.GetPollName(ctx); got != "" {
+	if got := pool.GetPoolName(); got != "" {
 		t.Errorf("OnceSingleGoPool 的 poolName = %q, 期望空", got)
 	}
 }
 
-// 空任务名必须被拒绝
+// 空任务名须自动生成，而不是让任务名为空导致后续无法按名字识别任务
 func TestSingleGoPoolEmptyTaskName(t *testing.T) {
 	ctx := GenCtx()
 	pool, err := NewSingleGoPool(ctx, "P")
@@ -106,11 +106,19 @@ func TestSingleGoPoolEmptyTaskName(t *testing.T) {
 	}
 	defer ClosePool(ctx, pool)
 
-	if err = pool.AddOnceTask(ctx, "", func(context.Context, *SingleGoPool) {}); err == nil {
-		t.Errorf("空任务名的 AddOnceTask 应报错")
+	if err = pool.AddOnceTask(ctx, "", func(context.Context, *SingleGoPool) {}); err != nil {
+		t.Errorf("空任务名的 AddOnceTask 异常: %+v", err)
 	}
-	if err = pool.AddDaemonTask(ctx, "", time.Millisecond, func(context.Context, *SingleGoPool) {}); err == nil {
-		t.Errorf("空任务名的 AddDaemonTask 应报错")
+	if got := pool.GetTaskName(); got == "" {
+		t.Errorf("空任务名未被自动生成")
+	}
+
+	pool.Cancel(ctx)
+	if err = pool.AddDaemonTask(ctx, "", time.Millisecond, func(context.Context, *SingleGoPool) {}); err != nil {
+		t.Errorf("空任务名的 AddDaemonTask 异常: %+v", err)
+	}
+	if got := pool.GetTaskName(); got == "" {
+		t.Errorf("空任务名未被自动生成")
 	}
 }
 
@@ -144,7 +152,7 @@ func TestOnceSingleGoPool(t *testing.T) {
 	if !pool.Doing(ctx) {
 		t.Errorf("任务运行中 Doing 应为 true")
 	}
-	if got := pool.GetTaskName(ctx); got != "test-1" {
+	if got := pool.GetTaskName(); got != "test-1" {
 		t.Errorf("GetTaskName = %q, 期望 test-1", got)
 	}
 
@@ -375,9 +383,9 @@ func TestSingleGoPoolTaskSelfAccess(t *testing.T) {
 	pool, err := NewOnceSingleGoPool(ctx, "selftask", func(cancelCtx context.Context, p *SingleGoPool) {
 		//运行中在任务内读取状态：若取名实现改回加锁会在此死锁
 		doing.Store(p.Doing(cancelCtx))
-		name.Store(p.GetTaskName(cancelCtx))
+		name.Store(p.GetTaskName())
 		p.IsClose(cancelCtx)
-		p.GetName(cancelCtx)
+		p.GetName()
 		done.Store(true)
 	})
 	if err != nil {
@@ -417,9 +425,9 @@ func TestSingleGoPoolConcurrentRead(t *testing.T) {
 		go func() {
 			for j := 0; j < 50; j++ {
 				pool.Doing(ctx)
-				pool.GetTaskName(ctx)
-				pool.GetName(ctx)
-				pool.GetPollName(ctx)
+				pool.GetTaskName()
+				pool.GetName()
+				pool.GetPoolName()
 				pool.IsClose(ctx)
 			}
 			done <- true
@@ -456,7 +464,7 @@ func TestNewDaemonSingleGoPoolName(t *testing.T) {
 	var done atomic.Bool
 
 	pool, err := NewDaemonSingleGoPool(ctx, "daemon", time.Hour, func(cancelCtx context.Context, p *SingleGoPool) {
-		name.Store(p.GetName(cancelCtx))
+		name.Store(p.GetName())
 		done.Store(true)
 		for !CtxDone(cancelCtx) {
 			time.Sleep(time.Millisecond * 20)
@@ -507,7 +515,7 @@ func TestDaemonSingleGoPoolSameName(t *testing.T) {
 		t.Errorf("同名守护任务启动次数 = %d, 期望 1（去重守卫失效会重启任务）", got)
 	}
 	//任务名不应被后续同名添加改写
-	if got := pool.GetTaskName(ctx); got != "same-daemon" {
+	if got := pool.GetTaskName(); got != "same-daemon" {
 		t.Errorf("GetTaskName = %q, 期望 same-daemon", got)
 	}
 	if !pool.Doing(ctx) {

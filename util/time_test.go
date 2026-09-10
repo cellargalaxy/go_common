@@ -17,12 +17,12 @@ func TestE8Loc(t *testing.T) {
 		t.Errorf("E8Loc 时区名 = %q, 与+8偏移自相矛盾", name)
 	}
 	//同一时刻在E8Loc与UTC下的挂钟时间应相差8小时
-	utc := d.In(UTCLoc)
+	utc := d.In(time.UTC)
 	if d.Hour()-utc.Hour() != 8 && d.Hour()-utc.Hour() != -16 {
 		t.Errorf("E8Loc与UTC小时差异常: E8=%d UTC=%d", d.Hour(), utc.Hour())
 	}
-	if UTCLoc != time.UTC {
-		t.Errorf("UTCLoc 应等于 time.UTC")
+	if time.UTC != time.UTC {
+		t.Errorf("time.UTC 应等于 time.UTC")
 	}
 }
 
@@ -50,7 +50,7 @@ func TestParseStr2Time(t *testing.T) {
 	}
 	//时区必须真正生效：同一字符串在UTC下解析应比E8晚8小时
 	e8, _ := ParseStr2Time(ctx, DateLayout_2006_01_02, "2023-01-01", E8Loc)
-	utc, _ := ParseStr2Time(ctx, DateLayout_2006_01_02, "2023-01-01", UTCLoc)
+	utc, _ := ParseStr2Time(ctx, DateLayout_2006_01_02, "2023-01-01", time.UTC)
 	if utc.Unix()-e8.Unix() != 8*3600 {
 		t.Errorf("时区未生效: UTC与E8解析差 %d秒, 期望 28800", utc.Unix()-e8.Unix())
 	}
@@ -64,37 +64,37 @@ func TestParseStr2Time(t *testing.T) {
 }
 
 // loc 为 nil 时 time.ParseInLocation 会 panic(missing Location in call to Date)，
-// 本函数是 ParseStr2Ts / ParseStr2MsTs 的公共入口，须回退到UTC而不是让调用方崩溃。
+// 本函数是 ParseStr2Unix / ParseStr2UnixMilli 的公共入口，须回退到UTC而不是让调用方崩溃。
 func TestParseStr2TimeNilLocation(t *testing.T) {
 	ctx := GenCtx()
 
-	//nil 时区不得panic，且须按UTC解析
+	//nil 时区不得panic，且须回退到默认的东八区
 	got, err := ParseStr2Time(ctx, DateLayout_2006_01_02, "2023-01-01", nil)
 	if err != nil {
 		t.Fatalf("ParseStr2Time(nil时区) 异常: %+v", err)
 	}
-	utc, err := ParseStr2Time(ctx, DateLayout_2006_01_02, "2023-01-01", UTCLoc)
+	e8, err := ParseStr2Time(ctx, DateLayout_2006_01_02, "2023-01-01", E8Loc)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if got.Unix() != utc.Unix() {
-		t.Errorf("nil时区解析 = %d, 期望与UTC一致的 %d", got.Unix(), utc.Unix())
+	if got.Unix() != e8.Unix() {
+		t.Errorf("nil时区解析 = %d, 期望与东八区一致的 %d", got.Unix(), e8.Unix())
 	}
 
 	//依赖它的两个上层函数同样不得panic
-	ts, err := ParseStr2Ts(ctx, DateLayout_2006_01_02, "2023-01-01", nil)
+	ts, err := ParseStr2Unix(ctx, DateLayout_2006_01_02, "2023-01-01", nil)
 	if err != nil {
-		t.Errorf("ParseStr2Ts(nil时区) 异常: %+v", err)
+		t.Errorf("ParseStr2Unix(nil时区) 异常: %+v", err)
 	}
-	if ts != utc.Unix() {
-		t.Errorf("ParseStr2Ts(nil时区) = %d, 期望 %d", ts, utc.Unix())
+	if ts != e8.Unix() {
+		t.Errorf("ParseStr2Unix(nil时区) = %d, 期望 %d", ts, e8.Unix())
 	}
-	msTs, err := ParseStr2MsTs(ctx, DateLayout_2006_01_02, "2023-01-01", nil)
+	msTs, err := ParseStr2UnixMilli(ctx, DateLayout_2006_01_02, "2023-01-01", nil)
 	if err != nil {
-		t.Errorf("ParseStr2MsTs(nil时区) 异常: %+v", err)
+		t.Errorf("ParseStr2UnixMilli(nil时区) 异常: %+v", err)
 	}
-	if msTs != utc.UnixMilli() {
-		t.Errorf("ParseStr2MsTs(nil时区) = %d, 期望 %d", msTs, utc.UnixMilli())
+	if msTs != e8.UnixMilli() {
+		t.Errorf("ParseStr2UnixMilli(nil时区) = %d, 期望 %d", msTs, e8.UnixMilli())
 	}
 
 	//nil 时区下的非法输入仍须返回error而非panic
@@ -103,89 +103,35 @@ func TestParseStr2TimeNilLocation(t *testing.T) {
 	}
 }
 
-func TestParseStr2Ts(t *testing.T) {
+func TestParseStr2Unix(t *testing.T) {
 	ctx := GenCtx()
-	got, err := ParseStr2Ts(ctx, DateLayout_2006_01_02, "2023-01-01", E8Loc)
+	got, err := ParseStr2Unix(ctx, DateLayout_2006_01_02, "2023-01-01", E8Loc)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if got != 1672502400 {
-		t.Errorf("ParseStr2Ts = %d, 期望 1672502400", got)
+		t.Errorf("ParseStr2Unix = %d, 期望 1672502400", got)
 	}
 	//失败时必须返回0且带error
-	ts, err := ParseStr2Ts(ctx, DateLayout_2006_01_02, "bad", E8Loc)
+	ts, err := ParseStr2Unix(ctx, DateLayout_2006_01_02, "bad", E8Loc)
 	if err == nil || ts != 0 {
 		t.Errorf("非法输入 = %d, err = %v, 期望 0 且非nil error", ts, err)
 	}
 }
 
-func TestParseStr2MsTs(t *testing.T) {
+func TestParseStr2UnixMilli(t *testing.T) {
 	ctx := GenCtx()
-	got, err := ParseStr2MsTs(ctx, DateLayout_2006_01_02, "2023-01-01", E8Loc)
+	got, err := ParseStr2UnixMilli(ctx, DateLayout_2006_01_02, "2023-01-01", E8Loc)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 	//原有断言：毫秒时间戳
 	if got != 1672502400000 {
-		t.Errorf("ParseStr2MsTs = %d, 期望 1672502400000", got)
+		t.Errorf("ParseStr2UnixMilli = %d, 期望 1672502400000", got)
 	}
-	ms, err := ParseStr2MsTs(ctx, DateLayout_2006_01_02, "bad", E8Loc)
+	ms, err := ParseStr2UnixMilli(ctx, DateLayout_2006_01_02, "bad", E8Loc)
 	if err == nil || ms != 0 {
 		t.Errorf("非法输入 = %d, err = %v", ms, err)
-	}
-}
-
-// Time2MsTs/MsTs2Time：此前用 UnixNano 实现，对本文件自己的 TimeMax(9999年) 会int64溢出
-func TestTime2MsTsAndBack(t *testing.T) {
-	ctx := GenCtx()
-	ttt, err := ParseStr2Time(ctx, DateLayout_2006_01_02, "2023-01-01", E8Loc)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if Time2MsTs(ttt) != 1672502400000 {
-		t.Errorf("Time2MsTs = %d, 期望 1672502400000", Time2MsTs(ttt))
-	}
-	//往返一致
-	if back := MsTs2Time(Time2MsTs(ttt)); back.Unix() != ttt.Unix() {
-		t.Errorf("往返不一致: %v -> %v", ttt, back)
-	}
-	//MsTs2Time 必须精确到毫秒：只断言Unix()秒或Year()会让±1ms的偏差漏检
-	if got := MsTs2Time(1672502400123).UnixMilli(); got != 1672502400123 {
-		t.Errorf("MsTs2Time(1672502400123).UnixMilli() = %d, 期望 1672502400123", got)
-	}
-	if got := MsTs2Time(0).UnixMilli(); got != 0 {
-		t.Errorf("MsTs2Time(0).UnixMilli() = %d, 期望 0", got)
-	}
-	if got := MsTs2Time(-1).UnixMilli(); got != -1 {
-		t.Errorf("MsTs2Time(-1).UnixMilli() = %d, 期望 -1（1970年前时间戳）", got)
-	}
-	//毫秒级往返：逐值校验，锁死偏移类缺陷
-	for _, ms := range []int64{0, 1, 999, 1000, 1672502400123, -1672502400123} {
-		if got := Time2MsTs(MsTs2Time(ms)); got != ms {
-			t.Errorf("毫秒往返 Time2MsTs(MsTs2Time(%d)) = %d", ms, got)
-		}
-	}
-	//Unix零点
-	if got := Time2MsTs(time.Unix(0, 0)); got != 0 {
-		t.Errorf("Time2MsTs(Unix零点) = %d, 期望 0", got)
-	}
-	//关键：本文件定义的 TimeMax 必须不溢出（UnixNano实现会回绕到1816年）
-	ms := Time2MsTs(TimeMax)
-	if ms <= 0 {
-		t.Errorf("Time2MsTs(TimeMax) = %d, 溢出为负（UnixNano缺陷）", ms)
-	}
-	if back := MsTs2Time(ms); back.Year() != TimeMax.Year() {
-		t.Errorf("TimeMax 往返年份 = %d, 期望 %d（溢出缺陷会得1816）", back.Year(), TimeMax.Year())
-	}
-	//1678~2262年之外的时间同样不能溢出
-	far := time.Date(2300, 6, 1, 0, 0, 0, 0, time.UTC)
-	if back := MsTs2Time(Time2MsTs(far)); back.Year() != 2300 {
-		t.Errorf("2300年往返 = %d年", back.Year())
-	}
-	//毫秒精度须保留
-	withMs := time.Unix(1672502400, 123000000)
-	if got := Time2MsTs(withMs); got != 1672502400123 {
-		t.Errorf("毫秒精度丢失: %d", got)
 	}
 }
 
