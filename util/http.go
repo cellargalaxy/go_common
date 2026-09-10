@@ -205,16 +205,12 @@ func LoadIP(ctx context.Context) string {
 }
 func GetIP() string {
 	value, _ := ip.Load().(string)
-	if value != "" {
-		return value
-	}
-	ctx := GenCtx()
-	return LoadIP(ctx)
+	return value
 }
 func flushIP(ctx context.Context, pool *SingleGoPool) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("HttpGetIp，退出")
 		}
 	})
 
