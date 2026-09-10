@@ -40,22 +40,22 @@ func TestBookmark(t *testing.T) {
 // 4. bookmark_en.txt -> bookmark_back.csv
 func TestDeAesCbcBookmark(t *testing.T) {
 	ctx := util.GenCtx()
-	secret, err := util.ReadFile2String(ctx, "bookmark_secret.txt", "")
+	secret, err := util.ReadFile2Str(ctx, "bookmark_secret.txt", "")
 	if err != nil {
 		panic(err)
 	}
 	if secret == "" {
 		panic("secret为空")
 	}
-	en, err := util.ReadFile2String(ctx, "bookmark_en.txt", "")
+	en, err := util.ReadFile2Str(ctx, "bookmark_en.txt", "")
 	if err != nil {
 		panic(err)
 	}
-	text, err := util.DeAesCbcString(ctx, en, secret)
+	text, err := util.DeAesCbcStr(ctx, en, secret)
 	if err != nil {
 		panic(err)
 	}
-	err = util.WriteString2File(ctx, text, "bookmark_back.csv")
+	err = util.WriteStr2File(ctx, text, "bookmark_back.csv")
 	if err != nil {
 		panic(err)
 	}
@@ -77,22 +77,22 @@ func TestBookmarkCsv2Xml(t *testing.T) {
 // 9. bookmark_back.csv -> bookmark_en.txt
 func TestEnAesCbcBookmark(t *testing.T) {
 	ctx := util.GenCtx()
-	secret, err := util.ReadFile2String(ctx, "bookmark_secret.txt", "")
+	secret, err := util.ReadFile2Str(ctx, "bookmark_secret.txt", "")
 	if err != nil {
 		panic(err)
 	}
 	if secret == "" {
 		panic("secret为空")
 	}
-	text, err := util.ReadFile2String(ctx, "bookmark_back.csv", "")
+	text, err := util.ReadFile2Str(ctx, "bookmark_back.csv", "")
 	if err != nil {
 		panic(err)
 	}
-	en, err := util.EnAesCbcString(ctx, text, secret)
+	en, err := util.EnAesCbcStr(ctx, text, secret)
 	if err != nil {
 		panic(err)
 	}
-	err = util.WriteString2File(ctx, en, "bookmark_en.txt")
+	err = util.WriteStr2File(ctx, en, "bookmark_en.txt")
 	if err != nil {
 		panic(err)
 	}
