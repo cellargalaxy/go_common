@@ -105,16 +105,16 @@ func GinLog(c *gin.Context) {
 	startTime := time.Now()
 	c.Next()
 	consume := time.Now().Sub(startTime)
-	ip := c.ClientIP()
+	cip := c.ClientIP()
 	method := c.Request.Method
 	uri := c.Request.RequestURI
 	status := c.Writer.Status()
 	if status == http.StatusOK {
-		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Info()
+		logrus.WithContext(c).WithFields(logrus.Fields{"cip": cip, "method": method, "uri": uri, "status": status, "consume": consume}).Info()
 	} else if status >= 500 {
-		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Error()
+		logrus.WithContext(c).WithFields(logrus.Fields{"cip": cip, "method": method, "uri": uri, "status": status, "consume": consume}).Error()
 	} else {
-		logrus.WithContext(c).WithFields(logrus.Fields{"ip": ip, "method": method, "uri": uri, "status": status, "consume": consume}).Warn()
+		logrus.WithContext(c).WithFields(logrus.Fields{"cip": cip, "method": method, "uri": uri, "status": status, "consume": consume}).Warn()
 	}
 }
 
