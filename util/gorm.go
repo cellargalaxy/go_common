@@ -218,7 +218,7 @@ func (this *SelectHandler[Object, Inquiry]) Transaction(ctx context.Context, tx 
 	tx = tx.Model(new(Object))
 	tx = this.Where(ctx, tx, this.inquiry)
 
-	err := tx.Count(&this.Count).Error
+	err := tx.Session(&gorm.Session{}).Count(&this.Count).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
 		return nil
