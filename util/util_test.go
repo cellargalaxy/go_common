@@ -14,7 +14,7 @@ import (
 // testProcStart 记录测试进程启动时刻，logDirRoot 记录 util/log 的绝对路径。
 //
 // Go 先执行被测包（util.go）的 init()，再执行同包测试文件的 init()。util.go 的
-// InitDefaultLog() 在 serverName 为空时用 GenStringId()（时间戳）当目录名，
+// InitDefaultLog() 在 serverName 为空时用 GenStrId()（时间戳）当目录名，
 // 故每跑一次测试都会在 util/log/<时间戳>/ 新增一个日志目录（复核时已累积约280个、23MB）。
 // 这里在切换CWD前记下路径，供 TestMain 前后清理这些目录。
 var logDirRoot string
@@ -37,7 +37,7 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-// isGenIdDirName 判断目录名是否为 GenStringId() 生成的纯数字时间戳ID。
+// isGenIdDirName 判断目录名是否为 GenStrId() 生成的纯数字时间戳ID。
 // 只有这种名字才可能是"serverName为空时自动兜底生成"的日志目录，
 // 用户显式指定的 serverName（如 go_common、svc）不会被误删。
 func isGenIdDirName(name string) bool {
@@ -55,7 +55,7 @@ func isGenIdDirName(name string) bool {
 // cleanTestLogDirs 清理 util/log 下由测试进程产生的日志目录。
 //
 // 需要清理两类：
-//  1. 纯数字时间戳目录：serverName 为空时 InitDefaultLog() 用 GenStringId() 兜底命名，
+//  1. 纯数字时间戳目录：serverName 为空时 InitDefaultLog() 用 GenStrId() 兜底命名，
 //     每次运行新增一个（复核时已累积约280个/23MB）；
 //  2. 固定 serverName 目录（go_common / go_common_test 等）：由 init() 与用例中的日志
 //     写入不断追加，lumberjack 还会滚动出多个 1MB 备份（复核时约11MB）。
@@ -115,7 +115,6 @@ func TestMain(m *testing.M) {
 	//关键：切目录后重新初始化日志，否则 lumberjack 仍按原 CWD 落盘到源码树。
 	//这里传固定 serverName，避免再产生一个时间戳目录（此时CWD已在临时目录，仅为稳妥）。
 	Init(testLogServerName)
-	InitDefaultLog()
 	//用例默认期望 serverName 为 go_common（codec/gin 等用例会与 GetServerName() 对比），
 	//日志初始化完成后即刻复原，不影响后续断言
 	Init("go_common")
@@ -199,16 +198,12 @@ func TestPackageInitialized(t *testing.T) {
 	if numRegexp == nil {
 		t.Errorf("numRegexp 未初始化")
 	}
-	//InitDefaultLog
 	if !ContainNum("1") {
 		t.Errorf("正则功能异常")
 	}
 	//initHttp：http客户端应已就绪
 	ctx := GenCtx()
-	if GetHttpRequest(ctx) == nil {
-		t.Errorf("GetHttpRequest 返回 nil，initHttp 未生效")
-	}
-	if GetHttpSpiderRequest(ctx) == nil {
-		t.Errorf("GetHttpSpiderRequest 返回 nil")
+	if NewHttpClientReq(ctx) == nil {
+		t.Errorf("NewHttpClientReq 返回 nil，initHttp 未生效")
 	}
 }
