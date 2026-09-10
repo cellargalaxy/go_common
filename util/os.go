@@ -94,7 +94,7 @@ func GetEnvBool(key string, defaultValue bool) bool {
 	}
 }
 
-func Defer(callback func(err interface{}, stack string)) {
+func Defer(callback func(panic any, stack string)) {
 	err := recover()
 	var stack string
 	if err != nil {
@@ -176,10 +176,10 @@ func ExecCommand(ctx context.Context, command string) ([]string, []string, error
 
 	wg.Add(1)
 	go func() {
-		defer Defer(func(err interface{}, stack string) {
+		defer Defer(func(panic any, stack string) {
 			wg.Done()
-			if err != nil {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+			if panic != nil {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic}).Error("执行命令，异常")
 			}
 		})
 
@@ -187,10 +187,10 @@ func ExecCommand(ctx context.Context, command string) ([]string, []string, error
 	}()
 	wg.Add(1)
 	go func() {
-		defer Defer(func(err interface{}, stack string) {
+		defer Defer(func(panic any, stack string) {
 			wg.Done()
-			if err != nil {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("执行命令，异常")
+			if panic != nil {
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic}).Error("执行命令，异常")
 			}
 		})
 
