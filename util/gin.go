@@ -64,29 +64,6 @@ func setGinLogId(c *gin.Context, logId int64) {
 	c.Set(LogIdKey, logId)
 	c.Header(LogIdKey, Int2Str(logId))
 }
-func ClaimsGin(c *gin.Context, secret string) {
-	setGinLogId(c, GetLogId(c))
-	defer c.Next()
-
-	var token string
-	authorization := c.Request.Header.Get(AuthorizationKey)
-	authorizations := strings.SplitN(authorization, " ", 2)
-	if len(authorizations) == 2 && authorizations[0] == BearerKey {
-		token = authorizations[1]
-	}
-	if token == "" {
-		token = c.Query(AuthorizationKey)
-	}
-	if token == "" {
-		return
-	}
-	var claims model.Claims
-	DeJwt(c, token, secret, &claims)
-	if claims.LogId > 0 {
-		setGinLogId(c, claims.LogId)
-	}
-	c.Set(ClaimsKey, &claims)
-}
 func ValidateGin(c *gin.Context, secret string) {
 	setGinLogId(c, GetLogId(c))
 
@@ -146,6 +123,7 @@ func ValidateGin(c *gin.Context, secret string) {
 			return
 		}
 	}
+	c.Set(ClaimsKey, &claims)
 	c.Next()
 }
 
