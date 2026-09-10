@@ -439,10 +439,9 @@ func TestDeleteHandlerSql(t *testing.T) {
 }
 
 // 分页语义：pageSize 决定 LIMIT，pageNum 决定 OFFSET=(pageNum-1)*pageSize。
-// 本用例当前必然失败，用于标记已知缺陷：Count 与 Find 复用同一个tx，
-// 而 gorm 只在 Statement.SQL 为空时才重建SQL(callbacks/query.go)，
-// 于是 Find 直接复用了 Count 那条语句，Order/Limit 失效、查回的是count结果。
-// 修法是让 Count 走独立会话：tx.Session(&gorm.Session{}).Count(&this.Count)
+// 同时是"Count必须走独立会话"的回归哨兵：gorm 只在 Statement.SQL 为空时才重建SQL
+// (callbacks/query.go)，Count 与 Find 复用同一个tx会让 Find 直接沿用 count 语句，
+// Order/Limit 失效、查回的是count结果。
 func TestSelectHandlerPaging(t *testing.T) {
 	ctx := GenCtx()
 	db, recorder := newDryRunDb(t)
@@ -460,6 +459,13 @@ func TestSelectHandlerPaging(t *testing.T) {
 	}
 	if !recorder.contains("OFFSET 20") {
 		t.Errorf("未按 pageNum 生成OFFSET: %v", recorder.sqls)
+	}
+	//计数语句与查询语句必须是两条不同的SQL
+	if !recorder.contains("count(*)") {
+		t.Errorf("未生成count语句: %v", recorder.sqls)
+	}
+	if len(recorder.sqls) < 2 {
+		t.Errorf("SQL条数 = %d, 期望计数与查询各一条: %v", len(recorder.sqls), recorder.sqls)
 	}
 	//Count 先于 Order/Limit 执行，故 Where 会被调用一次，Order/Limit 各一次
 	if inquiryHandler.whereCall != 1 || inquiryHandler.orderCall != 1 || inquiryHandler.limitCall != 1 {

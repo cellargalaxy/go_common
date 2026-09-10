@@ -268,6 +268,36 @@ func TestHump2Underscore(t *testing.T) {
 	}
 }
 
+// Underscore2Hump 是 Hump2Underscore 的反向函数，此前无任何用例
+func TestUnderscore2Hump(t *testing.T) {
+	cases := map[string]string{
+		"":           "",
+		"user_name":  "userName",
+		"user":       "user",
+		"user__name": "userName",
+		//首段保持原样，即产出小驼峰
+		"User_name": "UserName",
+		//下划线开头：首段为空串，跳过
+		"_user": "User",
+		//非字母开头的段不做处理
+		"a_1b": "a1b",
+		//非ASCII不受影响
+		"a_中文": "a中文",
+	}
+	for in, want := range cases {
+		if got := Underscore2Hump(in); got != want {
+			t.Errorf("Underscore2Hump(%q) = %q, 期望 %q", in, got, want)
+		}
+	}
+	//已知不可逆：UserName 与 userName 都映射到 user_name，反向只能产出小驼峰
+	if got := Underscore2Hump(Hump2Underscore("UserName")); got != "userName" {
+		t.Errorf("往返 UserName = %q, 期望 userName（大小驼峰映射到同一下划线名，不可逆）", got)
+	}
+	if got := Underscore2Hump(Hump2Underscore("userName")); got != "userName" {
+		t.Errorf("往返 userName = %q, 期望 userName", got)
+	}
+}
+
 func TestReverseStr(t *testing.T) {
 	cases := map[string]string{
 		"": "", "a": "a", "abc": "cba",

@@ -292,6 +292,21 @@ func TestValidateGinPass(t *testing.T) {
 	if c.IsAborted() {
 		t.Errorf("合法token被拒绝")
 	}
+	//放行后须把claims塞进ctx，与 ClaimsGin 对称，否则下游 GetClaims 恒为nil
+	got := GetClaims(c)
+	if got == nil {
+		t.Fatalf("放行后取不到 claims")
+	}
+	if got.Ip != "1.1.1.1" {
+		t.Errorf("claims.Ip = %q", got.Ip)
+	}
+
+	//query 参数方式同样须能取到token
+	_, c = newGinCtx(http.MethodGet, "/?"+AuthorizationKey+"="+token)
+	ValidateGin(c, secret)
+	if c.IsAborted() {
+		t.Errorf("query方式的合法token被拒绝")
+	}
 }
 
 // uri 绑定：claims 指定的uri与实际不符须拒绝，query/fragment 不参与比较
@@ -405,6 +420,10 @@ func TestNewGinGet(t *testing.T) {
 	if resp.Code != http.StatusInternalServerError {
 		t.Errorf("参数非法 Code = %d, 期望 FailCode", resp.Code)
 	}
+	//绑定失败也须是"HTTP200 + body业务码"，用BindQuery(MustBindWith)会先写出400再二次写头
+	if w.Code != http.StatusOK {
+		t.Errorf("参数非法时 HTTP状态码 = %d, 期望 200", w.Code)
+	}
 }
 
 func TestNewGinPost(t *testing.T) {
@@ -442,6 +461,10 @@ func TestNewGinPost(t *testing.T) {
 	}
 	if resp.Code != http.StatusInternalServerError {
 		t.Errorf("非法JSON Code = %d, 期望 FailCode", resp.Code)
+	}
+	//同 Get：不得因绑定失败把HTTP状态码改成400
+	if w.Code != http.StatusOK {
+		t.Errorf("非法JSON时 HTTP状态码 = %d, 期望 200", w.Code)
 	}
 }
 

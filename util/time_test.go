@@ -135,6 +135,75 @@ func TestParseStr2UnixMilli(t *testing.T) {
 	}
 }
 
+// Time2Str 是 ParseStr2Time 的反向函数，此前无任何用例
+func TestTime2Str(t *testing.T) {
+	ctx := GenCtx()
+	date := time.Unix(1672545600, 0) //2023-01-01 12:00:00 +08:00
+	cases := map[string]string{
+		DateLayout_2006_01_02:           "2023-01-01",
+		DateLayout_2006_01:              "2023-01",
+		DateLayout_2006_01_02_15_04_05:  "2023-01-01 12:00:00",
+		DateLayout_2006Y01M02D:          "2023年01月01日",
+		DateLayout_2006Y01M02D15H04m05S: "2023年01月01日 12点00分00秒",
+	}
+	for layout, want := range cases {
+		if got := Time2Str(ctx, layout, date, E8Loc); got != want {
+			t.Errorf("Time2Str(%q) = %q, 期望 %q", layout, got, want)
+		}
+	}
+	//nil 时区须回落东八区，与 ParseStr2Time 对称
+	if got := Time2Str(ctx, DateLayout_2006_01_02_15_04_05, date, nil); got != "2023-01-01 12:00:00" {
+		t.Errorf("Time2Str(nil时区) = %q", got)
+	}
+	//时区必须真正生效
+	if got := Time2Str(ctx, DateLayout_2006_01_02_15_04_05, date, time.UTC); got != "2023-01-01 04:00:00" {
+		t.Errorf("Time2Str(UTC) = %q, 期望 2023-01-01 04:00:00", got)
+	}
+	//与解析方向往返一致
+	back, err := ParseStr2Time(ctx, DateLayout_2006_01_02_15_04_05, Time2Str(ctx, DateLayout_2006_01_02_15_04_05, date, E8Loc), E8Loc)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if back.Unix() != date.Unix() {
+		t.Errorf("往返后 = %d, 期望 %d", back.Unix(), date.Unix())
+	}
+}
+
+// Unix2Str / UnixMilli2Str 与 ParseStr2Unix / ParseStr2UnixMilli 须往返一致
+func TestUnix2Str(t *testing.T) {
+	ctx := GenCtx()
+
+	if got := Unix2Str(ctx, DateLayout_2006_01_02_15_04_05, 1672545600, E8Loc); got != "2023-01-01 12:00:00" {
+		t.Errorf("Unix2Str = %q", got)
+	}
+	if got := Unix2Str(ctx, DateLayout_2006_01_02, 1672545600, nil); got != "2023-01-01" {
+		t.Errorf("Unix2Str(nil时区) = %q", got)
+	}
+	back, err := ParseStr2Unix(ctx, DateLayout_2006_01_02_15_04_05, Unix2Str(ctx, DateLayout_2006_01_02_15_04_05, 1672545600, E8Loc), E8Loc)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if back != 1672545600 {
+		t.Errorf("Unix 往返 = %d, 期望 1672545600", back)
+	}
+
+	//毫秒版：秒级layout会丢掉毫秒部分，故取整秒时间戳往返
+	if got := UnixMilli2Str(ctx, DateLayout_2006_01_02_15_04_05, 1672545600000, E8Loc); got != "2023-01-01 12:00:00" {
+		t.Errorf("UnixMilli2Str = %q", got)
+	}
+	backMilli, err := ParseStr2UnixMilli(ctx, DateLayout_2006_01_02_15_04_05, UnixMilli2Str(ctx, DateLayout_2006_01_02_15_04_05, 1672545600000, E8Loc), E8Loc)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if backMilli != 1672545600000 {
+		t.Errorf("UnixMilli 往返 = %d, 期望 1672545600000", backMilli)
+	}
+	//零值时间戳不能panic
+	if got := Unix2Str(ctx, DateLayout_2006_01_02, 0, E8Loc); got == "" {
+		t.Errorf("Unix2Str(0) 返回空串")
+	}
+}
+
 func TestTimeConstants(t *testing.T) {
 	//TimeMax 是固定时刻常量，其"9999年末"的语义按 E8Loc 成立；
 	//必须在 E8Loc 下断言，否则本地时区为 UTC+14 时会读成 10000 年

@@ -197,6 +197,43 @@ func TestConfigServiceStart(t *testing.T) {
 	}
 }
 
+// Stop 是 Start 的反向操作：须关掉守护池，且关掉后还能再 Start 起来
+func TestConfigServiceStop(t *testing.T) {
+	ctx := GenCtx()
+	h := newFakeConfigHandler(t, "启停配置")
+	service := NewConfigService(h)
+
+	//未启动就 Stop 不得panic
+	service.Stop(ctx)
+
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Start 异常: %+v", err)
+	}
+	t.Cleanup(func() { service.Stop(ctx) })
+	pool := service.pool
+	if pool == nil {
+		t.Fatalf("Start 未创建守护池")
+	}
+
+	service.Stop(ctx)
+	if !pool.IsClose(ctx) {
+		t.Errorf("Stop 后守护池未关闭")
+	}
+	//重复 Stop 不得panic
+	service.Stop(ctx)
+
+	//Stop 后须能重新拉起，且是新的池
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Stop 后重启异常: %+v", err)
+	}
+	if service.pool == nil || service.pool == pool {
+		t.Errorf("Stop 后未重建守护池")
+	}
+	if service.pool.IsClose(ctx) {
+		t.Errorf("重启后池仍为关闭态")
+	}
+}
+
 // 并发读写配置不得触发 race
 func TestConfigServiceConcurrent(t *testing.T) {
 	ctx := GenCtx()

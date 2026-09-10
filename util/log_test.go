@@ -266,11 +266,17 @@ func TestGinLog(t *testing.T) {
 			engine.Use(GinLog)
 			engine.GET("/p", func(ctx *gin.Context) { ctx.Status(c.status) })
 			w := httptest.NewRecorder()
-			engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/p?a=1", nil))
+			request := httptest.NewRequest(http.MethodGet, "/p?a=1", nil)
+			request.RemoteAddr = "1.2.3.4:5678"
+			engine.ServeHTTP(w, request)
 			if w.Code != c.status {
 				t.Errorf("状态码 = %d, 期望 %d", w.Code, c.status)
 			}
 		})
+		//客户端IP须落在日志里：字段名若用IpKey会被钩子注入的本机IP覆盖掉
+		if !strings.Contains(out, "1.2.3.4") {
+			t.Errorf("status=%d 未记录客户端IP: %q", c.status, out)
+		}
 		//须记录方法、完整uri（含query）与状态码
 		if !strings.Contains(out, "GET") {
 			t.Errorf("status=%d 未记录method: %q", c.status, out)
