@@ -4,17 +4,19 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"net/http"
+	"net/url"
+	"path"
+	"sort"
+	"strings"
+	"sync"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/cellargalaxy/go_common/util"
 	"github.com/panjf2000/ants/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"net/url"
-	"path"
-	"sort"
-	"strings"
-	"sync"
 )
 
 const (
@@ -218,7 +220,7 @@ func ParseBookmarkFile(ctx context.Context, filePath string) ([]model.Bookmark, 
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("解析书签，文件不存在")
 		return nil, errors.Errorf("解析书签，文件不存在")
 	}
-	data, err := util.ReadFile2String(ctx, filePath, "")
+	data, err := util.ReadFile2Str(ctx, filePath, "")
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +253,7 @@ func ParseBookmark(ctx context.Context, data string) ([]model.Bookmark, error) {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"url": list[i].Url}).Error("解析书签，Url非法")
 			return nil, errors.Errorf("解析书签，Url非法")
 		}
-		host = util.ReverseString(host)
+		host = util.ReverseStr(host)
 		list[i].Key = host + list[i].Sort + paths[1]
 	}
 
@@ -319,13 +321,11 @@ func CheckBookmark(ctx context.Context, csvPath string, excludeSorts ...string) 
 		defer wg.Done()
 		if param == nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"param": param}).Error("检测书签，协程池参数为空")
-			err = fmt.Errorf("检测书签，协程池参数为空")
 			return
 		}
 		i, ok := param.(int)
 		if !ok {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"param": param}).Error("检测书签，协程池参数转型失败")
-			err = fmt.Errorf("检测书签，协程池参数转型失败")
 			return
 		}
 		for _, excludeSort := range excludeSorts {
@@ -333,12 +333,12 @@ func CheckBookmark(ctx context.Context, csvPath string, excludeSorts ...string) 
 				return
 			}
 		}
-		response, err := util.GetHttpSpiderRequest(ctx).Get(list[i].Url)
-		_, err = util.DealHttpResponse(ctx, "", response, err)
+		response, err := util.NewHttpClientReq(ctx).Get(list[i].Url)
+		_, err = util.DealHttpClientResp(ctx, "检测书签", response, err)
 		if err != nil {
 			list[i].Survive = err.Error()
 		}
-		if list[i].Survive == "，响应码失败: 403" {
+		if response != nil && response.StatusCode() == http.StatusForbidden {
 			list[i].Survive = ""
 		}
 	})
