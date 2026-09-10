@@ -50,6 +50,7 @@ func initLog(serverName, filename string, maxSize, maxBackups, maxAge int, level
 		FieldsOrder:     []string{LogIdKey, ServerNameKey, IpKey, CallerKey}, //字段排序，默认：字段按字母顺序排序
 	})
 
+	logrus.StandardLogger().ReplaceHooks(make(logrus.LevelHooks))
 	var hook LogrusHook
 	hook.serverName = serverName
 	logrus.AddHook(&hook)
