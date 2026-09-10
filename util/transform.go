@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,6 +25,10 @@ func Any2Str(value any) string {
 	if ok {
 		return Int2Str(i32)
 	}
+	i16, ok := value.(int16)
+	if ok {
+		return Int2Str(i16)
+	}
 	i, ok := value.(int)
 	if ok {
 		return Int2Str(i)
@@ -31,6 +36,26 @@ func Any2Str(value any) string {
 	i8, ok := value.(int8)
 	if ok {
 		return Int2Str(i8)
+	}
+	u64, ok := value.(uint64)
+	if ok {
+		return Int2Str(u64)
+	}
+	u32, ok := value.(uint32)
+	if ok {
+		return Int2Str(u32)
+	}
+	u16, ok := value.(uint16)
+	if ok {
+		return Int2Str(u16)
+	}
+	u, ok := value.(uint)
+	if ok {
+		return Int2Str(u)
+	}
+	u8, ok := value.(uint8)
+	if ok {
+		return Int2Str(u8)
 	}
 	f64, ok := value.(float64)
 	if ok {
@@ -66,9 +91,33 @@ func Any2Float[T constraints.Float](value any) T {
 	if ok {
 		return T(i32)
 	}
+	i16, ok := value.(int16)
+	if ok {
+		return T(i16)
+	}
 	i8, ok := value.(int8)
 	if ok {
 		return T(i8)
+	}
+	u64, ok := value.(uint64)
+	if ok {
+		return T(u64)
+	}
+	u, ok := value.(uint)
+	if ok {
+		return T(u)
+	}
+	u32, ok := value.(uint32)
+	if ok {
+		return T(u32)
+	}
+	u16, ok := value.(uint16)
+	if ok {
+		return T(u16)
+	}
+	u8, ok := value.(uint8)
+	if ok {
+		return T(u8)
 	}
 	f64, ok := value.(float64)
 	if ok {
@@ -104,6 +153,10 @@ func Any2Int[T constraints.Integer](value any) T {
 	if ok {
 		return T(i32)
 	}
+	i16, ok := value.(int16)
+	if ok {
+		return T(i16)
+	}
 	i8, ok := value.(int8)
 	if ok {
 		return T(i8)
@@ -115,6 +168,18 @@ func Any2Int[T constraints.Integer](value any) T {
 	u, ok := value.(uint)
 	if ok {
 		return T(u)
+	}
+	u32, ok := value.(uint32)
+	if ok {
+		return T(u32)
+	}
+	u16, ok := value.(uint16)
+	if ok {
+		return T(u16)
+	}
+	u8, ok := value.(uint8)
+	if ok {
+		return T(u8)
 	}
 	f64, ok := value.(float64)
 	if ok {
@@ -136,7 +201,17 @@ func Any2Ints[T constraints.Integer](value ...any) []T {
 
 func Str2Int[T constraints.Integer](value string) T {
 	value = strings.TrimSpace(value)
-	data, _ := strconv.ParseInt(value, 10, 64)
+	data, err := strconv.ParseInt(value, 10, 64)
+	if err == nil {
+		return T(data)
+	}
+	//Int2Str对无符号用的是FormatUint，超过MaxInt64的串会被ParseInt钳制，须按无符号再解析一次
+	if errors.Is(err, strconv.ErrRange) && !strings.HasPrefix(value, "-") {
+		udata, uerr := strconv.ParseUint(value, 10, 64)
+		if uerr == nil {
+			return T(udata)
+		}
+	}
 	return T(data)
 }
 func Str2Ints[T constraints.Integer](value ...string) []T {
@@ -225,6 +300,23 @@ func Hump2Underscore(text string) string {
 		text = text[1:]
 	}
 	return text
+}
+func Underscore2Hump(text string) string {
+	if text == "" {
+		return text
+	}
+	words := strings.Split(text, "_")
+	for i := range words {
+		if i == 0 || words[i] == "" {
+			continue
+		}
+		runes := []rune(words[i])
+		if 'a' <= runes[0] && runes[0] <= 'z' {
+			runes[0] -= 32
+		}
+		words[i] = string(runes)
+	}
+	return strings.Join(words, "")
 }
 
 func ReverseStr(s string) string {
