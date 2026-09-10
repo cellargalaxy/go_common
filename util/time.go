@@ -30,6 +30,13 @@ func ParseStr2Time(ctx context.Context, layout, value string, loc *time.Location
 	return date, err
 }
 
+func Time2Str(ctx context.Context, layout string, date time.Time, loc *time.Location) string {
+	if loc == nil {
+		loc = E8Loc
+	}
+	return date.In(loc).Format(layout)
+}
+
 func ParseStr2Unix(ctx context.Context, layout, value string, loc *time.Location) (int64, error) {
 	date, err := ParseStr2Time(ctx, layout, value, loc)
 	if err != nil {
@@ -38,12 +45,20 @@ func ParseStr2Unix(ctx context.Context, layout, value string, loc *time.Location
 	return date.Unix(), err
 }
 
+func Unix2Str(ctx context.Context, layout string, unix int64, loc *time.Location) string {
+	return Time2Str(ctx, layout, time.Unix(unix, 0), loc)
+}
+
 func ParseStr2UnixMilli(ctx context.Context, layout, value string, loc *time.Location) (int64, error) {
 	date, err := ParseStr2Time(ctx, layout, value, loc)
 	if err != nil {
 		return 0, err
 	}
 	return date.UnixMilli(), err
+}
+
+func UnixMilli2Str(ctx context.Context, layout string, unixMilli int64, loc *time.Location) string {
+	return Time2Str(ctx, layout, time.UnixMilli(unixMilli), loc)
 }
 
 func Sleep(ctx context.Context, duration time.Duration) {
