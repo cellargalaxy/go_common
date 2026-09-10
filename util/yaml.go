@@ -9,10 +9,9 @@ import (
 )
 
 func YamlStruct2Data(ctx context.Context, x interface{}) (data []byte) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("序列化yaml异常")
-			err = errors.Errorf("序列化yaml异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化yaml异常")
 		}
 	})
 
@@ -30,10 +29,10 @@ func YamlStruct2Str(ctx context.Context, x interface{}) string {
 }
 
 func YamlData2Struct(ctx context.Context, data []byte, v interface{}) (err error) {
-	defer Defer(func(err interface{}, stack string) {
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("反序列化yaml异常")
-			err = errors.Errorf("反序列化yaml异常: %+v", err)
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("反序列化yaml异常")
+			err = errors.Errorf("反序列化yaml异常: %+v", panic)
 		}
 	})
 
