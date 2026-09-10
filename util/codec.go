@@ -201,7 +201,7 @@ func RsaSignStr(ctx context.Context, data, privateKey string) (string, error) {
 func RsaSign(ctx context.Context, data, privateKey []byte) ([]byte, error) {
 	block, _ := pem.Decode(privateKey)
 	if block == nil {
-		logrus.WithFields(logrus.Fields{}).Error("RSA签名，非法私钥")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("RSA签名，非法私钥")
 		return nil, errors.Errorf("RSA签名，非法私钥")
 	}
 
@@ -211,30 +211,30 @@ func RsaSign(ctx context.Context, data, privateKey []byte) ([]byte, error) {
 	case "RSA PRIVATE KEY":
 		private, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{"err": err}).Error("RSA签名，私钥解析异常")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("RSA签名，私钥解析异常")
 			return nil, errors.Errorf("RSA签名，私钥解析异常")
 		}
 	case "PRIVATE KEY":
 		pri, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{"err": err}).Error("RSA签名，私钥解析异常")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("RSA签名，私钥解析异常")
 			return nil, errors.Errorf("RSA签名，私钥解析异常")
 		}
 		var ok bool
 		private, ok = pri.(*rsa.PrivateKey)
 		if !ok {
-			logrus.WithFields(logrus.Fields{}).Error("RSA签名，私钥转型失败")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("RSA签名，私钥转型失败")
 			return nil, errors.Errorf("RSA签名，私钥转型失败")
 		}
 	default:
-		logrus.WithFields(logrus.Fields{}).Error("RSA签名，非法私钥")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("RSA签名，非法私钥")
 		return nil, errors.Errorf("RSA签名，非法私钥")
 	}
 
 	dataHash := EnSha256(data)
 	sign, err := rsa.SignPKCS1v15(rand.Reader, private, crypto.SHA256, dataHash)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("RSA签名，签名生成异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("RSA签名，签名生成异常")
 		return nil, errors.Errorf("RSA签名，签名生成异常: %+v", err)
 	}
 
@@ -250,26 +250,26 @@ func RsaVerifyStr(ctx context.Context, data, sign, publicKey string) (bool, erro
 func RsaVerify(ctx context.Context, data, sign, publicKey []byte) (bool, error) {
 	block, _ := pem.Decode(publicKey)
 	if block == nil || block.Type != "PUBLIC KEY" {
-		logrus.WithFields(logrus.Fields{}).Error("RSA校验，非法公钥")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("RSA校验，非法公钥")
 		return false, errors.Errorf("RSA校验，非法公钥")
 	}
 
 	public, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("RSA校验，公钥解析异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("RSA校验，公钥解析异常")
 		return false, errors.Errorf("RSA校验，公钥解析异常")
 	}
 
 	pubRsaKey, ok := public.(*rsa.PublicKey)
 	if !ok {
-		logrus.WithFields(logrus.Fields{}).Error("RSA校验，公钥转型失败")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("RSA校验，公钥转型失败")
 		return false, errors.Errorf("RSA校验，公钥转型失败")
 	}
 
 	dataHash := EnSha256(data)
 	err = rsa.VerifyPKCS1v15(pubRsaKey, crypto.SHA256, dataHash, sign)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"err": err}).Error("RSA校验，签名校验异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("RSA校验，签名校验异常")
 		return false, errors.Errorf("RSA校验，签名校验异常: %+v", err)
 	}
 

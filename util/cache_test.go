@@ -15,13 +15,13 @@ func TestLocalCacheGetSetDel(t *testing.T) {
 		t.Errorf("未设置的键返回了ok")
 	}
 	//设置后可取回
-	c.Set(ctx, "k", "v", time.Hour)
+	c.Set(ctx, "k", time.Hour, "v")
 	got, ok := c.Get(ctx, "k")
 	if !ok || got != "v" {
 		t.Errorf("Get = %q, %v", got, ok)
 	}
 	//覆盖
-	c.Set(ctx, "k", "v2", time.Hour)
+	c.Set(ctx, "k", time.Hour, "v2")
 	if got, _ = c.Get(ctx, "k"); got != "v2" {
 		t.Errorf("覆盖后 = %q", got)
 	}
@@ -34,7 +34,7 @@ func TestLocalCacheGetSetDel(t *testing.T) {
 	c.Del(ctx, "nokey")
 
 	//零值与空串要能被正常区分（ok标志必须可靠）
-	c.Set(ctx, "empty", "", time.Hour)
+	c.Set(ctx, "empty", time.Hour, "")
 	got, ok = c.Get(ctx, "empty")
 	if !ok {
 		t.Errorf("空串值应返回 ok=true，否则调用方无法区分'存了空串'与'没存'")
@@ -49,7 +49,7 @@ func TestLocalCacheExpire(t *testing.T) {
 	ctx := GenCtx()
 	c := NewLocalCache[int]()
 
-	c.Set(ctx, "short", 1, 50*time.Millisecond)
+	c.Set(ctx, "short", 50*time.Millisecond, 1)
 	if _, ok := c.Get(ctx, "short"); !ok {
 		t.Fatalf("刚设置就取不到")
 	}
@@ -59,7 +59,7 @@ func TestLocalCacheExpire(t *testing.T) {
 	}
 
 	//长过期时间不应提前失效
-	c.Set(ctx, "long", 2, time.Hour)
+	c.Set(ctx, "long", time.Hour, 2)
 	time.Sleep(120 * time.Millisecond)
 	if got, ok := c.Get(ctx, "long"); !ok || got != 2 {
 		t.Errorf("长过期键提前失效: %d, %v", got, ok)
@@ -87,7 +87,7 @@ func TestLocalCacheShareByCopy(t *testing.T) {
 	c1 := NewLocalCache[string]()
 	c2 := c1
 
-	c1.Set(ctx, "k", "v", time.Hour)
+	c1.Set(ctx, "k", time.Hour, "v")
 	if got, ok := c2.Get(ctx, "k"); !ok || got != "v" {
 		t.Errorf("拷贝后未共享底层缓存: %q, %v", got, ok)
 	}
@@ -101,13 +101,13 @@ func TestLocalCacheShareByCopy(t *testing.T) {
 	}
 }
 
-func TestLocalCacheGetWithTimeout(t *testing.T) {
+func TestLocalCacheFetch(t *testing.T) {
 	ctx := GenCtx()
 	c := NewLocalCache[string]()
 
 	//首次调用须执行get并缓存
 	calls := 0
-	got, err := c.GetWithTimeout(ctx, "k", time.Hour, func() (string, error) {
+	got, err := c.Fetch(ctx, "k", time.Hour, func() (string, error) {
 		calls++
 		return "first", nil
 	})
@@ -118,7 +118,7 @@ func TestLocalCacheGetWithTimeout(t *testing.T) {
 		t.Errorf("get 调用次数 = %d, 期望 1", calls)
 	}
 	//缓存期内不得再次执行get
-	got, err = c.GetWithTimeout(ctx, "k", time.Hour, func() (string, error) {
+	got, err = c.Fetch(ctx, "k", time.Hour, func() (string, error) {
 		calls++
 		return "second", nil
 	})
@@ -132,8 +132,17 @@ func TestLocalCacheGetWithTimeout(t *testing.T) {
 		t.Errorf("缓存期内 get 被重复调用, 次数 = %d", calls)
 	}
 
-	//超过duration后须重新取值
-	got, err = c.GetWithTimeout(ctx, "k", time.Nanosecond, func() (string, error) {
+	//duration是写入时的缓存时长，缓存过期后须重新取值
+	calls = 0
+	got, err = c.Fetch(ctx, "short", 50*time.Millisecond, func() (string, error) {
+		calls++
+		return "first", nil
+	})
+	if err != nil || got != "first" || calls != 1 {
+		t.Fatalf("首次 = %q, %v, calls=%d", got, err, calls)
+	}
+	time.Sleep(150 * time.Millisecond)
+	got, err = c.Fetch(ctx, "short", time.Hour, func() (string, error) {
 		calls++
 		return "refreshed", nil
 	})
@@ -141,20 +150,30 @@ func TestLocalCacheGetWithTimeout(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	if got != "refreshed" {
-		t.Errorf("超时后 = %q, 期望 refreshed", got)
+		t.Errorf("过期后 = %q, 期望 refreshed", got)
 	}
 	if calls != 2 {
-		t.Errorf("超时后 get 调用次数 = %d, 期望 2", calls)
+		t.Errorf("过期后 get 调用次数 = %d, 期望 2", calls)
+	}
+
+	//get 报错时不得写缓存，否则错误会被固化
+	if _, err = c.Fetch(ctx, "err", time.Hour, func() (string, error) {
+		return "ignored", ErrTestSentinel
+	}); err == nil {
+		t.Errorf("get 报错时应返回error")
+	}
+	if _, ok := c.Get(ctx, "err"); ok {
+		t.Errorf("get 失败后仍写入了缓存")
 	}
 }
 
 // get 返回错误时不得写入缓存，也不得吞掉错误
-func TestLocalCacheGetWithTimeoutError(t *testing.T) {
+func TestLocalCacheFetchError(t *testing.T) {
 	ctx := GenCtx()
 	c := NewLocalCache[string]()
 
 	wantErr := ErrTestSentinel
-	got, err := c.GetWithTimeout(ctx, "k", time.Hour, func() (string, error) {
+	got, err := c.Fetch(ctx, "k", time.Hour, func() (string, error) {
 		return "ignored", wantErr
 	})
 	if err == nil {
@@ -169,7 +188,7 @@ func TestLocalCacheGetWithTimeoutError(t *testing.T) {
 	}
 	//下一次调用必须重新尝试
 	calls := 0
-	got, err = c.GetWithTimeout(ctx, "k", time.Hour, func() (string, error) {
+	got, err = c.Fetch(ctx, "k", time.Hour, func() (string, error) {
 		calls++
 		return "ok", nil
 	})
@@ -182,25 +201,36 @@ func TestLocalCacheTryLock(t *testing.T) {
 	ctx := GenCtx()
 	c := NewLocalCache[int]()
 
-	//首次能拿到
-	if !c.TryLock(ctx, "lk", time.Hour) {
+	//首次能拿到，且须返回>0的锁ID
+	lockId := c.TryLock(ctx, "lk", time.Hour)
+	if lockId <= 0 {
 		t.Fatalf("首次 TryLock 失败")
 	}
 	//重复获取必须失败（互斥）
-	if c.TryLock(ctx, "lk", time.Hour) {
+	if c.TryLock(ctx, "lk", time.Hour) > 0 {
 		t.Errorf("同一key重复 TryLock 应失败")
 	}
 	//不同key互不影响
-	if !c.TryLock(ctx, "other", time.Hour) {
+	if c.TryLock(ctx, "other", time.Hour) <= 0 {
 		t.Errorf("不同key的 TryLock 应成功")
 	}
-	//释放后可再次获取
-	c.UnLock(ctx, "lk")
-	if !c.TryLock(ctx, "lk", time.Hour) {
+	//锁ID不匹配时不得解锁，否则会把别人的锁解掉
+	c.UnLock(ctx, "lk", lockId+1)
+	if c.TryLock(ctx, "lk", time.Hour) > 0 {
+		t.Errorf("错误的锁ID解锁成功了")
+	}
+	//凭正确锁ID释放后可再次获取
+	c.UnLock(ctx, "lk", lockId)
+	newLockId := c.TryLock(ctx, "lk", time.Hour)
+	if newLockId <= 0 {
 		t.Errorf("UnLock 后应能重新获取")
 	}
+	//每次加锁的锁ID必须不同，否则旧持有者能解掉新锁
+	if newLockId == lockId {
+		t.Errorf("两次加锁返回了相同的锁ID: %d", newLockId)
+	}
 	//释放未持有的锁不应panic
-	c.UnLock(ctx, "never-locked")
+	c.UnLock(ctx, "never-locked", 1)
 }
 
 // 锁必须随过期自动释放，避免死锁
@@ -208,14 +238,14 @@ func TestLocalCacheTryLockExpire(t *testing.T) {
 	ctx := GenCtx()
 	c := NewLocalCache[int]()
 
-	if !c.TryLock(ctx, "k", 50*time.Millisecond) {
+	if c.TryLock(ctx, "k", 50*time.Millisecond) <= 0 {
 		t.Fatalf("首次 TryLock 失败")
 	}
-	if c.TryLock(ctx, "k", time.Hour) {
+	if c.TryLock(ctx, "k", time.Hour) > 0 {
 		t.Errorf("未过期时应拿不到锁")
 	}
 	time.Sleep(150 * time.Millisecond)
-	if !c.TryLock(ctx, "k", time.Hour) {
+	if c.TryLock(ctx, "k", time.Hour) <= 0 {
 		t.Errorf("锁过期后应能重新获取，否则会死锁")
 	}
 }
@@ -228,7 +258,7 @@ func TestLocalCacheGetNilValue(t *testing.T) {
 
 	//T=any 且值为nil：必须报告命中
 	ic := NewLocalCache[any]()
-	ic.Set(ctx, "k", nil, time.Hour)
+	ic.Set(ctx, "k", time.Hour, nil)
 	got, ok := ic.Get(ctx, "k")
 	if !ok {
 		t.Errorf("LocalCache[any] 缓存nil后 Get 应命中，实际未命中")
@@ -248,7 +278,7 @@ func TestLocalCacheGetNilValue(t *testing.T) {
 
 	//指针类型缓存nil同样须命中
 	pc := NewLocalCache[*int]()
-	pc.Set(ctx, "p", nil, time.Hour)
+	pc.Set(ctx, "p", time.Hour, nil)
 	pv, pok := pc.Get(ctx, "p")
 	if !pok {
 		t.Errorf("LocalCache[*int] 缓存nil后 Get 应命中")
@@ -259,7 +289,7 @@ func TestLocalCacheGetNilValue(t *testing.T) {
 
 	//map/slice 等可为nil的类型
 	mc := NewLocalCache[map[string]int]()
-	mc.Set(ctx, "m", nil, time.Hour)
+	mc.Set(ctx, "m", time.Hour, nil)
 	if _, ok = mc.Get(ctx, "m"); !ok {
 		t.Errorf("LocalCache[map] 缓存nil后 Get 应命中")
 	}
@@ -272,30 +302,31 @@ func TestLocalCacheTryLockAnyType(t *testing.T) {
 	ctx := GenCtx()
 	ic := NewLocalCache[any]()
 
-	if !ic.TryLock(ctx, "lk", time.Hour) {
+	icLockId := ic.TryLock(ctx, "lk", time.Hour)
+	if icLockId <= 0 {
 		t.Fatalf("LocalCache[any] 首次 TryLock 失败")
 	}
-	if ic.TryLock(ctx, "lk", time.Hour) {
+	if ic.TryLock(ctx, "lk", time.Hour) > 0 {
 		t.Errorf("LocalCache[any] 重复 TryLock 应失败，互斥失效")
 	}
 	//连续多次都不能再拿到
 	for i := 0; i < 3; i++ {
-		if ic.TryLock(ctx, "lk", time.Hour) {
+		if ic.TryLock(ctx, "lk", time.Hour) > 0 {
 			t.Fatalf("LocalCache[any] 第%d次重复 TryLock 仍成功", i+2)
 		}
 	}
 	//释放后可重新获取
-	ic.UnLock(ctx, "lk")
-	if !ic.TryLock(ctx, "lk", time.Hour) {
+	ic.UnLock(ctx, "lk", icLockId)
+	if ic.TryLock(ctx, "lk", time.Hour) <= 0 {
 		t.Errorf("LocalCache[any] UnLock 后应能重新获取")
 	}
 
 	//指针类型同理
 	pc := NewLocalCache[*int]()
-	if !pc.TryLock(ctx, "lk", time.Hour) {
+	if pc.TryLock(ctx, "lk", time.Hour) <= 0 {
 		t.Fatalf("LocalCache[*int] 首次 TryLock 失败")
 	}
-	if pc.TryLock(ctx, "lk", time.Hour) {
+	if pc.TryLock(ctx, "lk", time.Hour) > 0 {
 		t.Errorf("LocalCache[*int] 重复 TryLock 应失败")
 	}
 
@@ -309,7 +340,7 @@ func TestLocalCacheTryLockAnyType(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if ac.TryLock(ctx, "race", time.Hour) {
+			if ac.TryLock(ctx, "race", time.Hour) > 0 {
 				mu.Lock()
 				success++
 				mu.Unlock()
@@ -322,8 +353,8 @@ func TestLocalCacheTryLockAnyType(t *testing.T) {
 	}
 }
 
-// GetWithTimeout 缓存到nil值时不能每次都穿透重取
-func TestLocalCacheGetWithTimeoutNilValue(t *testing.T) {
+// Fetch 缓存到nil值时不能每次都穿透重取
+func TestLocalCacheFetchNilValue(t *testing.T) {
 	ctx := GenCtx()
 	ic := NewLocalCache[any]()
 
@@ -332,14 +363,14 @@ func TestLocalCacheGetWithTimeoutNilValue(t *testing.T) {
 		calls++
 		return nil, nil
 	}
-	if _, err := ic.GetWithTimeout(ctx, "k", time.Hour, getter); err != nil {
-		t.Fatalf("GetWithTimeout 异常: %+v", err)
+	if _, err := ic.Fetch(ctx, "k", time.Hour, getter); err != nil {
+		t.Fatalf("Fetch 异常: %+v", err)
 	}
-	if _, err := ic.GetWithTimeout(ctx, "k", time.Hour, getter); err != nil {
-		t.Fatalf("GetWithTimeout 异常: %+v", err)
+	if _, err := ic.Fetch(ctx, "k", time.Hour, getter); err != nil {
+		t.Fatalf("Fetch 异常: %+v", err)
 	}
 	if calls != 1 {
-		t.Errorf("GetWithTimeout 对nil缓存值调用了 %d 次get, 期望 1 次（nil也应命中缓存）", calls)
+		t.Errorf("Fetch 对nil缓存值调用了 %d 次get, 期望 1 次（nil也应命中缓存）", calls)
 	}
 }
 
@@ -356,7 +387,7 @@ func TestLocalCacheTryLockConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if c.TryLock(ctx, "race-key", time.Hour) {
+			if c.TryLock(ctx, "race-key", time.Hour) > 0 {
 				mu.Lock()
 				success++
 				mu.Unlock()
@@ -369,8 +400,8 @@ func TestLocalCacheTryLockConcurrent(t *testing.T) {
 	}
 }
 
-// 并发 GetWithTimeout 时 get 应只被执行一次（有锁保护）
-func TestLocalCacheGetWithTimeoutConcurrent(t *testing.T) {
+// 并发 Fetch 时 get 应只被执行一次（有锁保护）
+func TestLocalCacheFetchConcurrent(t *testing.T) {
 	ctx := GenCtx()
 	c := NewLocalCache[int]()
 
@@ -382,7 +413,7 @@ func TestLocalCacheGetWithTimeoutConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c.GetWithTimeout(ctx, "k", time.Hour, func() (int, error) {
+			c.Fetch(ctx, "k", time.Hour, func() (int, error) {
 				mu.Lock()
 				calls++
 				mu.Unlock()
@@ -416,7 +447,7 @@ func TestLocalCacheConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(3)
-		go func(n int) { defer wg.Done(); safe(func() { c.Set(ctx, "k", n, time.Minute) }) }(i)
+		go func(n int) { defer wg.Done(); safe(func() { c.Set(ctx, "k", time.Minute, n) }) }(i)
 		go func() { defer wg.Done(); safe(func() { c.Get(ctx, "k") }) }()
 		go func() { defer wg.Done(); safe(func() { c.Del(ctx, "k") }) }()
 	}
@@ -427,7 +458,7 @@ func TestLocalCacheConcurrentAccess(t *testing.T) {
 	}
 
 	//并发结束后缓存必须仍可正常读写，证明内部状态没被并发破坏
-	c.Set(ctx, "after", 42, time.Minute)
+	c.Set(ctx, "after", time.Minute, 42)
 	if got, exist := c.Get(ctx, "after"); !exist || got != 42 {
 		t.Errorf("并发后缓存不可用: got=%v exist=%v", got, exist)
 	}
@@ -439,60 +470,60 @@ func TestLocalCacheConcurrentAccess(t *testing.T) {
 
 // ==== 包内私有缓存函数 ====
 
-func TestExistReqId(t *testing.T) {
+func TestTryLockReqId(t *testing.T) {
 	ctx := GenCtx()
-	reqId := GenStringId()
+	reqId := GenId()
 
 	//首次未出现过
-	if existReqId(ctx, reqId, time.Hour) {
+	if !TryLockReqId(ctx, reqId, time.Hour) {
 		t.Errorf("首个reqId应返回 false")
 	}
 	//第二次必须判定为已存在（幂等去重的核心）
-	if !existReqId(ctx, reqId, time.Hour) {
+	if !!TryLockReqId(ctx, reqId, time.Hour) {
 		t.Errorf("重复reqId应返回 true")
 	}
 	//不同reqId互不影响
-	if existReqId(ctx, GenStringId(), time.Hour) {
+	if !TryLockReqId(ctx, GenId(), time.Hour) {
 		t.Errorf("不同reqId应返回 false")
 	}
 	//过期后视为未出现
-	shortId := GenStringId()
-	existReqId(ctx, shortId, 50*time.Millisecond)
+	shortId := GenId()
+	TryLockReqId(ctx, shortId, 50*time.Millisecond)
 	time.Sleep(150 * time.Millisecond)
-	if existReqId(ctx, shortId, time.Hour) {
+	if !TryLockReqId(ctx, shortId, time.Hour) {
 		t.Errorf("过期后应重新视为未出现")
 	}
 }
 
 func TestHttpBan(t *testing.T) {
 	ctx := GenCtx()
-	address := "http://" + GenStringId() + ".com/path"
+	address := "http://" + GenStrId() + ".com/path"
 
 	//默认未封禁
-	if getHttpBan(ctx, address) {
+	if GetHttpBan(ctx, address) {
 		t.Errorf("默认应未封禁")
 	}
 	//设置后封禁
-	setHttpBan(ctx, address, time.Hour)
-	if !getHttpBan(ctx, address) {
+	SetHttpBan(ctx, address, time.Hour)
+	if !GetHttpBan(ctx, address) {
 		t.Errorf("设置后应为封禁")
 	}
 	//query 与 fragment 须被忽略：同一地址的不同参数应共享封禁状态
-	if !getHttpBan(ctx, address+"?a=1") {
+	if !GetHttpBan(ctx, address+"?a=1") {
 		t.Errorf("带query的同地址应同样被封禁")
 	}
-	if !getHttpBan(ctx, address+"#frag") {
+	if !GetHttpBan(ctx, address+"#frag") {
 		t.Errorf("带fragment的同地址应同样被封禁")
 	}
 	//不同地址不受影响
-	if getHttpBan(ctx, "http://"+GenStringId()+".com/other") {
+	if GetHttpBan(ctx, "http://"+GenStrId()+".com/other") {
 		t.Errorf("其他地址不应被封禁")
 	}
 	//过期后解封
-	shortAddr := "http://" + GenStringId() + ".com"
-	setHttpBan(ctx, shortAddr, 50*time.Millisecond)
+	shortAddr := "http://" + GenStrId() + ".com"
+	SetHttpBan(ctx, shortAddr, 50*time.Millisecond)
 	time.Sleep(150 * time.Millisecond)
-	if getHttpBan(ctx, shortAddr) {
+	if GetHttpBan(ctx, shortAddr) {
 		t.Errorf("过期后应自动解封")
 	}
 }

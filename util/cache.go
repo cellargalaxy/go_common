@@ -37,8 +37,8 @@ func NewLocalCache[T any]() LocalCache[T] {
 }
 
 type LocalCache[T any] struct {
-	lock  *sync.RWMutex //todo，如果不使用指针会有问题吗
-	cache *cache.Cache  //todo，如果不使用指针会有问题吗
+	lock  *sync.RWMutex
+	cache *cache.Cache
 }
 
 func (this *LocalCache[T]) get(ctx context.Context, key string) (T, bool) {
@@ -95,14 +95,34 @@ func (this *LocalCache[T]) Fetch(ctx context.Context, key string, duration time.
 
 	return this.fetch(ctx, key, duration, get)
 }
-func (this *LocalCache[T]) Lock(ctx context.Context, key string, duration time.Duration) int64 {
-	//todo，阻塞获取写锁，超过duration后锁自动释放，待实现
-	return 0 //返回锁ID，如果ID>0，则说明获取所成功，解锁需要使用该ID进行，避免被其他代码错误解锁
+func (this *LocalCache[T]) tryLock(ctx context.Context, key string, duration time.Duration) int64 {
+	lockId := GenId()
+	err := this.cache.Add(key, lockId, duration) //Add是"键不存在才写入"的原子操作
+	if err != nil {
+		return 0
+	}
+	return lockId
 }
 func (this *LocalCache[T]) TryLock(ctx context.Context, key string, duration time.Duration) int64 {
-	//todo，非阻塞获取写锁，超过duration后锁自动释放，待实现
-	return 0 //返回锁ID，如果ID>0，则说明获取所成功，解锁需要使用该ID进行，避免被其他代码错误解锁
+	this.lock.Lock()
+	defer this.lock.Unlock()
+
+	return this.tryLock(ctx, key, duration)
+}
+func (this *LocalCache[T]) unLock(ctx context.Context, key string, lockId int64) {
+	object, ok := this.cache.Get(key)
+	if !ok {
+		return
+	}
+	id, ok := object.(int64)
+	if !ok || id != lockId {
+		return
+	}
+	this.cache.Delete(key)
 }
 func (this *LocalCache[T]) UnLock(ctx context.Context, key string, lockId int64) {
-	//todo，解锁，无论解锁是否成功，都无需要返回
+	this.lock.Lock()
+	defer this.lock.Unlock()
+
+	this.unLock(ctx, key, lockId)
 }
