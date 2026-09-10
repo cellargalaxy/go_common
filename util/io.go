@@ -36,16 +36,16 @@ func ClearPath(fileOrFolderPath string) string {
 func ListFile(ctx context.Context, folderPath string) ([]fs.FileInfo, error) {
 	fileInfo := GetPathInfo(ctx, folderPath)
 	if fileInfo == nil {
-		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，文件夹不存在")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，文件夹不存在")
 		return nil, nil
 	}
 	if !fileInfo.IsDir() {
-		logrus.WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，不是文件夹")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath}).Warn("罗列文件，不是文件夹")
 		return nil, nil
 	}
 	files, err := ioutil.ReadDir(folderPath)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("罗列文件，读取文件夹异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"folderPath": folderPath, "err": err}).Error("罗列文件，读取文件夹异常")
 		return nil, errors.Errorf("罗列文件，读取文件夹异常: %+v", err)
 	}
 	return files, nil
@@ -274,6 +274,10 @@ func ReadFile2Writer(ctx context.Context, filePath string, writer io.Writer, def
 }
 
 func GetFileMd5(ctx context.Context, filePath string) (string, error) {
+	if GetPathInfo(ctx, filePath) == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("文件计算MD5，文件不存在")
+		return "", errors.Errorf("文件计算MD5，文件不存在")
+	}
 	file, err := OpenReadFile(ctx, filePath)
 	if err != nil {
 		return "", err
@@ -296,17 +300,17 @@ func GetFileMd5(ctx context.Context, filePath string) (string, error) {
 func RemoveFile(ctx context.Context, filePath string) error {
 	fileInfo := GetPathInfo(ctx, filePath)
 	if fileInfo == nil {
-		logrus.WithFields(logrus.Fields{"filePath": filePath}).Warn("删除文件，文件不存在")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Warn("删除文件，文件不存在")
 		return nil
 	}
 	if fileInfo.IsDir() {
 		files, err := ioutil.ReadDir(filePath)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("删除文件，读取文件夹异常")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath, "err": err}).Error("删除文件，读取文件夹异常")
 			return errors.Errorf("删除文件，读取文件夹异常: %+v", err)
 		}
 		if len(files) > 0 {
-			logrus.WithFields(logrus.Fields{"filePath": filePath}).Error("删除文件，文件夹不为空")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"filePath": filePath}).Error("删除文件，文件夹不为空")
 			return errors.Errorf("删除文件，文件夹不为空")
 		}
 	}
@@ -325,18 +329,18 @@ func Read2LogByReader(ctx context.Context, reader *bufio.Reader, save bool) ([]s
 		line = strings.TrimSpace(line)
 
 		if line != "" {
-			logrus.WithFields(logrus.Fields{"line": line}).Info("流读取")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"line": line}).Info("流读取")
 		}
 		if line != "" && save {
 			lines = append(lines, line)
 		}
 
 		if err == io.EOF {
-			logrus.WithFields(logrus.Fields{}).Info("流读取，完成")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("流读取，完成")
 			return lines, nil
 		}
 		if err != nil {
-			logrus.WithFields(logrus.Fields{"err": err}).Error("流读取，异常")
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("流读取，异常")
 			return lines, errors.Errorf("流读取，异常: %+v", err)
 		}
 	}
