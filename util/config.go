@@ -24,8 +24,8 @@ func NewConfigService(handler ConfigHandler) *ConfigService {
 
 type ConfigService struct {
 	handler ConfigHandler
-	lock    *sync.Mutex   // 如果不使用指针会有问题吗
-	pool    *SingleGoPool // 如果不使用指针会有问题吗
+	lock    *sync.Mutex
+	pool    *SingleGoPool
 
 	text string
 }
@@ -57,7 +57,10 @@ func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) 
 
 	for {
 		ccc := ReSetLogId(ctx)
-		this.LoadConfig(ccc)
+		err := this.LoadConfig(ccc)
+		if err != nil {
+			logrus.WithContext(ccc).WithFields(logrus.Fields{"err": err}).Error("ConfigService，加载异常")
+		}
 		Sleep(ccc, time.Minute)
 		if CtxDone(ccc) {
 			return
