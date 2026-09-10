@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/panjf2000/ants/v2"
@@ -204,18 +205,15 @@ func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task fun
 }
 
 func (this *SingleGoPool) doing(ctx context.Context) bool {
-	return this.taskName != ""
+	return this.getTaskName() != ""
 }
 func (this *SingleGoPool) Doing(ctx context.Context) bool {
-	this.lock.RLock()
-	defer this.lock.RUnlock()
-
 	return this.doing(ctx)
 }
 func (this *SingleGoPool) cancel(ctx context.Context) {
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，取消")
 	CancelCtx(this.ctxCancel)
-	this.taskName = ""
+	this.setTaskName("")
 }
 func (this *SingleGoPool) Cancel(ctx context.Context) {
 	this.lock.Lock()
@@ -232,15 +230,12 @@ func (this *SingleGoPool) isClose(ctx context.Context) bool {
 	return isClose
 }
 func (this *SingleGoPool) IsClose(ctx context.Context) bool {
-	this.lock.RLock()
-	defer this.lock.RUnlock()
-
 	return this.isClose(ctx)
 }
 func (this *SingleGoPool) close(ctx context.Context) {
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，关闭")
 	CancelCtx(this.ctxCancel)
-	this.taskName = ""
+	this.setTaskName("")
 	if this.pool != nil {
 		this.pool.Release()
 	}
@@ -254,7 +249,7 @@ func (this *SingleGoPool) Close(ctx context.Context) {
 
 func (this *SingleGoPool) getName() string {
 	poolName := this.poolName
-	taskName := this.taskName
+	taskName := this.getTaskName()
 	if poolName != "" && taskName != "" {
 		return fmt.Sprintf("%s_%s", poolName, taskName)
 	}
@@ -267,16 +262,17 @@ func (this *SingleGoPool) getName() string {
 	return "SingleGoPool"
 }
 func (this *SingleGoPool) GetName() string {
-	this.lock.RLock()
-	defer this.lock.RUnlock()
-
 	return this.getName()
 }
+func (this *SingleGoPool) setTaskName(name string) {
+	this.taskName.Store(name)
+}
+func (this *SingleGoPool) getTaskName() string {
+	value, _ := this.taskName.Load().(string)
+	return value
+}
 func (this *SingleGoPool) GetTaskName() string {
-	this.lock.RLock()
-	defer this.lock.RUnlock()
-
-	return this.taskName
+	return this.getTaskName()
 }
 func (this *SingleGoPool) GetPoolName() string {
 	return this.poolName
