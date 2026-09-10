@@ -2,7 +2,7 @@ package util
 
 import "context"
 
-const ignoreErrKey = "ignoreErr"
+const ignoreErrKey = "ignore_err"
 
 func GetCtxValue[T any](ctx context.Context, key string) T {
 	value := ctx.Value(key)

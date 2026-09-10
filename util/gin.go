@@ -3,12 +3,13 @@ package util
 import (
 	"context"
 	"fmt"
-	"github.com/cellargalaxy/go_common/model"
-	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/cellargalaxy/go_common/model"
+	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -17,7 +18,14 @@ const (
 	ClaimsKey        = "claims"
 )
 
-func NewHttpRespByErr(data interface{}, err error) model.HttpResp {
+const (
+	PathPing   = "/api/ping"
+	PathStatic = "/static"
+	PathDebug  = "/debug"
+	PathPprof  = "/pprof"
+)
+
+func NewHttpRespByErr(data any, err error) model.HttpResp {
 	var msg string
 	if err != nil {
 		msg = err.Error()
@@ -26,10 +34,9 @@ func NewHttpRespByErr(data interface{}, err error) model.HttpResp {
 }
 func NewHttpRespByMsg(data interface{}, msg string) model.HttpResp {
 	if msg == "" {
-		return NewHttpResp(model.SuccessCode, "", data)
-	} else {
-		return NewHttpResp(model.FailCode, msg, data)
+		return NewHttpResp(http.StatusOK, "", data)
 	}
+	return NewHttpResp(http.StatusInternalServerError, msg, data)
 }
 func NewHttpResp(code int, msg string, data interface{}) model.HttpResp {
 	return model.HttpResp{Code: code, Msg: msg, Data: data}
@@ -37,7 +44,7 @@ func NewHttpResp(code int, msg string, data interface{}) model.HttpResp {
 
 func Ping(c *gin.Context) {
 	logrus.WithContext(c).WithFields(logrus.Fields{"claims": GetClaims(c)}).Info("Ping")
-	c.JSON(http.StatusOK, NewHttpRespByErr(model.PingResponse{Timestamp: time.Now().Unix(), ServerName: GetServerName()}, nil))
+	c.JSON(http.StatusOK, NewHttpRespByErr(model.PingData{Ip: GetIP(), ServerName: GetServerName(), Timestamp: time.Now().Unix()}, nil))
 }
 
 func GetClaims(ctx context.Context) *model.Claims {
@@ -53,10 +60,10 @@ func SetClaims(ctx context.Context, claims *model.Claims) context.Context {
 func setGinLogId(c *gin.Context) {
 	logId := GetLogId(c)
 	if logId <= 0 {
-		logId = GenLogId()
+		logId = GenId()
 	}
 	c.Set(LogIdKey, logId)
-	c.Header(LogIdKey, Int2String(logId))
+	c.Header(LogIdKey, Int2Str(logId))
 }
 func ClaimsGin(c *gin.Context, secret string) {
 	setGinLogId(c)
@@ -95,7 +102,7 @@ func ValidateGin(c *gin.Context, secret string) {
 	}
 	if token == "" {
 		c.Abort()
-		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "Authorization非法"))
+		c.JSON(http.StatusOK, NewHttpResp(http.StatusUnauthorized, "Authorization非法", nil))
 		return
 	}
 	var claims model.Claims
@@ -107,12 +114,12 @@ func ValidateGin(c *gin.Context, secret string) {
 	}
 	if jwtToken == nil {
 		c.Abort()
-		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "jwtToken为空"))
+		c.JSON(http.StatusOK, NewHttpResp(http.StatusUnauthorized, "jwtToken为空", nil))
 		return
 	}
 	if !jwtToken.Valid {
 		c.Abort()
-		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "jwtToken非法"))
+		c.JSON(http.StatusOK, NewHttpResp(http.StatusUnauthorized, "jwtToken非法", nil))
 		return
 	}
 
@@ -123,10 +130,10 @@ func ValidateGin(c *gin.Context, secret string) {
 		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "jwtToken过期"))
 		return
 	}
-	if claims.ReqId != "" {
-		if existReqId(c, claims.ReqId, duration) {
+	if claims.ReqId > 0 {
+		if !TryLockReqId(c, claims.ReqId, duration) {
 			c.Abort()
-			c.JSON(http.StatusOK, NewHttpResp(model.ReRequestCode, "请求非法重放", nil))
+			c.JSON(http.StatusOK, NewHttpResp(http.StatusConflict, "请求非法重放", nil))
 			return
 		}
 	}
@@ -136,7 +143,7 @@ func ValidateGin(c *gin.Context, secret string) {
 		uri = strings.Split(uri, "?")[0]
 		if claims.Uri != uri {
 			c.Abort()
-			c.JSON(http.StatusOK, NewHttpResp(model.IllegalUriCode, "请求非法uri", nil))
+			c.JSON(http.StatusOK, NewHttpResp(http.StatusBadRequest, "请求非法uri", nil))
 			return
 		}
 	}

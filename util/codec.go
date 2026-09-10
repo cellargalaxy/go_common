@@ -14,21 +14,19 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"hash/crc32"
+	"time"
+
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/wumansgy/goEncrypt"
-	"hash/crc32"
-	"time"
 )
 
 func EnGzip(ctx context.Context, data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	writer := gzip.NewWriter(&buf)
-	//不能用 defer CloseIo 兜底：下面必须显式Close以刷出gzip尾部(CRC/长度)后才能取buf，
-	//再由defer关闭一次即为重复Close。gzip.Writer重复Close虽当前不报错，
-	//但依赖未承诺的实现细节；此处改为在各出口显式关闭，语义明确且不重复。
 	_, err := writer.Write(data)
 	if err != nil {
 		CloseIo(ctx, writer)
@@ -44,13 +42,11 @@ func EnGzip(ctx context.Context, data []byte) ([]byte, error) {
 }
 func DeGzip(ctx context.Context, data []byte) ([]byte, error) {
 	reader, err := gzip.NewReader(bytes.NewReader(data))
-	//先判断异常再注册关闭，否则reader为空指针时关闭会panic
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("GZIP解压，异常")
 		return nil, errors.Errorf("GZIP解压，异常: %+v", err)
 	}
 	defer CloseIo(ctx, reader)
-
 	buf := new(bytes.Buffer)
 	_, err = buf.ReadFrom(reader)
 	if err != nil {
@@ -76,22 +72,22 @@ func deBase64(ctx context.Context, text string) ([]byte, error) {
 	return data, nil
 }
 
-func GenAuthorizationHeader(ctx context.Context, token string) (string, string) {
+func GenAuthHeader(ctx context.Context, token string) (string, string) {
 	return AuthorizationKey, fmt.Sprintf("%s %s", BearerKey, token)
 }
-func EnAuthorizationJwt(ctx context.Context, secret string, expire time.Duration) (string, string) {
+func EnAuthJwt(ctx context.Context, secret string, expire time.Duration) (string, string) {
 	token, _ := EnDefaultJwt(ctx, secret, expire)
-	return GenAuthorizationHeader(ctx, token)
+	return GenAuthHeader(ctx, token)
 }
 func EnDefaultJwt(ctx context.Context, secret string, expire time.Duration) (string, error) {
 	now := time.Now()
 	var claims model.Claims
 	claims.IssuedAt = now.Add(-expire).Unix()
 	claims.ExpiresAt = now.Add(expire).Unix()
-	claims.Ip = GetIp()
+	claims.Ip = GetIP()
 	claims.ServerName = GetServerName()
 	claims.LogId = GetLogId(ctx)
-	claims.ReqId = GetOrGenReqIdString(ctx)
+	claims.ReqId = GetOrGenReqId(ctx)
 	return EnJwt(ctx, secret, claims)
 }
 func EnJwt(ctx context.Context, secret string, claims jwt.Claims) (string, error) {
@@ -126,7 +122,7 @@ func DeJwt(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.T
 	return jwtToken, nil
 }
 
-func DeAesCbcString(ctx context.Context, text, secret string) (string, error) {
+func DeAesCbcStr(ctx context.Context, text, secret string) (string, error) {
 	data, err := deBase64(ctx, text)
 	if err != nil {
 		return "", err
@@ -138,9 +134,6 @@ func DeAesCbcString(ctx context.Context, text, secret string) (string, error) {
 	return string(de), nil
 }
 func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
-	//密文长度必须是AES块大小(16)的正整数倍：goEncrypt 在遇到非完整块时
-	//只打印日志、返回的err为nil，会让调用方把失败当成"解出空串"的成功，
-	//故此处先自行校验，避免静默失败
 	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"len": len(data)}).Error("AesCbc解密异常，密文长度非法")
 		return nil, errors.Errorf("AesCbc解密异常，密文长度非法")
@@ -154,7 +147,7 @@ func DeAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	}
 	return de, nil
 }
-func EnAesCbcString(ctx context.Context, text, secret string) (string, error) {
+func EnAesCbcStr(ctx context.Context, text, secret string) (string, error) {
 	en, err := EnAesCbc(ctx, []byte(text), []byte(secret))
 	if err != nil {
 		return "", err
@@ -173,7 +166,6 @@ func EnAesCbc(ctx context.Context, data, secret []byte) ([]byte, error) {
 	return en, nil
 }
 
-// 256
 func EnSha256(data []byte) []byte {
 	hash := sha256.New()
 	hash.Write(data)
@@ -183,7 +175,6 @@ func EnSha256Hex(data string) string {
 	return fmt.Sprintf("%x", EnSha256([]byte(data)))
 }
 
-// 128
 func EnMd5(data []byte) []byte {
 	hash := md5.New()
 	hash.Write(data)
@@ -200,7 +191,7 @@ func EnCrc32Hex(data string) string {
 	return fmt.Sprintf("%x", EnCrc32([]byte(data)))
 }
 
-func RsaSignString(ctx context.Context, data, privateKey string) (string, error) {
+func RsaSignStr(ctx context.Context, data, privateKey string) (string, error) {
 	sign, err := RsaSign(ctx, []byte(data), []byte(privateKey))
 	if err != nil {
 		return "", err
@@ -249,7 +240,7 @@ func RsaSign(ctx context.Context, data, privateKey []byte) ([]byte, error) {
 
 	return sign, nil
 }
-func RsaVerifyString(ctx context.Context, data, sign, publicKey string) (bool, error) {
+func RsaVerifyStr(ctx context.Context, data, sign, publicKey string) (bool, error) {
 	signData, err := deBase64(ctx, sign)
 	if err != nil {
 		return false, err

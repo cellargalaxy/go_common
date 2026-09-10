@@ -21,11 +21,11 @@ func JsonStruct2DataIndent(x interface{}) []byte {
 	return bytes
 }
 
-func JsonStruct2String(x interface{}) string {
+func JsonStruct2Str(x interface{}) string {
 	bytes := JsonStruct2Data(x)
 	return string(bytes)
 }
-func JsonStruct2StringIndent(x interface{}) string {
+func JsonStruct2StrIndent(x interface{}) string {
 	bytes := JsonStruct2DataIndent(x)
 	return string(bytes)
 }
@@ -38,6 +38,6 @@ func JsonData2Struct(data []byte, v interface{}) error {
 	}
 	return nil
 }
-func JsonString2Struct(data string, v interface{}) error {
+func JsonStr2Struct(data string, v interface{}) error {
 	return JsonData2Struct([]byte(data), v)
 }

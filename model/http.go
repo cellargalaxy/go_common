@@ -1,20 +1,17 @@
 package model
 
 import (
-	"context"
 	"github.com/golang-jwt/jwt"
 	json "github.com/json-iterator/go"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type Claims struct {
 	jwt.StandardClaims
-	Ip         string `json:"ip,omitempty"`
-	ServerName string `json:"sn,omitempty"`
-	LogId      int64  `json:"logid,omitempty"`
-	ReqId      string `json:"reqid,omitempty"`
-	Uri        string `json:"uri,omitempty"`
+	Ip         string `json:"ip,omitempty"`    //某台服务器
+	ServerName string `json:"sn,omitempty"`    //的某个服务
+	LogId      int64  `json:"logid,omitempty"` //在某次调用链中
+	Uri        string `json:"uri,omitempty"`   //向某个接口
+	ReqId      int64  `json:"reqid,omitempty"` //发起的某次请求
 }
 
 func (this Claims) String() string {
@@ -37,26 +34,12 @@ func (this HttpResp) String() string {
 	data, _ := json.MarshalToString(this)
 	return data
 }
-func (this *HttpResp) HttpSuccess(ctx context.Context) error {
-	switch this.Code {
-	case SuccessCode, ReRequestCode:
-		return nil
-	default:
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"this": this}).Error("HTTP响应失败")
-		return errors.Errorf("HTTP响应失败: %+v", this)
-	}
+
+type PingReq struct {
 }
 
-type HttpRequestParam struct {
-	Url    string            `json:"url"`
-	Header map[string]string `json:"header"`
-	Body   string            `json:"body"`
-}
-
-type PingRequest struct {
-}
-
-type PingResponse struct {
-	Timestamp  int64  `json:"ts"`
-	ServerName string `json:"sn"`
+type PingData struct {
+	Ip         string `json:"ip"` //某台服务器
+	ServerName string `json:"sn"` //的某个服务
+	Timestamp  int64  `json:"ts"` //的响应
 }

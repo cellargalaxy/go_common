@@ -3,10 +3,6 @@ package util
 import (
 	"bufio"
 	"context"
-	"github.com/mitchellh/go-homedir"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/constraints"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,18 +12,23 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/constraints"
 )
 
 const serverNameKey = "server_name"
 
-var defaultServerName string
+var serverName string
 
-func InitOs(serverName string) {
-	defaultServerName = serverName
+func initOs(sn string) {
+	serverName = sn
 }
 
 func GetServerName() string {
-	return GetEnvString(serverNameKey, defaultServerName)
+	return GetEnvStr(serverNameKey, serverName)
 }
 
 func GetHome() string {
@@ -53,9 +54,11 @@ func GetExecFolder() string {
 }
 
 func GetEnv(key string) string {
-	return os.Getenv(key)
+	value := os.Getenv(key)
+	value = strings.TrimSpace(value)
+	return value
 }
-func GetEnvString(key, defaultValue string) string {
+func GetEnvStr(key, defaultValue string) string {
 	value := GetEnv(key)
 	if value == "" {
 		value = defaultValue
@@ -63,10 +66,7 @@ func GetEnvString(key, defaultValue string) string {
 	return value
 }
 func GetEnvInt[T constraints.Integer](key string, defaultValue T) T {
-	//必须TrimSpace：环境变量常经shell、.env文件、K8s ConfigMap 传入而带首尾空白，
-	//strconv.Atoi 对 "  123  " 直接报错，会静默退回默认值（配置看似生效实则未生效）。
-	//同文件的 GetEnvBool 已做TrimSpace，此处对齐，避免同一套env读取有两种容忍度。
-	value := strings.TrimSpace(GetEnv(key))
+	value := GetEnv(key)
 	data, err := strconv.Atoi(value)
 	if err != nil {
 		return defaultValue
@@ -74,8 +74,7 @@ func GetEnvInt[T constraints.Integer](key string, defaultValue T) T {
 	return T(data)
 }
 func GetEnvFloat[T constraints.Float](key string, defaultValue T) T {
-	//同 GetEnvInt：未TrimSpace时 "  1.5  " 会静默退回默认值
-	value := strings.TrimSpace(GetEnv(key))
+	value := GetEnv(key)
 	data, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return defaultValue
@@ -84,7 +83,7 @@ func GetEnvFloat[T constraints.Float](key string, defaultValue T) T {
 }
 func GetEnvBool(key string, defaultValue bool) bool {
 	value := GetEnv(key)
-	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ToLower(value)
 	switch value {
 	case "true":
 		return true

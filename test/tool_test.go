@@ -1,11 +1,11 @@
 package test
 
 import (
-	"fmt"
-	"github.com/cellargalaxy/go_common/tool"
-	"github.com/cellargalaxy/go_common/util"
 	"os"
 	"testing"
+
+	"github.com/cellargalaxy/go_common/tool"
+	"github.com/cellargalaxy/go_common/util"
 )
 
 /*
@@ -96,15 +96,4 @@ func TestEnAesCbcBookmark(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func TestLog2Csv(t *testing.T) {
-	ctx := util.GenCtx()
-	tool.Log2Csv(ctx, `$HOME/code/mmm/log/mmm_job/tmp.log`, "log.csv")
-}
-
-func TestBankStatementPdf2Xlsx(t *testing.T) {
-	ctx := util.GenCtx()
-	//tool.CmbBankStatementPdf2Xlsx(ctx, fmt.Sprintf("%s/招商银行交易流水.pdf", util.GetHome()), "CmbBankStatement.xlsx")
-	tool.IcbcBankStatementPdf2Xlsx(ctx, fmt.Sprintf("%s/工商银行交易流水.pdf", util.GetHome()), "IcbcBankStatement.xlsx")
 }

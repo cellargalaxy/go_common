@@ -3,12 +3,12 @@ package util
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/panjf2000/ants/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 func CancelPool(ctx context.Context, pools ...*SingleGoPool) {
@@ -64,60 +64,44 @@ func NewSingleGoPool(ctx context.Context, name string) (*SingleGoPool, error) {
 		return nil, errors.Errorf("创建单协程池，异常: %+v", err)
 	}
 
-	return &SingleGoPool{poolName: name, pool: pool, lock: &sync.Mutex{}}, nil
+	return &SingleGoPool{poolName: name, pool: pool, lock: &sync.RWMutex{}}, nil
 }
 
 type SingleGoPool struct {
-	poolName string
-	pool     *ants.Pool
-
-	lock      *sync.Mutex
-	taskName  atomic.Value //由守护重启协程并发写、日志与Doing并发读，须原子访问
+	poolName  string
+	pool      *ants.Pool    //如果不使用指针会有问题吗
+	lock      *sync.RWMutex //如果不使用指针会有问题吗
+	taskName  string
 	ctxCancel func()
 }
 
 func (this *SingleGoPool) AddDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
-	if name == "" {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Error("单协程池，守护任务名称为空")
-		return errors.Errorf("单协程池，守护任务名称为空")
-	}
-
 	this.lock.Lock()
 	defer this.lock.Unlock()
-
-	if this.loadTaskName() == name {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，守护任务已添加")
-		return nil
-	}
-
-	this.cancel(ctx)
-	ctx, this.ctxCancel = context.WithCancel(ctx)
 
 	var err error
 	err = this.addDaemonTask(ctx, name, sleep, task)
 	if err != nil {
 		return err
 	}
-	this.storeTaskName(name)
-
 	return nil
 }
 func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep time.Duration, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
 		defer Defer(func(err interface{}, stack string) {
 			if err == nil {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，退出")
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，退出")
 			} else {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err, "stack": stack}).Error("单协程池，退出")
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "err": err, "stack": stack}).Error("单协程池，退出")
 			}
 
 			go func() {
 				this.lock.Lock()
-				if this.loadTaskName() == name {
-					this.storeTaskName("")
-				}
-				this.lock.Unlock()
+				defer this.lock.Unlock()
 
+				if this.taskName == name {
+					this.taskName = ""
+				}
 				Sleep(ctx, sleep)
 				this.addDaemonTask(ctx, name, sleep, task)
 			}()
@@ -126,114 +110,137 @@ func (this *SingleGoPool) addDaemonTask(ctx context.Context, name string, sleep 
 		task(ctx, this)
 	}
 
-	if CtxDone(ctx) {
-		this.cancel(ctx)
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，已取消")
+	if name == "" {
+		name = GenStrId()
+	}
+	if this.taskName == name {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，守护任务已添加")
 		return nil
 	}
-	if this.IsClose(ctx) {
+	this.cancel(ctx)
+	ctx, this.ctxCancel = context.WithCancel(ctx)
+
+	if CtxDone(ctx) {
 		this.cancel(ctx)
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，已关闭")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，已取消")
+		return nil
+	}
+	if this.isClose(ctx) {
+		this.cancel(ctx)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，已关闭")
 		return nil
 	}
 	err := this.pool.Submit(submit)
 	if err != nil {
 		this.cancel(ctx)
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err}).Error("单协程池，添加守护任务异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "err": err}).Error("单协程池，添加守护任务异常")
 		return errors.Errorf("单协程池，添加守护任务异常: %+v", err)
 	}
-	this.storeTaskName(name)
+	this.taskName = name
 
 	return nil
 }
 func (this *SingleGoPool) AddOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
-	if name == "" {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Error("单协程池，单次任务名称为空")
-		return errors.Errorf("单协程池，单次任务名称为空")
-	}
-
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	if this.loadTaskName() == name {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，单次任务已添加")
-		return nil
-	}
-
-	this.cancel(ctx)
-	ctx, this.ctxCancel = context.WithCancel(ctx)
-
-	var err error
-	err = this.addOnceTask(ctx, name, task)
+	err := this.addOnceTask(ctx, name, task)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 func (this *SingleGoPool) addOnceTask(ctx context.Context, name string, task func(cancelCtx context.Context, pool *SingleGoPool)) error {
 	submit := func() {
 		defer Defer(func(err interface{}, stack string) {
 			if err == nil {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，退出")
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，退出")
 			} else {
-				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err, "stack": stack}).Error("单协程池，退出")
+				logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "err": err, "stack": stack}).Error("单协程池，退出")
 			}
 
 			go func() {
 				this.lock.Lock()
-				if this.loadTaskName() == name {
-					this.storeTaskName("")
+				defer this.lock.Unlock()
+
+				if this.taskName == name {
+					this.taskName = ""
 				}
-				this.lock.Unlock()
 			}()
 		})
 
 		task(ctx, this)
 	}
 
-	if CtxDone(ctx) {
-		this.cancel(ctx)
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，已取消")
+	if name == "" {
+		name = GenStrId()
+	}
+	if this.taskName == name {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": name}).Warn("单协程池，单次任务已添加")
 		return nil
 	}
-	if this.IsClose(ctx) {
+	this.cancel(ctx)
+	ctx, this.ctxCancel = context.WithCancel(ctx)
+
+	if CtxDone(ctx) {
 		this.cancel(ctx)
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，已关闭")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，已取消")
+		return nil
+	}
+	if this.isClose(ctx) {
+		this.cancel(ctx)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，已关闭")
 		return nil
 	}
 	err := this.pool.Submit(submit)
 	if err != nil {
 		this.cancel(ctx)
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "err": err}).Error("单协程池，添加单次任务异常")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "err": err}).Error("单协程池，添加单次任务异常")
 		return errors.Errorf("单协程池，添加单次任务异常: %+v", err)
 	}
-	this.storeTaskName(name)
+	this.taskName = name
 
 	return nil
 }
+
+func (this *SingleGoPool) doing(ctx context.Context) bool {
+	return this.taskName != ""
+}
 func (this *SingleGoPool) Doing(ctx context.Context) bool {
-	return this.GetTaskName(ctx) != ""
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
+	return this.doing(ctx)
 }
 func (this *SingleGoPool) cancel(ctx context.Context) {
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，取消")
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，取消")
 	CancelCtx(this.ctxCancel)
-	this.storeTaskName("")
+	this.taskName = ""
 }
 func (this *SingleGoPool) Cancel(ctx context.Context) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
+
 	this.cancel(ctx)
 }
-func (this *SingleGoPool) IsClose(ctx context.Context) bool {
-	isClose := this.pool.IsClosed()
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx), "isClose": isClose}).Info("单协程池")
+func (this *SingleGoPool) isClose(ctx context.Context) bool {
+	isClose := true
+	if this.pool != nil {
+		isClose = this.pool.IsClosed()
+	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName(), "isClose": isClose}).Info("单协程池")
 	return isClose
 }
+func (this *SingleGoPool) IsClose(ctx context.Context) bool {
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
+	return this.isClose(ctx)
+}
 func (this *SingleGoPool) close(ctx context.Context) {
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.GetName(ctx)}).Info("单协程池，关闭")
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"name": this.getName()}).Info("单协程池，关闭")
 	CancelCtx(this.ctxCancel)
-	this.storeTaskName("")
+	this.taskName = ""
 	if this.pool != nil {
 		this.pool.Release()
 	}
@@ -241,34 +248,36 @@ func (this *SingleGoPool) close(ctx context.Context) {
 func (this *SingleGoPool) Close(ctx context.Context) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
+
 	this.close(ctx)
 }
-func (this *SingleGoPool) GetPollName(ctx context.Context) string {
-	return this.poolName
-}
 
-// 原子读写taskName：不能改用互斥锁，pool.Submit会在持锁期间阻塞，
-// 届时任务协程的日志取名若再抢锁将直接死锁
-func (this *SingleGoPool) loadTaskName() string {
-	value, _ := this.taskName.Load().(string)
-	return value
-}
-func (this *SingleGoPool) storeTaskName(name string) {
-	this.taskName.Store(name)
-}
-func (this *SingleGoPool) GetTaskName(ctx context.Context) string {
-	return this.loadTaskName()
-}
-func (this *SingleGoPool) GetName(ctx context.Context) string {
-	taskName := this.loadTaskName()
-	if this.poolName != "" && taskName != "" {
-		return fmt.Sprintf("%s_%s", this.poolName, taskName)
+func (this *SingleGoPool) getName() string {
+	poolName := this.poolName
+	taskName := this.taskName
+	if poolName != "" && taskName != "" {
+		return fmt.Sprintf("%s_%s", poolName, taskName)
 	}
-	if this.poolName != "" {
-		return this.poolName
+	if poolName != "" {
+		return poolName
 	}
 	if taskName != "" {
 		return taskName
 	}
 	return "SingleGoPool"
+}
+func (this *SingleGoPool) GetName() string {
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
+	return this.getName()
+}
+func (this *SingleGoPool) GetTaskName() string {
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
+	return this.taskName
+}
+func (this *SingleGoPool) GetPoolName() string {
+	return this.poolName
 }

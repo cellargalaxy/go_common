@@ -2,20 +2,22 @@ package util
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"strings"
-	"time"
 )
 
 const (
-	DefaultSqlLen = 512
+	LogSqlLen   = 512
+	DbBatchSize = 1000
 )
 
 func NewDefaultGormLog() GormLog {
-	return NewGormLog([]error{gorm.ErrRecordNotFound}, DefaultSqlLen, false, true, true, false, true)
+	return NewGormLog([]error{gorm.ErrRecordNotFound}, LogSqlLen, false, true, true, false, true)
 }
 func NewGormLog(ignoreErrs []error, sqlLen int, insertShow, deleteShow, selectShow, updateShow, otherShow bool) GormLog {
 	return GormLog{IgnoreErrs: ignoreErrs, SqlLen: sqlLen, InsertShow: insertShow, DeleteShow: deleteShow, SelectShow: selectShow, UpdateShow: updateShow, OtherShow: otherShow}
@@ -83,114 +85,161 @@ func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (strin
 	}
 }
 
-type GormObject interface {
-	TableName() string
-}
-type GormInquiry interface {
-	GormObject
-	GetPageNum() int
-	GetPageSize() int
-}
-type GormHandler[Inquiry GormInquiry] interface {
-	GetName(ctx context.Context) string
-	GetDb(ctx context.Context, where *gorm.DB) *gorm.DB
-	Where(ctx context.Context, where *gorm.DB, inquiry Inquiry) *gorm.DB
-}
-type GormService[Object GormObject, Inquiry GormInquiry] struct {
-	GormHandler[Inquiry]
+type TransactionHandler interface {
+	Transaction(ctx context.Context, tx *gorm.DB) error
 }
 
-func (this *GormService[Object, Inquiry]) Insert(ctx context.Context, object ...*Object) ([]*Object, error) {
-	if len(object) == 0 {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("插入%s，为空", this.GetName(ctx))
-		return object, nil
-	}
-	where := this.GetDb(ctx, nil)
-	err := where.Create(&object).Error
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("插入%s，异常", this.GetName(ctx))
-		return object, errors.Errorf("插入%s，异常: %+v", this.GetName(ctx), err)
-	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("插入%s，完成", this.GetName(ctx))
-	return object, nil
+func Transaction(ctx context.Context, db *gorm.DB, handlers ...TransactionHandler) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i := range handlers {
+			err := handlers[i].Transaction(ctx, tx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return err
 }
-func (this *GormService[Object, Inquiry]) Delete(ctx context.Context, inquiry Inquiry) error {
-	var where *gorm.DB
-	where = this.Where(ctx, where, inquiry)
-	if where == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"inquiry": inquiry}).Warnf("删除%s，条件为空", this.GetName(ctx))
-		return errors.Errorf("删除%s，条件为空", this.GetName(ctx))
+
+func NewInsertHandler[Object any](name string, object ...*Object) *InsertHandler[Object] {
+	handler := new(InsertHandler[Object])
+	handler.name = name
+	handler.Object = object
+	return handler
+}
+
+type InsertHandler[Object any] struct {
+	name   string
+	Object []*Object
+}
+
+func (this *InsertHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+	if len(this.Object) == 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("插入%s，为空", this.name)
+		return nil
 	}
-	err := where.Delete(&inquiry).Error
+	err := tx.CreateInBatches(this.Object, DbBatchSize).Error
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("删除%s，异常", this.GetName(ctx))
-		return errors.Errorf("删除%s，异常: %+v", this.GetName(ctx), err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("插入%s，异常", this.name)
+		return errors.Errorf("插入%s，异常: %+v", this.name, err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("删除%s，完成", this.GetName(ctx))
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("插入%s，完成", this.name)
 	return nil
 }
-func (this *GormService[Object, Inquiry]) Update(ctx context.Context, object *Object) (*Object, int64, error) {
-	if object == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("更新%s，为空", this.GetName(ctx))
-		return object, 0, nil
+
+func NewUpdateHandler[Object any](name string, object *Object) *UpdateHandler[Object] {
+	handler := new(UpdateHandler[Object])
+	handler.name = name
+	handler.Object = object
+	return handler
+}
+
+type UpdateHandler[Object any] struct {
+	name   string
+	Object *Object
+	Count  int64
+}
+
+func (this *UpdateHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+	if this.Object == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("更新%s，为空", this.name)
+		return nil
 	}
-	where := this.GetDb(ctx, nil)
-	where = where.Model(&object)
-	result := where.Select("*").Updates(&object)
-	count := result.RowsAffected
+	tx = tx.Model(this.Object)
+	result := tx.Select("*").Updates(this.Object)
+	this.Count = result.RowsAffected
 	err := result.Error
 	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("更新%s，异常", this.GetName(ctx))
-		return object, count, errors.Errorf("更新%s，异常: %+v", this.GetName(ctx), err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("更新%s，异常", this.name)
+		return errors.Errorf("更新%s，异常: %+v", this.name, err)
 	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("更新%s，完成", this.GetName(ctx))
-	return object, count, nil
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("更新%s，完成", this.name)
+	return nil
 }
-func (this *GormService[Object, Inquiry]) Select(ctx context.Context, inquiry Inquiry) ([]*Object, int64, error) {
-	where := this.GetDb(ctx, nil)
-	where = where.Model(&inquiry)
-	where = this.Where(ctx, where, inquiry)
 
-	var count int64
-	err := where.Count(&count).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.GetName(ctx))
-		return nil, count, nil
-	}
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Warnf("查询%s，异常", this.GetName(ctx))
-		return nil, count, errors.Errorf("查询%s，异常: %+v", this.GetName(ctx), err)
-	}
-
-	pageSize := inquiry.GetPageSize()
-	if pageSize > 0 {
-		where = where.Limit(pageSize)
-	}
-	pageNum := inquiry.GetPageNum()
-	if pageNum > 0 {
-		where = where.Offset((pageNum - 1) * pageSize)
-	}
-
-	var object []*Object
-	err = where.Find(&object).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.GetName(ctx))
-		return object, count, nil
-	}
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("查询%s，异常", this.GetName(ctx))
-		return object, count, errors.Errorf("查询%s, 异常: %+v", this.GetName(ctx), err)
-	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"len": len(object)}).Infof("查询%s，完成", this.GetName(ctx))
-	return object, count, nil
+type InquiryHandler[Inquiry any] interface {
+	Where(ctx context.Context, tx *gorm.DB, inquiry Inquiry) *gorm.DB
+	Order(ctx context.Context, tx *gorm.DB, inquiry Inquiry) *gorm.DB
+	Limit(ctx context.Context, tx *gorm.DB, inquiry Inquiry) *gorm.DB
 }
-func (this *GormService[Object, Inquiry]) SelectOne(ctx context.Context, inquiry Inquiry) (*Object, error) {
-	list, _, err := this.Select(ctx, inquiry)
+
+func NewDeleteHandler[Object any, Inquiry any](name string, inquiry Inquiry, inquiryHandler InquiryHandler[Inquiry]) *DeleteHandler[Object, Inquiry] {
+	handler := new(DeleteHandler[Object, Inquiry])
+	handler.name = name
+	handler.inquiry = inquiry
+	handler.InquiryHandler = inquiryHandler
+	return handler
+}
+
+type DeleteHandler[Object any, Inquiry any] struct {
+	InquiryHandler[Inquiry]
+	name    string
+	inquiry Inquiry
+}
+
+func (this *DeleteHandler[Object, Inquiry]) Transaction(ctx context.Context, tx *gorm.DB) error {
+	tx = this.Where(ctx, tx, this.inquiry)
+	tx = this.Order(ctx, tx, this.inquiry)
+	tx = this.Limit(ctx, tx, this.inquiry)
+	err := tx.Delete(new(Object)).Error
 	if err != nil {
-		return nil, err
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("删除%s，异常", this.name)
+		return errors.Errorf("删除%s，异常: %+v", this.name, err)
 	}
-	if len(list) == 0 {
-		return nil, nil
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Infof("删除%s，完成", this.name)
+	return nil
+}
+
+func NewSelectHandler[Object any, Inquiry any](name string, inquiry Inquiry, inquiryHandler InquiryHandler[Inquiry]) *SelectHandler[Object, Inquiry] {
+	handler := new(SelectHandler[Object, Inquiry])
+	handler.name = name
+	handler.inquiry = inquiry
+	handler.InquiryHandler = inquiryHandler
+	handler.Object = make([]*Object, 0)
+	return handler
+}
+
+type SelectHandler[Object any, Inquiry any] struct {
+	InquiryHandler[Inquiry]
+	name    string
+	inquiry Inquiry
+	Object  []*Object
+	Count   int64
+}
+
+func (this *SelectHandler[Object, Inquiry]) Transaction(ctx context.Context, tx *gorm.DB) error {
+	tx = tx.Model(new(Object))
+	tx = this.Where(ctx, tx, this.inquiry)
+
+	err := tx.Count(&this.Count).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
+		return nil
 	}
-	return list[0], nil
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Warnf("查询%s，异常", this.name)
+		return errors.Errorf("查询%s，异常: %+v", this.name, err)
+	}
+
+	tx = this.Order(ctx, tx, this.inquiry)
+	tx = this.Limit(ctx, tx, this.inquiry)
+
+	err = tx.Find(&this.Object).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
+		return nil
+	}
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("查询%s，异常", this.name)
+		return errors.Errorf("查询%s, 异常: %+v", this.name, err)
+	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"len": len(this.Object)}).Infof("查询%s，完成", this.name)
+	return nil
+}
+func (this *SelectHandler[Object, Inquiry]) GetOne() *Object {
+	if len(this.Object) == 0 {
+		return nil
+	}
+	return this.Object[0]
 }

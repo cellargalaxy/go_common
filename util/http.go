@@ -4,15 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/cellargalaxy/go_common/model"
+	"net/http"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"net/http"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
@@ -23,151 +22,44 @@ const (
 	UserAgentDefault = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 )
 
-var SpiderSleepDefault = []time.Duration{0, time.Second * 2, time.Second * 2}
-var httpClient *resty.Client
-var httpClientOnce sync.Once
-var httpClientSpider *resty.Client
-var httpClientSpiderOnce sync.Once
-
-// ip为守护协程写入、日志与JWT并发读取，使用原子变量避免数据竞争
+var httpClient = CreateHttpClient(TimeoutDefault, []time.Duration{time.Second, time.Second * 2, time.Second * 2}, nil, true)
 var ip atomic.Value
 
-func initHttp(ctx context.Context) {
+func initHttp() {
 	var err error
-	_, err = NewDaemonSingleGoPool(ctx, "HttpGetIp", time.Hour, flushHttpGetIp)
+	ctx := GenCtx()
+	_, err = NewDaemonSingleGoPool(ctx, "HttpGetIp", time.Hour, flushIP)
 	if err != nil {
 		panic(err)
 	}
 }
 
-type HttpResponse interface {
-	HttpSuccess(ctx context.Context) error
-}
+func CreateHttpClient(timeout time.Duration, sleeps []time.Duration, header map[string]string, skipTls bool) *resty.Client {
+	var GetSleepTime = func(sleeps []time.Duration, index int) time.Duration {
+		if len(sleeps) == 0 {
+			return 1
+		}
+		if index < 0 {
+			index = 0
+		}
+		sleep := sleeps[len(sleeps)-1]
+		if index < len(sleeps) {
+			sleep = sleeps[index]
+		}
+		if sleep <= 0 {
+			sleep = 1
+		}
+		return sleep
+	}
+	var HttpBan = errors.Errorf("HTTP请求封禁")
 
-func HttpApiTry(ctx context.Context, name string, try int, sleeps []time.Duration, response HttpResponse, newResponse func() (*resty.Response, error)) error {
-	if try < len(sleeps)+1 {
-		try = len(sleeps) + 1
-	}
-	var err error
-	for i := 0; i < try; i++ {
-		err = HttpApi(ctx, name, response, newResponse)
-		if err == nil {
-			return nil
-		}
-		//最后一次尝试失败后不再退避：后面没有重试了，这一觉纯属让调用方多等。
-		//实测 try=2、sleeps=[500ms] 时原实现耗时约1s(睡了2次)，修复后约500ms(睡1次)。
-		if i == try-1 {
-			break
-		}
-		wareSleep := WareNumber(GetSleepTime(sleeps, i))
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "wareSleep": wareSleep}).Error(genHttpText(ctx, name, nil, "异常", "重试请求"))
-		Sleep(ctx, wareSleep)
-	}
-	return err
-}
-func HttpApi(ctx context.Context, name string, response HttpResponse, newResponse func() (*resty.Response, error)) error {
-	resp, err := newResponse()
-	body, err := DealHttpResponse(ctx, name, resp, err)
-	if err != nil {
-		return err
-	}
-	err = JsonString2Struct(body, response)
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"body": body}).Error(genHttpText(ctx, name, nil, "反序列化异常"))
-		return err
-	}
-	return response.HttpSuccess(ctx)
-}
-func DealHttpResponse(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
-	if err != nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(genHttpText(ctx, name, nil, "请求异常"))
-		return "", errors.New(genHttpText(ctx, name, err, "请求异常"))
-	}
-	if response == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(genHttpText(ctx, name, nil, "响应为空"))
-		return "", errors.New(genHttpText(ctx, name, nil, "响应为空"))
-	}
-	statusCode := response.StatusCode()
-	body := response.String()
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(genHttpText(ctx, name, nil, "响应"))
-	if statusCode != http.StatusOK {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(genHttpText(ctx, name, nil, "响应码失败"))
-		return "", errors.New(genHttpText(ctx, name, statusCode, "响应码失败"))
-	}
-	return body, nil
-}
-func genHttpText(ctx context.Context, name string, value interface{}, texts ...string) string {
-	var str string
-	if len(texts) == 0 {
-		str = name
-	} else {
-		str = fmt.Sprintf("%s，%s", name, strings.Join(texts, "，"))
-	}
-	if value != nil {
-		str = fmt.Sprintf("%s: %+v", str, value)
-	}
-	return str
-}
-
-func GetIp() string {
-	value, _ := ip.Load().(string)
-	return value
-}
-func flushHttpGetIp(ctx context.Context, pool *SingleGoPool) {
-	defer Defer(func(err interface{}, stack string) {
-		//正常退出不应记为Error，与config.go的flushConfig保持一致
-		if err != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
-		}
-	})
-
-	for {
-		ctx := ResetLogId(ctx)
-		object := HttpGetIp(ctx)
-		object = strings.TrimSpace(object)
-		if object != "" {
-			ip.Store(object)
-		}
-		Sleep(ctx, time.Hour)
-		if CtxDone(ctx) {
-			return
-		}
-	}
-}
-func HttpGetIp(ctx context.Context) string {
-	response, err := GetHttpSpiderRequest(ctx).Get("http://ipv4.duia.ro/")
-	body, _ := DealHttpResponse(ctx, "HttpGetIp", response, err)
-	return body
-}
-
-func GetHttpSpiderRequest(ctx context.Context) *resty.Request {
-	return GetHttpClientSpider().R().SetContext(ctx)
-}
-func GetHttpRequest(ctx context.Context) *resty.Request {
-	return GetHttpClient().R().SetContext(ctx)
-}
-func GetHttpClient() *resty.Client {
-	httpClientOnce.Do(func() {
-		httpClient = CreateHttpClient(TimeoutDefault, 0, nil, nil, true)
-	})
-	return httpClient
-}
-func GetHttpClientSpider() *resty.Client {
-	httpClientSpiderOnce.Do(func() {
-		httpClientSpider = CreateHttpClient(TimeoutDefault, 0, SpiderSleepDefault, nil, true)
-	})
-	return httpClientSpider
-}
-func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, header map[string]string, skipTls bool) *resty.Client {
 	client := resty.New()
 	if timeout > 0 {
 		client = client.SetTimeout(timeout)
 	}
-	if try < len(sleeps)+1 {
-		try = len(sleeps) + 1
-	}
-	if try > 1 {
-		client = client.SetRetryCount(try - 1)
+	if len(sleeps) > 1 {
+
+		client = client.SetRetryCount(len(sleeps) - 1)
 		client = client.SetRetryWaitTime(GetSleepTime(sleeps, 0))
 		client = client.SetRetryMaxWaitTime(GetSleepTime(sleeps, len(sleeps)))
 		client = client.AddRetryCondition(func(response *resty.Response, err error) bool {
@@ -194,18 +86,18 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 			if response != nil {
 				statusCode = response.StatusCode()
 			}
-			if statusCode == 404 {
+			if statusCode == http.StatusNotFound {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，请求404")
 				return false
 			}
-			if 400 <= statusCode && statusCode < 500 && statusCode != 404 {
+			if http.StatusBadRequest <= statusCode && statusCode < http.StatusInternalServerError {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，请求封禁")
 				if response.Request != nil {
-					setHttpBan(ctx, response.Request.URL, SleepDefault)
+					SetHttpBan(ctx, response.Request.URL, SleepDefault)
 				}
 				return false
 			}
-			if 500 <= statusCode {
+			if http.StatusInternalServerError <= statusCode {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Warn("HTTP请求异常，重试请求")
 				return true
 			}
@@ -228,7 +120,7 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 			if response != nil && response.Request != nil {
 				attempt = response.Request.Attempt
 			}
-			if try <= attempt {
+			if len(sleeps) <= attempt {
 				logrus.WithContext(ctx).WithFields(logrus.Fields{"attempt": attempt}).Error("HTTP请求异常，重试超限")
 				return 0, errors.Errorf("HTTP请求异常，重试超限")
 			}
@@ -248,7 +140,7 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 		}
 		ctx = SetLogId(ctx)
 		address := request.URL
-		if getHttpBan(ctx, address) {
+		if GetHttpBan(ctx, address) {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"address": address}).Warn("HTTP请求异常，请求封禁")
 			return HttpBan
 		}
@@ -266,28 +158,78 @@ func CreateHttpClient(timeout time.Duration, try int, sleeps []time.Duration, he
 	client = client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: skipTls})
 	return client
 }
-func GetSleepTime(sleeps []time.Duration, index int) time.Duration {
-	if len(sleeps) == 0 {
-		return 1
+
+func NewHttpClientReq(ctx context.Context) *resty.Request {
+	return httpClient.R().SetContext(ctx)
+}
+func DealHttpClientResp(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
+	var GenMsg = func(name string, value interface{}, texts ...string) string {
+		var str string
+		if len(texts) == 0 {
+			str = name
+		} else {
+			str = fmt.Sprintf("%s，%s", name, strings.Join(texts, "，"))
+		}
+		if value != nil {
+			str = fmt.Sprintf("%s: %+v", str, value)
+		}
+		return str
 	}
-	//负下标会越界panic，而调用方存在 attempt-1 的用法（attempt为0时即为-1），
-	//故按首个退避时间兜底，语义等价于"第一次重试"
-	if index < 0 {
-		index = 0
+
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(GenMsg(name, nil, "HTTP请求异常"))
+		return "", errors.New(GenMsg(name, err, "HTTP请求异常"))
 	}
-	sleep := sleeps[len(sleeps)-1]
-	if index < len(sleeps) {
-		sleep = sleeps[index]
+	if response == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(GenMsg(name, nil, "HTTP响应为空"))
+		return "", errors.New(GenMsg(name, nil, "HTTP响应为空"))
 	}
-	if sleep <= 0 {
-		sleep = 1
+	statusCode := response.StatusCode()
+	body := response.String()
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode, "body": len(body)}).Info(GenMsg(name, nil, "HTTP响应"))
+	if statusCode != http.StatusOK {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(GenMsg(name, nil, "HTTP响应码失败"))
+		return "", errors.New(GenMsg(name, statusCode, "HTTP响应码失败"))
 	}
-	return sleep
+	return body, nil
 }
 
-func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error) {
-	var param model.HttpRequestParam
-	param.Header = make(map[string]string)
+func LoadIP(ctx context.Context) string {
+	response, err := NewHttpClientReq(ctx).Get("http://ipv4.duia.ro/")
+	body, _ := DealHttpClientResp(ctx, "HttpGetIp", response, err)
+	body = strings.TrimSpace(body)
+	if body != "" {
+		ip.Store(body)
+	}
+	return body
+}
+func GetIP() string {
+	value, _ := ip.Load().(string)
+	if value != "" {
+		return value
+	}
+	ctx := GenCtx()
+	return LoadIP(ctx)
+}
+func flushIP(ctx context.Context, pool *SingleGoPool) {
+	defer Defer(func(err interface{}, stack string) {
+		if err != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "stack": stack}).Error("HttpGetIp，退出")
+		}
+	})
+
+	for {
+		ccc := ReSetLogId(ctx)
+		LoadIP(ccc)
+		Sleep(ccc, time.Hour)
+		if CtxDone(ccc) {
+			return
+		}
+	}
+}
+
+func ParseCurl(ctx context.Context, curl string) (url string, header map[string]string, body string, err error) {
+	header = make(map[string]string)
 	lines := strings.Split(curl, "\n")
 	for i := range lines {
 		line := lines[i]
@@ -304,7 +246,7 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 			if strings.HasSuffix(line, "'") || strings.HasSuffix(line, "\"") {
 				line = line[:len(line)-1]
 			}
-			param.Url = line
+			url = line
 			continue
 		}
 		if strings.HasPrefix(line, "-H") {
@@ -327,7 +269,7 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 			key = strings.TrimSpace(key)
 			value := ss[1]
 			value = strings.TrimSpace(value)
-			param.Header[key] = value
+			header[key] = value
 			continue
 		}
 		if strings.HasPrefix(line, "--data-raw") {
@@ -339,11 +281,11 @@ func ParseCurl(ctx context.Context, curl string) (*model.HttpRequestParam, error
 			if strings.HasSuffix(line, "'") || strings.HasSuffix(line, "\"") {
 				line = line[:len(line)-1]
 			}
-			param.Body = line
+			body = line
 			continue
 		}
 	}
-	return &param, nil
+	return url, header, body, nil
 }
 func ExecCurl(ctx context.Context, name, method, url string, header map[string]string) (string, error) {
 	method = strings.TrimSpace(method)
@@ -351,12 +293,12 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 	switch method {
 	case "", "GET", "POST":
 	default:
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"method": method}).Error(genHttpText(ctx, name, nil, "CURL请求异常，非法方法"))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"method": method}).Error(fmt.Sprintf("%s，CURL请求异常，非法方法", name))
 		return "", errors.Errorf("CURL请求异常，非法方法")
 	}
 	url = strings.TrimSpace(url)
 	if url == "" {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(genHttpText(ctx, name, nil, "CURL请求异常，链接为空"))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error(fmt.Sprintf("%s，CURL请求异常，链接为空", name))
 		return "", errors.Errorf("CURL请求异常，链接为空")
 	}
 	if header == nil {
@@ -381,7 +323,7 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 	}
 	curls = append(curls, fmt.Sprintf(`  --compressed >> %s`, filename))
 	curl := strings.Join(curls, "\n")
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"curl": curl}).Info(genHttpText(ctx, name, nil, "CURL请求"))
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"curl": curl}).Info(fmt.Sprintf("%s，CURL请求", name))
 
 	lines, stderrLines, err := ExecCommand(ctx, curl)
 	if err != nil {
@@ -403,13 +345,13 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 		}
 		list = strings.Split(list[1], " ")
 		if len(list) >= 2 {
-			statusCode = String2Int[int](list[1])
+			statusCode = Str2Int[int](list[1])
 		}
 		break
 	}
 	if statusCode != http.StatusOK {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(genHttpText(ctx, name, nil, "响应码失败"))
-		return "", errors.New(genHttpText(ctx, name, statusCode, "响应码失败"))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"statusCode": statusCode}).Error(fmt.Sprintf("%s，响应码失败", name))
+		return "", errors.Errorf("%s，响应码失败: %d", name, statusCode)
 	}
 
 	fileInfo := GetFileInfo(ctx, filename)
@@ -417,7 +359,7 @@ func ExecCurl(ctx context.Context, name, method, url string, header map[string]s
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("CURL请求异常，文件为空")
 		return "", errors.Errorf("CURL请求异常，文件为空")
 	}
-	data, err := ReadFile2String(ctx, filename, "")
+	data, err := ReadFile2Str(ctx, filename, "")
 	if err != nil {
 		return "", err
 	}

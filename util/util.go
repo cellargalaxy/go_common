@@ -1,12 +1,10 @@
 package util
 
-func init() {
-	ctx := GenCtx()
-	InitDefaultLog()
-	initRegexp()
-	initHttp(ctx)
-}
+import "github.com/sirupsen/logrus"
 
 func Init(serverName string) {
-	InitOs(serverName)
+	initOs(serverName)
+	initLog(GetServerName(), "", 1, 100, 30, logrus.InfoLevel)
+	initRegexp()
+	initHttp()
 }
