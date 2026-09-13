@@ -162,9 +162,9 @@ func (this *UpdateHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB)
 }
 
 type Inquiry interface {
-	Where(ctx context.Context, tx *gorm.DB) *gorm.DB
-	Order(ctx context.Context, tx *gorm.DB) *gorm.DB
-	Limit(ctx context.Context, tx *gorm.DB) *gorm.DB
+	Where(ctx context.Context, tx *gorm.DB) (*gorm.DB, error)
+	Order(ctx context.Context, tx *gorm.DB) (*gorm.DB, error)
+	Limit(ctx context.Context, tx *gorm.DB) (*gorm.DB, error)
 }
 
 func NewDeleteHandler[Object any](name string, inquiry Inquiry) *DeleteHandler[Object] {
@@ -181,12 +181,22 @@ type DeleteHandler[Object any] struct {
 }
 
 func (this *DeleteHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
-	tx = this.inquiry.Where(ctx, tx)
-	tx = this.inquiry.Order(ctx, tx)
-	tx = this.inquiry.Limit(ctx, tx)
+	var err error
+	tx, err = this.inquiry.Where(ctx, tx)
+	if err != nil {
+		return err
+	}
+	tx, err = this.inquiry.Order(ctx, tx)
+	if err != nil {
+		return err
+	}
+	tx, err = this.inquiry.Limit(ctx, tx)
+	if err != nil {
+		return err
+	}
 	result := tx.Delete(new(Object))
 	this.Count = result.RowsAffected
-	err := result.Error
+	err = result.Error
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Errorf("删除%s，异常", this.name)
 		return errors.Errorf("删除%s，异常: %+v", this.name, err)
@@ -211,10 +221,14 @@ type SelectHandler[Object any] struct {
 }
 
 func (this *SelectHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+	var err error
 	tx = tx.Model(new(Object))
-	tx = this.inquiry.Where(ctx, tx)
+	tx, err = this.inquiry.Where(ctx, tx)
+	if err != nil {
+		return err
+	}
 
-	err := tx.Session(&gorm.Session{}).Count(&this.Count).Error
+	err = tx.Session(&gorm.Session{}).Count(&this.Count).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
 		return nil
@@ -224,8 +238,14 @@ func (this *SelectHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB)
 		return errors.Errorf("查询%s，异常: %+v", this.name, err)
 	}
 
-	tx = this.inquiry.Order(ctx, tx)
-	tx = this.inquiry.Limit(ctx, tx)
+	tx, err = this.inquiry.Order(ctx, tx)
+	if err != nil {
+		return err
+	}
+	tx, err = this.inquiry.Limit(ctx, tx)
+	if err != nil {
+		return err
+	}
 	err = tx.Find(&this.Object).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
