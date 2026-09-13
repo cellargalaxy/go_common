@@ -14,6 +14,15 @@ type Claims struct {
 	ReqId      int64  `json:"reqid,omitempty"` //发起的某次请求
 }
 
+func (this Claims) GetExpiresAt() int64 {
+	return this.ExpiresAt
+}
+func (this Claims) GetReqId() int64 {
+	return this.ReqId
+}
+func (this Claims) GetUri() string {
+	return this.Uri
+}
 func (this Claims) String() string {
 	data, _ := json.MarshalToString(this)
 	return data

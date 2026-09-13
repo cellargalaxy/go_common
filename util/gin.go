@@ -9,6 +9,7 @@ import (
 
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
 )
 
@@ -64,7 +65,15 @@ func setGinLogId(c *gin.Context, logId int64) {
 	c.Set(LogIdKey, logId)
 	c.Header(LogIdKey, Int2Str(logId))
 }
-func ValidateGin(c *gin.Context, secret string) {
+
+type Claims interface {
+	jwt.Claims
+	GetExpiresAt() int64
+	GetReqId() int64
+	GetUri() string
+}
+
+func ValidateGin(c *gin.Context, secret string, claims Claims) {
 	setGinLogId(c, GetLogId(c))
 
 	var token string
@@ -81,8 +90,7 @@ func ValidateGin(c *gin.Context, secret string) {
 		c.JSON(http.StatusOK, NewHttpResp(http.StatusUnauthorized, "Authorization非法", nil))
 		return
 	}
-	var claims model.Claims
-	jwtToken, err := DeJwt(c, token, secret, &claims)
+	jwtToken, err := DeJwt(c, token, secret, claims)
 	if err != nil {
 		c.Abort()
 		c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
@@ -99,25 +107,25 @@ func ValidateGin(c *gin.Context, secret string) {
 		return
 	}
 
-	expiresAt := time.Unix(claims.ExpiresAt, 0)
+	expiresAt := time.Unix(claims.GetExpiresAt(), 0)
 	duration := expiresAt.Sub(time.Now())
 	if duration.Nanoseconds() <= 0 {
 		c.Abort()
 		c.JSON(http.StatusOK, NewHttpRespByMsg(nil, "jwtToken过期"))
 		return
 	}
-	if claims.ReqId > 0 {
-		if !TryLockReqId(c, claims.ReqId, duration) {
+	if claims.GetReqId() > 0 {
+		if !TryLockReqId(c, claims.GetReqId(), duration) {
 			c.Abort()
 			c.JSON(http.StatusOK, NewHttpResp(http.StatusConflict, "请求非法重放", nil))
 			return
 		}
 	}
-	if claims.Uri != "" {
+	if claims.GetUri() != "" {
 		uri := c.Request.RequestURI
 		uri = strings.Split(uri, "#")[0]
 		uri = strings.Split(uri, "?")[0]
-		if claims.Uri != uri {
+		if claims.GetUri() != uri {
 			c.Abort()
 			c.JSON(http.StatusOK, NewHttpResp(http.StatusBadRequest, "请求非法uri", nil))
 			return
