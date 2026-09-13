@@ -161,31 +161,29 @@ func (this *UpdateHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB)
 	return nil
 }
 
-type InquiryHandler[Inquiry any] interface {
-	Where(ctx context.Context, tx *gorm.DB, inquiry Inquiry) *gorm.DB
-	Order(ctx context.Context, tx *gorm.DB, inquiry Inquiry) *gorm.DB
-	Limit(ctx context.Context, tx *gorm.DB, inquiry Inquiry) *gorm.DB
+type Inquiry interface {
+	Where(ctx context.Context, tx *gorm.DB) *gorm.DB
+	Order(ctx context.Context, tx *gorm.DB) *gorm.DB
+	Limit(ctx context.Context, tx *gorm.DB) *gorm.DB
 }
 
-func NewDeleteHandler[Object any, Inquiry any](name string, inquiry Inquiry, inquiryHandler InquiryHandler[Inquiry]) *DeleteHandler[Object, Inquiry] {
-	handler := new(DeleteHandler[Object, Inquiry])
+func NewDeleteHandler[Object any](name string, inquiry Inquiry) *DeleteHandler[Object] {
+	handler := new(DeleteHandler[Object])
 	handler.name = name
 	handler.inquiry = inquiry
-	handler.InquiryHandler = inquiryHandler
 	return handler
 }
 
-type DeleteHandler[Object any, Inquiry any] struct {
-	InquiryHandler[Inquiry]
+type DeleteHandler[Object any] struct {
 	name    string
 	inquiry Inquiry
 	Count   int64
 }
 
-func (this *DeleteHandler[Object, Inquiry]) Transaction(ctx context.Context, tx *gorm.DB) error {
-	tx = this.Where(ctx, tx, this.inquiry)
-	tx = this.Order(ctx, tx, this.inquiry)
-	tx = this.Limit(ctx, tx, this.inquiry)
+func (this *DeleteHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+	tx = this.inquiry.Where(ctx, tx)
+	tx = this.inquiry.Order(ctx, tx)
+	tx = this.inquiry.Limit(ctx, tx)
 	result := tx.Delete(new(Object))
 	this.Count = result.RowsAffected
 	err := result.Error
@@ -197,26 +195,24 @@ func (this *DeleteHandler[Object, Inquiry]) Transaction(ctx context.Context, tx 
 	return nil
 }
 
-func NewSelectHandler[Object any, Inquiry any](name string, inquiry Inquiry, inquiryHandler InquiryHandler[Inquiry]) *SelectHandler[Object, Inquiry] {
-	handler := new(SelectHandler[Object, Inquiry])
+func NewSelectHandler[Object any](name string, inquiry Inquiry) *SelectHandler[Object] {
+	handler := new(SelectHandler[Object])
 	handler.name = name
 	handler.inquiry = inquiry
-	handler.InquiryHandler = inquiryHandler
 	handler.Object = make([]*Object, 0)
 	return handler
 }
 
-type SelectHandler[Object any, Inquiry any] struct {
-	InquiryHandler[Inquiry]
+type SelectHandler[Object any] struct {
 	name    string
 	inquiry Inquiry
 	Object  []*Object
 	Count   int64
 }
 
-func (this *SelectHandler[Object, Inquiry]) Transaction(ctx context.Context, tx *gorm.DB) error {
+func (this *SelectHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
 	tx = tx.Model(new(Object))
-	tx = this.Where(ctx, tx, this.inquiry)
+	tx = this.inquiry.Where(ctx, tx)
 
 	err := tx.Session(&gorm.Session{}).Count(&this.Count).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -228,8 +224,8 @@ func (this *SelectHandler[Object, Inquiry]) Transaction(ctx context.Context, tx 
 		return errors.Errorf("查询%s，异常: %+v", this.name, err)
 	}
 
-	tx = this.Order(ctx, tx, this.inquiry)
-	tx = this.Limit(ctx, tx, this.inquiry)
+	tx = this.inquiry.Order(ctx, tx)
+	tx = this.inquiry.Limit(ctx, tx)
 	err = tx.Find(&this.Object).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
@@ -242,7 +238,7 @@ func (this *SelectHandler[Object, Inquiry]) Transaction(ctx context.Context, tx 
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"len": len(this.Object)}).Infof("查询%s，完成", this.name)
 	return nil
 }
-func (this *SelectHandler[Object, Inquiry]) GetOne() *Object {
+func (this *SelectHandler[Object]) GetOne() *Object {
 	if len(this.Object) == 0 {
 		return nil
 	}
