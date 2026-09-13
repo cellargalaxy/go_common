@@ -131,7 +131,7 @@ func ValidateGin(c *gin.Context, secret string, claims Claims) {
 			return
 		}
 	}
-	c.Set(ClaimsKey, &claims)
+	c.Set(ClaimsKey, claims)
 	c.Next()
 }
 
