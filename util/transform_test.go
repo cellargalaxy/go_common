@@ -3,6 +3,8 @@ package util
 import (
 	"math"
 	"testing"
+
+	"github.com/cellargalaxy/go_common/model"
 )
 
 // Int2Str：必须覆盖无符号大值，此前实现用 strconv.Itoa(int(v)) 会把 uint64 最大值回绕成 -1
@@ -320,6 +322,43 @@ func TestReverseStr(t *testing.T) {
 }
 
 // 指针与切片辅助函数：重点验证是否发生别名共享
+// IsNil 的存在意义就是"接口非nil、但里面装的是nil"这一类：
+// 直接 object == nil 判不出来，SetClaims 当年就栽在这上面
+func TestIsNil(t *testing.T) {
+	//接口本身为nil
+	if !IsNil(nil) {
+		t.Errorf("IsNil(nil) = false, 期望 true")
+	}
+	//装了空指针的接口：接口本身非nil，必须判为空
+	var nilP *model.Claims
+	if nilP != nil {
+		t.Fatalf("前提不成立")
+	}
+	if any(nilP) == nil {
+		t.Fatalf("前提不成立：装了空指针的接口本该非nil")
+	}
+	if !IsNil(nilP) {
+		t.Errorf("IsNil(空指针) = false, 期望 true")
+	}
+	//其余可为nil的类型
+	var nilMap map[string]int
+	var nilSlice []int
+	var nilChan chan int
+	var nilFunc func()
+	var nilErr error
+	for i, item := range []any{nilMap, nilSlice, nilChan, nilFunc, nilErr} {
+		if !IsNil(item) {
+			t.Errorf("第%d个空值 IsNil = false, 期望 true", i)
+		}
+	}
+	//非空值一律为false，尤其是零值：零值不是nil
+	for i, item := range []any{0, "", false, 0.0, model.Claims{}, &model.Claims{}, []int{}, map[string]int{}} {
+		if IsNil(item) {
+			t.Errorf("第%d个非空值 IsNil = true, 期望 false", i)
+		}
+	}
+}
+
 func TestPointerHelpers(t *testing.T) {
 	v := 42
 	p := S2P(v)

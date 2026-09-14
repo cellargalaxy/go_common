@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/utils/tests"
 )
@@ -380,7 +381,7 @@ func TestInsertHandlerEmpty(t *testing.T) {
 	ctx := GenCtx()
 	handler := NewInsertHandler[fakeGormObject]("假对象")
 
-	if err := handler.Transaction(ctx, nil); err != nil {
+	if err := handler.Exec(ctx, nil); err != nil {
 		t.Errorf("空插入应无错误: %+v", err)
 	}
 	if handler.Count != 0 {
@@ -393,7 +394,7 @@ func TestInsertHandlerSql(t *testing.T) {
 	db, recorder := newDryRunDb(t)
 	handler := NewInsertHandler("假对象", &fakeGormObject{Id: 1, Name: "a"}, &fakeGormObject{Id: 2, Name: "b"})
 
-	if err := handler.Transaction(ctx, db); err != nil {
+	if err := handler.Exec(ctx, db); err != nil {
 		t.Fatalf("插入异常: %+v", err)
 	}
 	if !recorder.contains("INSERT") || !recorder.contains("fake_object") {
@@ -406,7 +407,7 @@ func TestUpdateHandlerNil(t *testing.T) {
 	ctx := GenCtx()
 	handler := NewUpdateHandler[fakeGormObject]("假对象", nil)
 
-	if err := handler.Transaction(ctx, nil); err != nil {
+	if err := handler.Exec(ctx, nil); err != nil {
 		t.Errorf("nil更新应无错误: %+v", err)
 	}
 	if handler.Count != 0 {
@@ -419,7 +420,7 @@ func TestUpdateHandlerSql(t *testing.T) {
 	db, recorder := newDryRunDb(t)
 	handler := NewUpdateHandler("假对象", &fakeGormObject{Id: 1, Name: "a"})
 
-	if err := handler.Transaction(ctx, db); err != nil {
+	if err := handler.Exec(ctx, db); err != nil {
 		t.Fatalf("更新异常: %+v", err)
 	}
 	if !recorder.contains("UPDATE") || !recorder.contains("fake_object") {
@@ -433,7 +434,7 @@ func TestDeleteHandlerSql(t *testing.T) {
 	inquiry := &fakeGormInquiry{Id: 7}
 	handler := NewDeleteHandler[fakeGormObject]("假对象", inquiry)
 
-	if err := handler.Transaction(ctx, db.Model(&fakeGormObject{})); err != nil {
+	if err := handler.Exec(ctx, db.Model(&fakeGormObject{})); err != nil {
 		t.Fatalf("删除异常: %+v", err)
 	}
 	if !recorder.contains("DELETE") || !recorder.contains("fake_object") {
@@ -462,7 +463,7 @@ func TestDeleteHandlerInquiryErr(t *testing.T) {
 		db, recorder := newDryRunDb(t)
 		handler := NewDeleteHandler[fakeGormObject]("假对象", item.inquiry)
 
-		err := handler.Transaction(ctx, db.Model(&fakeGormObject{}))
+		err := handler.Exec(ctx, db.Model(&fakeGormObject{}))
 		if err == nil {
 			t.Errorf("[%s] 钩子报错时必须返回错误", item.scene)
 			continue
@@ -481,7 +482,7 @@ func TestDeleteHandlerInquiryErr(t *testing.T) {
 	//Where 报错后，Order/Limit 不得再被调用
 	inquiry := &fakeGormInquiry{whereErr: errors.Errorf("条件异常")}
 	db, _ := newDryRunDb(t)
-	NewDeleteHandler[fakeGormObject]("假对象", inquiry).Transaction(ctx, db.Model(&fakeGormObject{}))
+	NewDeleteHandler[fakeGormObject]("假对象", inquiry).Exec(ctx, db.Model(&fakeGormObject{}))
 	if inquiry.orderCall != 0 || inquiry.limitCall != 0 {
 		t.Errorf("Where报错后仍执行了后续钩子: order=%d limit=%d", inquiry.orderCall, inquiry.limitCall)
 	}
@@ -497,7 +498,7 @@ func TestSelectHandlerPaging(t *testing.T) {
 	inquiry := &fakeGormInquiry{Id: 7, PageNum: 2, PageSize: 20}
 	handler := NewSelectHandler[fakeGormObject]("假对象", inquiry)
 
-	if err := handler.Transaction(ctx, db); err != nil {
+	if err := handler.Exec(ctx, db); err != nil {
 		t.Fatalf("查询异常: %+v", err)
 	}
 	if !recorder.contains("SELECT") || !recorder.contains("fake_object") {
@@ -531,7 +532,7 @@ func TestSelectHandlerInquiryErr(t *testing.T) {
 	//Where 报错：一条SQL都不该有
 	inquiry := &fakeGormInquiry{whereErr: errors.Errorf("条件异常")}
 	db, recorder := newDryRunDb(t)
-	err := NewSelectHandler[fakeGormObject]("假对象", inquiry).Transaction(ctx, db)
+	err := NewSelectHandler[fakeGormObject]("假对象", inquiry).Exec(ctx, db)
 	if err == nil || !strings.Contains(err.Error(), "条件异常") {
 		t.Errorf("Where报错未上抛: %v", err)
 	}
@@ -554,7 +555,7 @@ func TestSelectHandlerInquiryErr(t *testing.T) {
 		db, recorder = newDryRunDb(t)
 		handler := NewSelectHandler[fakeGormObject]("假对象", item.inquiry)
 
-		err = handler.Transaction(ctx, db)
+		err = handler.Exec(ctx, db)
 		if err == nil || !strings.Contains(err.Error(), item.want) {
 			t.Errorf("[%s] 错误未上抛: %v", item.scene, err)
 			continue
@@ -582,7 +583,7 @@ func TestSelectHandlerGetOne(t *testing.T) {
 	if got := handler.GetOne(); got != nil {
 		t.Errorf("空结果 GetOne = %v, 期望 nil", got)
 	}
-	if err := handler.Transaction(ctx, db); err != nil {
+	if err := handler.Exec(ctx, db); err != nil {
 		t.Fatalf("查询异常: %+v", err)
 	}
 	if got := handler.GetOne(); got != nil {
@@ -599,13 +600,79 @@ func TestSelectHandlerGetOne(t *testing.T) {
 	}
 }
 
+// 944cd02 给四个handler统一加了 Clauses 链式入口，这里盯住"存进去的conds真的发到了SQL上"。
+// gorm 的 Clauses 对未注册到 BuildClauses 的子句会静默丢弃，漏接不会报错，只能靠SQL断言。
+func TestHandlerClauses(t *testing.T) {
+	ctx := GenCtx()
+
+	//插入：ON CONFLICT 只在 INSERT 的 BuildClauses 里
+	db, recorder := newDryRunDb(t)
+	if err := NewInsertHandler("假对象", &fakeGormObject{Id: 1, Name: "a"}).
+		Clauses(clause.OnConflict{DoNothing: true}).Exec(ctx, db); err != nil {
+		t.Fatalf("插入异常: %+v", err)
+	}
+	if !recorder.contains("ON CONFLICT") {
+		t.Errorf("插入未带上 Clauses: %v", recorder.sqls)
+	}
+
+	//更新
+	db, recorder = newDryRunDb(t)
+	if err := NewUpdateHandler("假对象", &fakeGormObject{Id: 1, Name: "a"}).
+		Clauses(clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "name = ?", Vars: []interface{}{"a"}}}}).
+		Exec(ctx, db); err != nil {
+		t.Fatalf("更新异常: %+v", err)
+	}
+	if !recorder.contains("name = ") {
+		t.Errorf("更新未带上 Clauses: %v", recorder.sqls)
+	}
+
+	//删除
+	db, recorder = newDryRunDb(t)
+	if err := NewDeleteHandler[fakeGormObject]("假对象", &fakeGormInquiry{Id: 7}).
+		Clauses(clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "name = ?", Vars: []interface{}{"a"}}}}).
+		Exec(ctx, db.Model(&fakeGormObject{})); err != nil {
+		t.Fatalf("删除异常: %+v", err)
+	}
+	if !recorder.contains("name = ") {
+		t.Errorf("删除未带上 Clauses: %v", recorder.sqls)
+	}
+}
+
+// SelectHandler 的 conds 分发点：944cd02 加了字段与入口却没在 Exec 里用，是纯运行期静默失效。
+// 约定只挂在真正取数的 Find 上——Count 已把 SELECT 改写成聚合(finisher_api.go Count)，
+// 计数语句再带 clause.Locking 会变成 SELECT count(*) ... FOR UPDATE，部分数据库直接报错。
+func TestSelectHandlerClauses(t *testing.T) {
+	ctx := GenCtx()
+	db, recorder := newDryRunDb(t)
+	handler := NewSelectHandler[fakeGormObject]("假对象", &fakeGormInquiry{Id: 7}).
+		Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate})
+
+	if err := handler.Exec(ctx, db); err != nil {
+		t.Fatalf("查询异常: %+v", err)
+	}
+	var countSql, findSql string
+	for i := range recorder.sqls {
+		if strings.Contains(recorder.sqls[i], "count(*)") {
+			countSql = recorder.sqls[i]
+		} else {
+			findSql = recorder.sqls[i]
+		}
+	}
+	if findSql == "" || !strings.Contains(findSql, "FOR UPDATE") {
+		t.Errorf("查询语句未带上 Clauses: %v", recorder.sqls)
+	}
+	if countSql == "" || strings.Contains(countSql, "FOR UPDATE") {
+		t.Errorf("计数语句不该带 Clauses: %v", recorder.sqls)
+	}
+}
+
 // Transaction 须按顺序执行全部handler，任一报错则中断并向上抛出
 type errHandler struct {
 	called int
 	err    error
 }
 
-func (this *errHandler) Transaction(ctx context.Context, tx *gorm.DB) error {
+func (this *errHandler) Exec(ctx context.Context, tx *gorm.DB) error {
 	this.called++
 	return this.err
 }

@@ -117,6 +117,16 @@ func TestGetSetClaims(t *testing.T) {
 	if GetClaims[*model.Claims](SetClaims(ctx, nil)) != nil {
 		t.Errorf("SetClaims(nil) 后应仍取不到claims")
 	}
+	//空指针形态的nil同样不该污染ctx：117bdb6 泛型化后这条一度失守（详见 IsNil）
+	var nilClaims *model.Claims
+	if SetClaims(ctx, nilClaims) != ctx {
+		t.Errorf("SetClaims(空指针) 应返回原ctx")
+	}
+	//已有claims的ctx，再塞空值不得把原值顶掉
+	had := SetClaims(ctx, claims)
+	if got := GetClaims[*model.Claims](SetClaims(had, nilClaims)); got == nil || got.LogId != 99 {
+		t.Errorf("塞空值把原claims顶掉了: %v", got)
+	}
 }
 
 func TestPing(t *testing.T) {
