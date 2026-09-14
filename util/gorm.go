@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -86,13 +87,13 @@ func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (strin
 }
 
 type TransactionHandler interface {
-	Transaction(ctx context.Context, tx *gorm.DB) error
+	Exec(ctx context.Context, tx *gorm.DB) error
 }
 
 func Transaction(ctx context.Context, db *gorm.DB, handlers ...TransactionHandler) error {
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for i := range handlers {
-			err := handlers[i].Transaction(ctx, tx)
+			err := handlers[i].Exec(ctx, tx)
 			if err != nil {
 				return err
 			}
@@ -111,16 +112,21 @@ func NewInsertHandler[Object any](name string, object ...*Object) *InsertHandler
 
 type InsertHandler[Object any] struct {
 	name   string
+	conds  []clause.Expression
 	Object []*Object
 	Count  int64
 }
 
-func (this *InsertHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+func (this *InsertHandler[Object]) Clauses(conds ...clause.Expression) *InsertHandler[Object] {
+	this.conds = append(this.conds, conds...)
+	return this
+}
+func (this *InsertHandler[Object]) Exec(ctx context.Context, tx *gorm.DB) error {
 	if len(this.Object) == 0 {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("插入%s，为空", this.name)
 		return nil
 	}
-	result := tx.CreateInBatches(this.Object, DbBatchSize)
+	result := tx.Clauses(this.conds...).CreateInBatches(this.Object, DbBatchSize)
 	this.Count = result.RowsAffected
 	err := result.Error
 	if err != nil {
@@ -140,17 +146,22 @@ func NewUpdateHandler[Object any](name string, object *Object) *UpdateHandler[Ob
 
 type UpdateHandler[Object any] struct {
 	name   string
+	conds  []clause.Expression
 	Object *Object
 	Count  int64
 }
 
-func (this *UpdateHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+func (this *UpdateHandler[Object]) Clauses(conds ...clause.Expression) *UpdateHandler[Object] {
+	this.conds = append(this.conds, conds...)
+	return this
+}
+func (this *UpdateHandler[Object]) Exec(ctx context.Context, tx *gorm.DB) error {
 	if this.Object == nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("更新%s，为空", this.name)
 		return nil
 	}
 	tx = tx.Model(this.Object)
-	result := tx.Select("*").Updates(this.Object)
+	result := tx.Clauses(this.conds...).Select("*").Updates(this.Object)
 	this.Count = result.RowsAffected
 	err := result.Error
 	if err != nil {
@@ -176,11 +187,16 @@ func NewDeleteHandler[Object any](name string, inquiry Inquiry) *DeleteHandler[O
 
 type DeleteHandler[Object any] struct {
 	name    string
+	conds   []clause.Expression
 	inquiry Inquiry
 	Count   int64
 }
 
-func (this *DeleteHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+func (this *DeleteHandler[Object]) Clauses(conds ...clause.Expression) *DeleteHandler[Object] {
+	this.conds = append(this.conds, conds...)
+	return this
+}
+func (this *DeleteHandler[Object]) Exec(ctx context.Context, tx *gorm.DB) error {
 	var err error
 	tx, err = this.inquiry.Where(ctx, tx)
 	if err != nil {
@@ -194,7 +210,7 @@ func (this *DeleteHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB)
 	if err != nil {
 		return err
 	}
-	result := tx.Delete(new(Object))
+	result := tx.Clauses(this.conds...).Delete(new(Object))
 	this.Count = result.RowsAffected
 	err = result.Error
 	if err != nil {
@@ -215,12 +231,17 @@ func NewSelectHandler[Object any](name string, inquiry Inquiry) *SelectHandler[O
 
 type SelectHandler[Object any] struct {
 	name    string
+	conds   []clause.Expression
 	inquiry Inquiry
 	Object  []*Object
 	Count   int64
 }
 
-func (this *SelectHandler[Object]) Transaction(ctx context.Context, tx *gorm.DB) error {
+func (this *SelectHandler[Object]) Clauses(conds ...clause.Expression) *SelectHandler[Object] {
+	this.conds = append(this.conds, conds...)
+	return this
+}
+func (this *SelectHandler[Object]) Exec(ctx context.Context, tx *gorm.DB) error {
 	var err error
 	tx = tx.Model(new(Object))
 	tx, err = this.inquiry.Where(ctx, tx)
