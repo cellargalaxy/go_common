@@ -15,15 +15,17 @@ import (
 )
 
 // fakeClaims 自定义claims类型。7b1b8e3 起 ValidateGin 接受任意 Claims 实现，
-// 但 GetClaims 仍固定断言 *model.Claims，本类型用于锁定这条新链路的实际行为。
+// 5893d24 起 GetClaims 也泛型化，本类型用于锁定这条链路的端到端行为。
 type fakeClaims struct {
 	jwt.StandardClaims
 	Uri    string `json:"uri,omitempty"`
+	LogId  int64  `json:"logid,omitempty"`
 	ReqId  int64  `json:"reqid,omitempty"`
 	Tenant string `json:"tenant,omitempty"`
 }
 
 func (this fakeClaims) GetExpiresAt() int64 { return this.ExpiresAt }
+func (this fakeClaims) GetLogId() int64     { return this.LogId }
 func (this fakeClaims) GetReqId() int64     { return this.ReqId }
 func (this fakeClaims) GetUri() string      { return this.Uri }
 
@@ -96,12 +98,12 @@ func TestNewHttpRespByErr(t *testing.T) {
 func TestGetSetClaims(t *testing.T) {
 	ctx := GenCtx()
 	//未设置时为nil
-	if got := GetClaims(ctx); got != nil {
+	if got := GetClaims[*model.Claims](ctx); got != nil {
 		t.Errorf("未设置时 GetClaims = %v, 期望 nil", got)
 	}
 	//设置后可取回同一实例
 	claims := &model.Claims{Ip: "1.2.3.4", LogId: 99}
-	got := GetClaims(SetClaims(ctx, claims))
+	got := GetClaims[*model.Claims](SetClaims(ctx, claims))
 	if got == nil {
 		t.Fatalf("SetClaims 后取不到")
 	}
@@ -112,7 +114,7 @@ func TestGetSetClaims(t *testing.T) {
 	if SetClaims(ctx, nil) != ctx {
 		t.Errorf("SetClaims(nil) 应返回原ctx")
 	}
-	if GetClaims(SetClaims(ctx, nil)) != nil {
+	if GetClaims[*model.Claims](SetClaims(ctx, nil)) != nil {
 		t.Errorf("SetClaims(nil) 后应仍取不到claims")
 	}
 }
@@ -232,8 +234,8 @@ func TestValidateGinPass(t *testing.T) {
 	if c.IsAborted() {
 		t.Errorf("合法token被拒绝")
 	}
-	//放行后须把claims塞进ctx，与 ClaimsGin 对称，否则下游 GetClaims 恒为nil
-	got := GetClaims(c)
+	//放行后须把claims塞进ctx，否则下游 GetClaims 恒为nil
+	got := GetClaims[*model.Claims](c)
 	if got == nil {
 		t.Fatalf("放行后取不到 claims")
 	}
@@ -435,10 +437,9 @@ func assertGinAbort(t *testing.T, w *httptest.ResponseRecorder, c *gin.Context, 
 	}
 }
 
-// 自定义 Claims 实现必须能走通鉴权，且只能用 GetClaimsBy 取回。
-// 这是 7b1b8e3 把 ValidateGin 泛化后唯一没有跟上的地方：GetClaims 固定断言
-// *model.Claims，GetCtxValue 又吞掉断言失败(util/ctx.go:9 忽略ok)，
-// 自定义claims类型的服务会静默拿到nil。
+// 自定义 Claims 实现必须能走通鉴权，并能用 GetClaims 按自身类型取回。
+// 7b1b8e3 把 ValidateGin 泛化时 GetClaims 没跟上（固定断言 *model.Claims，
+// 自定义claims类型的服务会静默拿到nil），5893d24 把 GetClaims 一并泛型化后闭合。
 func TestValidateGinCustomClaims(t *testing.T) {
 	ctx := GenCtx()
 	secret := "s"
@@ -462,17 +463,14 @@ func TestValidateGinCustomClaims(t *testing.T) {
 	if got.Tenant != "租户A" {
 		t.Errorf("自定义claims字段 = %q, 期望 租户A", got.Tenant)
 	}
-	//GetClaimsBy 按自定义类型取回的必须是同一个实例
-	if by := GetClaimsBy[*fakeClaims](c); by != got {
-		t.Errorf("GetClaimsBy 取回 %v, 期望与传入实例相同", by)
+	//GetClaims 按自定义类型取回的必须是同一个实例
+	if by := GetClaims[*fakeClaims](c); by != got {
+		t.Errorf("GetClaims[*fakeClaims] 取回 %v, 期望与传入实例相同", by)
 	}
-	//GetClaims 固定断言 *model.Claims，自定义类型下取不到；沿用它的下游会静默拿到nil
-	if by := GetClaims(c); by != nil {
-		t.Errorf("GetClaims 在自定义claims下应取不到, got %v", by)
-	}
-	//类型不符时 GetClaimsBy 同样返回零值而非panic
-	if by := GetClaimsBy[*model.Claims](c); by != nil {
-		t.Errorf("GetClaimsBy 类型不符时应为nil, got %v", by)
+	//类型参数给错时返回零值而非panic：GetCtxValue 的断言失败被吞掉(util/ctx.go:9 忽略ok)，
+	//故调用方必须自己保证类型参数与 ValidateGin 传入的claims类型一致，否则静默拿到nil
+	if by := GetClaims[*model.Claims](c); by != nil {
+		t.Errorf("类型参数不符时应为nil, got %v", by)
 	}
 }
 
@@ -497,4 +495,73 @@ func TestValidateGinValueClaims(t *testing.T) {
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
 	ValidateGin(c, secret, model.Claims{}) //故意传值
 	assertGinAbort(t, w, c, "claims传值", http.StatusInternalServerError, "JWT解密异常")
+}
+
+// 跨服务链路追踪：调用方的logId经 EnDefaultJwt 写进claims(util/codec.go:88 claims.LogId = GetLogId(ctx))，
+// 服务端必须取出来覆盖本次请求的logId，两侧日志才能用同一个logId串起来。
+//
+// 这条链路曾断过：只有 ClaimsGin 做这件事(if claims.LogId > 0 { setGinLogId(c, claims.LogId) })，
+// 而它在 681e08d(2026-09-10) 被删除；ValidateGin 从 2023-05-03 的首版起就只做
+// setGinLogId(c, GetLogId(c))，从未读过 claims.LogId。
+// 于是发送方仍在往JWT里塞logId、接收方却直接丢弃，调用链在服务边界断开。
+func TestValidateGinLogIdFromClaims(t *testing.T) {
+	ctx := GenCtx()
+	secret := "s"
+	newToken := func(logId int64) string {
+		var claims model.Claims
+		claims.IssuedAt = time.Now().Unix()
+		claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+		claims.LogId = logId
+		token, err := EnJwt(ctx, secret, claims)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return token
+	}
+
+	//前提事实：全新请求的gin上下文里没有logId，故 setGinLogId(c, GetLogId(c)) 必然现生成一个。
+	//本库没有任何中间件会在 ValidateGin 之前写入 LogIdKey——c.Set(LogIdKey,...) 只出现在 setGinLogId 内部
+	_, fresh := newGinCtx(http.MethodGet, "/")
+	if got := GetLogId(fresh); got != 0 {
+		t.Fatalf("全新gin上下文竟已有logId = %d", got)
+	}
+
+	//claims 带logId：必须被采用，且同步到响应头
+	const callerLogId = 2609041730451234
+	w, c := newGinCtx(http.MethodGet, "/")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+newToken(callerLogId))
+	ValidateGin(c, secret, &model.Claims{})
+	if c.IsAborted() {
+		t.Fatalf("合法token被拒绝")
+	}
+	if got := GetLogId(c); got != callerLogId {
+		t.Errorf("logId = %d, 期望取自claims的 %d（跨服务链路断开）", got, callerLogId)
+	}
+	if got := w.Header().Get(LogIdKey); got != Int2Str(callerLogId) {
+		t.Errorf("响应头 logId = %q, 期望 %q", got, Int2Str(callerLogId))
+	}
+
+	//claims 不带logId：沿用本次请求自己生成的logId，不得被清零
+	_, c = newGinCtx(http.MethodGet, "/")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+newToken(0))
+	ValidateGin(c, secret, &model.Claims{})
+	if got := GetLogId(c); got <= 0 {
+		t.Errorf("claims无logId时应沿用自生成的logId, got %d", got)
+	}
+
+	//伪造签名的token不得注入logId：采信发生在验签之后
+	var forged model.Claims
+	forged.IssuedAt = time.Now().Unix()
+	forged.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	forged.LogId = callerLogId
+	badToken, err := EnJwt(ctx, "wrong-secret", forged)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	_, c = newGinCtx(http.MethodGet, "/")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+badToken)
+	ValidateGin(c, secret, &model.Claims{})
+	if got := GetLogId(c); got == callerLogId {
+		t.Errorf("验签失败的token注入了logId = %d", got)
+	}
 }

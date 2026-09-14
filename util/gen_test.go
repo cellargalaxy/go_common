@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+// 期望值在测试侧独立声明，不复用实现里的常量：
+// 实现中 wantIdLen / wantIdTickMicro 是 ParseStrId / GenId 的函数内局部常量(99da961)，测试取不到；
+// 更重要的是——用例若复用被测常量，实现把常量改错时断言会跟着一起变，反而失去拦截力。
+const (
+	wantIdLen       = 16  //ID位数：12位东八区时间(YYMMDDhhmmss) + 4位亚秒
+	wantIdTickMicro = 100 //亚秒位精度，单位微秒：4位亚秒即0.1毫秒
+)
+
 // ID往返：GenIdByTime按本地时区格式化、ParseStrId固定按E8Loc解析，
 // 二者曾不对称，仅在本地时区恰为UTC+8时自洽。本用例显式覆盖多时区。
 func TestGenIdRoundTrip(t *testing.T) {
@@ -46,8 +54,8 @@ func TestGenIdTimezoneIndependent(t *testing.T) {
 func TestGenId(t *testing.T) {
 	//ID为16位，且随时间单调递增
 	id1 := GenId()
-	if s := Int2Str(id1); len(s) != IdLen {
-		t.Errorf("GenId 位数 = %d (%s), 期望 %d", len(s), s, IdLen)
+	if s := Int2Str(id1); len(s) != wantIdLen {
+		t.Errorf("GenId 位数 = %d (%s), 期望 %d", len(s), s, wantIdLen)
 	}
 	time.Sleep(time.Millisecond * 2)
 	if id2 := GenId(); id2 <= id1 {
@@ -55,7 +63,7 @@ func TestGenId(t *testing.T) {
 	}
 	//字符串形式与数值形式一致
 	sid := GenStrId()
-	if len(sid) != IdLen {
+	if len(sid) != wantIdLen {
 		t.Errorf("GenStrId 位数 = %d (%s)", len(sid), sid)
 	}
 	if Str2Int[int64](sid) <= 0 {
@@ -94,8 +102,8 @@ func TestGenIdUnique(t *testing.T) {
 		}
 		prev = id
 		//补偿不能把ID撑出16位，也不能产生无法解析的非法时间
-		if s := Int2Str(id); len(s) != IdLen {
-			t.Fatalf("第%d次调用ID非%d位: %s", i, IdLen, s)
+		if s := Int2Str(id); len(s) != wantIdLen {
+			t.Fatalf("第%d次调用ID非%d位: %s", i, wantIdLen, s)
 		}
 		if _, err := ParseId(ctx, id); err != nil {
 			t.Fatalf("第%d次调用ID无法解析 %d: %+v", i, id, err)
@@ -145,19 +153,19 @@ func TestGenIdClockRollback(t *testing.T) {
 	restoreGenIdTick(t)
 
 	//把水位顶到未来一小时，等价于时钟回拨：此后发号必须在水位上继续递增，不能倒退也不能重复
-	future := time.Now().Add(time.Hour).UnixMicro() / IdTickMicro
+	future := time.Now().Add(time.Hour).UnixMicro() / wantIdTickMicro
 	setGenIdTick(future)
 
-	if got, want := GenId(), GenIdByTime(time.UnixMicro((future+1)*IdTickMicro)); got != want {
+	if got, want := GenId(), GenIdByTime(time.UnixMicro((future+1)*wantIdTickMicro)); got != want {
 		t.Errorf("时钟回拨后发号 = %d, 期望 %d（必须继续递增）", got, want)
 	}
 	//同一个100微秒窗口内再次发号同样必须+1
-	if got, want := GenId(), GenIdByTime(time.UnixMicro((future+2)*IdTickMicro)); got != want {
+	if got, want := GenId(), GenIdByTime(time.UnixMicro((future+2)*wantIdTickMicro)); got != want {
 		t.Errorf("连续发号 = %d, 期望 %d", got, want)
 	}
 
 	//水位低于真实时刻时，应直接采用真实时刻而非继续在旧水位上+1
-	past := time.Now().Add(-time.Hour).UnixMicro() / IdTickMicro
+	past := time.Now().Add(-time.Hour).UnixMicro() / wantIdTickMicro
 	setGenIdTick(past)
 	GenId()
 	if tick := getGenIdTick(); tick <= past+1 {
@@ -182,18 +190,18 @@ func TestGenIdCarryAcrossSecond(t *testing.T) {
 		time.Date(2030, 9, 5, 23, 59, 59, 999900000, E8Loc),   //跨日
 		time.Date(2030, 12, 31, 23, 59, 59, 999900000, E8Loc), //跨年
 	} {
-		edgeTick := edge.UnixMicro() / IdTickMicro
+		edgeTick := edge.UnixMicro() / wantIdTickMicro
 		setGenIdTick(edgeTick)
 
 		//传入时刻远早于水位，必然走补偿分支，拿到 edgeTick+1
 		id := GenId()
-		want := GenIdByTime(time.UnixMicro((edgeTick + 1) * IdTickMicro))
+		want := GenIdByTime(time.UnixMicro((edgeTick + 1) * wantIdTickMicro))
 		if id != want {
 			t.Errorf("%s 边界发号 = %d, 期望 %d",
 				edge.In(E8Loc).Format("06-01-02 15:04:05.0000"), id, want)
 		}
-		if s := Int2Str(id); len(s) != IdLen {
-			t.Errorf("%s 边界发号非%d位: %s", edge.In(E8Loc).Format("15:04:05.0000"), IdLen, s)
+		if s := Int2Str(id); len(s) != wantIdLen {
+			t.Errorf("%s 边界发号非%d位: %s", edge.In(E8Loc).Format("15:04:05.0000"), wantIdLen, s)
 		}
 		//关键断言：整数+1的实现会在这里产生秒位60/分位60等非法值
 		parsed, err := ParseId(ctx, id)
@@ -203,9 +211,9 @@ func TestGenIdCarryAcrossSecond(t *testing.T) {
 			continue
 		}
 		//进位后应恰好落在下一个100微秒窗口
-		if parsed.UnixMicro() != (edgeTick+1)*IdTickMicro {
+		if parsed.UnixMicro() != (edgeTick+1)*wantIdTickMicro {
 			t.Errorf("%s 边界发号解析时刻 = %d, 期望 %d",
-				edge.In(E8Loc).Format("15:04:05.0000"), parsed.UnixMicro(), (edgeTick+1)*IdTickMicro)
+				edge.In(E8Loc).Format("15:04:05.0000"), parsed.UnixMicro(), (edgeTick+1)*wantIdTickMicro)
 		}
 	}
 }
@@ -221,12 +229,12 @@ func TestGenIdByTimeTickCarry(t *testing.T) {
 		time.Date(2026, 12, 31, 23, 59, 59, 999900000, E8Loc), //跨年
 	} {
 		base := GenIdByTime(tm)
-		next := GenIdByTime(time.UnixMicro(tm.UnixMicro() + IdTickMicro))
+		next := GenIdByTime(time.UnixMicro(tm.UnixMicro() + wantIdTickMicro))
 		if next <= base {
 			t.Errorf("%v 进位后ID未递增: %d -> %d", tm, base, next)
 		}
-		if s := Int2Str(next); len(s) != IdLen {
-			t.Errorf("%v 进位后ID非%d位: %s", tm, IdLen, s)
+		if s := Int2Str(next); len(s) != wantIdLen {
+			t.Errorf("%v 进位后ID非%d位: %s", tm, wantIdLen, s)
 		}
 		if _, err := ParseId(ctx, next); err != nil {
 			t.Errorf("%v 进位后ID无法解析 %d: %+v", tm, next, err)
@@ -275,13 +283,13 @@ func TestGenIdJsSafe(t *testing.T) {
 		t.Fatalf("越界起点 = %d, 期望 9007200000000000", over)
 	}
 	if over <= jsMaxSafeInteger {
-		t.Errorf("越界起点 %d 未越界，与 IdLen 注释记载的边界不符", over)
+		t.Errorf("越界起点 %d 未越界，与 wantIdLen 注释记载的边界不符", over)
 	}
 }
 
 // 发号容量：亚秒位取4位即0.1毫秒精度，单进程每秒最多10000个不同的ID。
 // 本用例把"容量"与"漂移上界"两件事都变成可执行的规格：
-//  1. 精度就是 IdTickMicro——同一个100微秒窗口内的不同时刻必须格式化出同一个ID，
+//  1. 精度就是 wantIdTickMicro——同一个100微秒窗口内的不同时刻必须格式化出同一个ID，
 //     跨窗口必须恰好+1。窗口数 1e6/100 = 10000 就是每秒容量。
 //  2. 连续发号 n 个时，GenId 的水位补偿会把内嵌时间顶到未来，
 //     但前移量恒不超过 n 个窗口（即 n/10000 秒）——这是补偿式发号的结构性上界，
@@ -289,24 +297,24 @@ func TestGenIdJsSafe(t *testing.T) {
 func TestGenIdCapacity(t *testing.T) {
 	ctx := GenCtx()
 
-	//1) 精度 = IdTickMicro，故每秒容量 = 1秒/IdTickMicro
+	//1) 精度 = wantIdTickMicro，故每秒容量 = 1秒/wantIdTickMicro
 	base := time.Date(2026, 9, 4, 17, 30, 45, 0, E8Loc)
-	if got, want := int64(time.Second/time.Microsecond)/IdTickMicro, int64(10000); got != want {
+	if got, want := int64(time.Second/time.Microsecond)/wantIdTickMicro, int64(10000); got != want {
 		t.Fatalf("每秒发号容量 = %d, 期望 %d", got, want)
 	}
 	//同一窗口内(0 与 99微秒)必须是同一个ID，否则精度不是声称的100微秒
-	if head, tail := GenIdByTime(base), GenIdByTime(base.Add(time.Duration(IdTickMicro-1)*time.Microsecond)); head != tail {
+	if head, tail := GenIdByTime(base), GenIdByTime(base.Add(time.Duration(wantIdTickMicro-1)*time.Microsecond)); head != tail {
 		t.Errorf("同一窗口内ID不一致: %d vs %d", head, tail)
 	}
 	//跨一个窗口必须恰好+1，既不跳号也不重号
-	if got, want := GenIdByTime(base.Add(time.Duration(IdTickMicro)*time.Microsecond)), GenIdByTime(base)+1; got != want {
+	if got, want := GenIdByTime(base.Add(time.Duration(wantIdTickMicro)*time.Microsecond)), GenIdByTime(base)+1; got != want {
 		t.Errorf("跨窗口发号 = %d, 期望 %d", got, want)
 	}
 
 	//2) 循环赋值场景：连续发号的内嵌时间前移量不得超过 n 个窗口
 	restoreGenIdTick(t)
 	const n = 1000
-	setGenIdTick(time.Now().UnixMicro() / IdTickMicro)
+	setGenIdTick(time.Now().UnixMicro() / wantIdTickMicro)
 	var last int64
 	for i := 0; i < n; i++ {
 		last = GenId()
@@ -316,7 +324,7 @@ func TestGenIdCapacity(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	drift := parsed.Sub(time.Now())
-	maxDrift := time.Duration(n*IdTickMicro) * time.Microsecond
+	maxDrift := time.Duration(n*wantIdTickMicro) * time.Microsecond
 	if drift > maxDrift {
 		t.Errorf("连续发号%d个后内嵌时间前移 %v, 超过结构性上界 %v", n, drift, maxDrift)
 	}
@@ -388,7 +396,7 @@ func restoreGenIdTick(t *testing.T) {
 	t.Helper()
 	saved := getGenIdTick()
 	t.Cleanup(func() {
-		if now := time.Now().UnixMicro() / IdTickMicro; now > saved {
+		if now := time.Now().UnixMicro() / wantIdTickMicro; now > saved {
 			setGenIdTick(now)
 		} else {
 			setGenIdTick(saved)
