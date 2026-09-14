@@ -167,9 +167,9 @@ func TestSetGinLogId(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	setGinLogId(c, GetLogId(c))
+	setGinLogId(c, GetLogId(c.Request.Context()))
 
-	logId := GetLogId(c)
+	logId := GetLogId(c.Request.Context())
 	if logId <= 0 {
 		t.Errorf("未生成 logId: %d", logId)
 	}
@@ -181,10 +181,14 @@ func TestSetGinLogId(t *testing.T) {
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c.Set(LogIdKey, int64(2609041730451234))
-	setGinLogId(c, GetLogId(c))
-	if got := GetLogId(c); got != 2609041730451234 {
+	c.Request = c.Request.WithContext(SetCtxValue(c.Request.Context(), LogIdKey, int64(2609041730451234)))
+	setGinLogId(c, GetLogId(c.Request.Context()))
+	if got := GetLogId(c.Request.Context()); got != 2609041730451234 {
 		t.Errorf("已有 logId 被覆盖: %d", got)
+	}
+	//不得写进 gin.Context.Keys：那个对象请求结束就回 sync.Pool 给下个请求复用
+	if _, exist := c.Get(LogIdKey); exist {
+		t.Errorf("logId 被写进了 gin.Context.Keys")
 	}
 }
 
@@ -244,8 +248,8 @@ func TestValidateGinPass(t *testing.T) {
 	if c.IsAborted() {
 		t.Errorf("合法token被拒绝")
 	}
-	//放行后须把claims塞进ctx，否则下游 GetClaims 恒为nil
-	got := GetClaims[*model.Claims](c)
+	//放行后须把claims塞进请求ctx，否则下游 GetClaims 恒为nil
+	got := GetClaims[*model.Claims](c.Request.Context())
 	if got == nil {
 		t.Fatalf("放行后取不到 claims")
 	}
@@ -474,12 +478,12 @@ func TestValidateGinCustomClaims(t *testing.T) {
 		t.Errorf("自定义claims字段 = %q, 期望 租户A", got.Tenant)
 	}
 	//GetClaims 按自定义类型取回的必须是同一个实例
-	if by := GetClaims[*fakeClaims](c); by != got {
+	if by := GetClaims[*fakeClaims](c.Request.Context()); by != got {
 		t.Errorf("GetClaims[*fakeClaims] 取回 %v, 期望与传入实例相同", by)
 	}
 	//类型参数给错时返回零值而非panic：GetCtxValue 的断言失败被吞掉(util/ctx.go:9 忽略ok)，
 	//故调用方必须自己保证类型参数与 ValidateGin 传入的claims类型一致，否则静默拿到nil
-	if by := GetClaims[*model.Claims](c); by != nil {
+	if by := GetClaims[*model.Claims](c.Request.Context()); by != nil {
 		t.Errorf("类型参数不符时应为nil, got %v", by)
 	}
 }
@@ -529,11 +533,11 @@ func TestValidateGinLogIdFromClaims(t *testing.T) {
 		return token
 	}
 
-	//前提事实：全新请求的gin上下文里没有logId，故 setGinLogId(c, GetLogId(c)) 必然现生成一个。
-	//本库没有任何中间件会在 ValidateGin 之前写入 LogIdKey——c.Set(LogIdKey,...) 只出现在 setGinLogId 内部
+	//前提事实：全新请求的ctx里没有logId，故 setGinLogId(c, GetLogId(c.Request.Context())) 必然现生成一个。
+	//本库没有任何中间件会在 ValidateGin 之前写入 LogIdKey
 	_, fresh := newGinCtx(http.MethodGet, "/")
-	if got := GetLogId(fresh); got != 0 {
-		t.Fatalf("全新gin上下文竟已有logId = %d", got)
+	if got := GetLogId(fresh.Request.Context()); got != 0 {
+		t.Fatalf("全新请求ctx竟已有logId = %d", got)
 	}
 
 	//claims 带logId：必须被采用，且同步到响应头
@@ -544,7 +548,7 @@ func TestValidateGinLogIdFromClaims(t *testing.T) {
 	if c.IsAborted() {
 		t.Fatalf("合法token被拒绝")
 	}
-	if got := GetLogId(c); got != callerLogId {
+	if got := GetLogId(c.Request.Context()); got != callerLogId {
 		t.Errorf("logId = %d, 期望取自claims的 %d（跨服务链路断开）", got, callerLogId)
 	}
 	if got := w.Header().Get(LogIdKey); got != Int2Str(callerLogId) {
@@ -555,7 +559,7 @@ func TestValidateGinLogIdFromClaims(t *testing.T) {
 	_, c = newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+newToken(0))
 	ValidateGin(c, secret, &model.Claims{})
-	if got := GetLogId(c); got <= 0 {
+	if got := GetLogId(c.Request.Context()); got <= 0 {
 		t.Errorf("claims无logId时应沿用自生成的logId, got %d", got)
 	}
 
@@ -571,7 +575,221 @@ func TestValidateGinLogIdFromClaims(t *testing.T) {
 	_, c = newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+badToken)
 	ValidateGin(c, secret, &model.Claims{})
-	if got := GetLogId(c); got == callerLogId {
+	if got := GetLogId(c.Request.Context()); got == callerLogId {
 		t.Errorf("验签失败的token注入了logId = %d", got)
+	}
+}
+
+// 中间件与 service 之间的唯一通路是 c.Request.Context()。
+// 曾经 ValidateGin 只把claims写进 gin.Context.Keys(c.Set(ClaimsKey,...))，
+// 而 NewGinGet/NewGinPost 交给 service 的是 c.Request.Context()——
+// gin.Context.Value 只在 engine.ContextWithFallback 打开时才回落到 Request.Context()，
+// 反向(Request.Context() 读 gin.Context.Keys)则永远不通，
+// 于是 service 侧 GetClaims 恒为nil、GetLogId 恒为0，logId 在 handler 边界断开。
+// 下游实例：jotcash 用 NewGinPost 注册的 5 个路由(jotcash/handler/handler.go:35-39)，
+// service 取不到claims → tool.GetToken 报"获取口令，为空" → 加密库连打都打不开。
+func TestValidateGinCtxToService(t *testing.T) {
+	ctx := GenCtx()
+	secret := "s"
+	const callerLogId = 2609150011071234
+	var claims model.Claims
+	claims.IssuedAt = time.Now().Unix()
+	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.LogId = callerLogId
+	claims.Ip = "1.2.3.4"
+	token, err := EnJwt(ctx, secret, claims)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	type req struct {
+		Name string `form:"name" json:"name"`
+	}
+	//POST：ValidateGin 放行后，NewGinPost 的 service 必须能拿到同一个claims与同一个logId
+	_, c := newGinCtx(http.MethodPost, "/")
+	c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"tom"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
+	got := &model.Claims{}
+	ValidateGin(c, secret, got)
+	if c.IsAborted() {
+		t.Fatalf("合法token被拒绝")
+	}
+	var postClaims *model.Claims
+	var postLogId int64
+	NewGinPost("测试接口", func(ctx context.Context, request req) (any, error) {
+		postClaims, postLogId = GetClaims[*model.Claims](ctx), GetLogId(ctx)
+		return "done", nil
+	})(c)
+	if postClaims == nil {
+		t.Fatalf("NewGinPost 的 service 取不到claims（中间件与service不通）")
+	}
+	if postClaims != got {
+		t.Errorf("service 拿到的claims = %v, 期望与 ValidateGin 传入的是同一实例", postClaims)
+	}
+	if postLogId != callerLogId {
+		t.Errorf("service 侧 logId = %d, 期望 %d（日志链路在handler边界断开）", postLogId, callerLogId)
+	}
+
+	//GET：同一条通路，NewGinGet 也须打通
+	_, c = newGinCtx(http.MethodGet, "/?name=tom")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
+	got = &model.Claims{}
+	ValidateGin(c, secret, got)
+	if c.IsAborted() {
+		t.Fatalf("合法token被拒绝")
+	}
+	var getClaims *model.Claims
+	var getLogId int64
+	NewGinGet("测试接口", func(ctx context.Context, request req) (any, error) {
+		getClaims, getLogId = GetClaims[*model.Claims](ctx), GetLogId(ctx)
+		return "done", nil
+	})(c)
+	if getClaims != got {
+		t.Errorf("NewGinGet 的 service 拿到的claims = %v, 期望与 ValidateGin 传入的是同一实例", getClaims)
+	}
+	if getLogId != callerLogId {
+		t.Errorf("NewGinGet 的 service 侧 logId = %d, 期望 %d", getLogId, callerLogId)
+	}
+
+	//未过鉴权时不得凭空出现claims：写入发生在放行那一步
+	_, c = newGinCtx(http.MethodPost, "/")
+	c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"tom"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	ValidateGin(c, secret, &model.Claims{}) //无 Authorization，必被拒
+	if !c.IsAborted() {
+		t.Fatalf("无token的请求竟被放行")
+	}
+	if by := GetClaims[*model.Claims](c.Request.Context()); by != nil {
+		t.Errorf("鉴权失败却把claims写进了请求ctx: %v", by)
+	}
+	//鉴权失败也已生成logId（setGinLogId 在入口就跑），须同样对 service 可见
+	if by := GetLogId(c.Request.Context()); by <= 0 {
+		t.Errorf("请求ctx里的 logId = %d, 期望入口生成的logId", by)
+	}
+}
+
+// 值一律只写请求ctx，不许写 gin.Context.Keys。
+// 原因不是洁癖：gin 在 ServeHTTP 结束时 engine.pool.Put(c)(gin@v1.12.0/gin.go)，
+// 下个请求 c.Request = req; c.reset() 把 Keys 直接置nil(gin@v1.12.0/context.go reset)，
+// 而 database/sql 的 (*Rows).awaitDone / (*Tx).awaitDone 协程(go1.27 src/database/sql/sql.go:3015/2214)
+// 会在请求返回后继续读 ctx.Done()/ctx.Err()——那时 *gin.Context 已经是别人的了。
+// 所以本库任何一处都不再把 *gin.Context 当 context.Context 交出去。
+func TestValidateGinNotInGinKeys(t *testing.T) {
+	ctx := GenCtx()
+	secret := "s"
+	var claims model.Claims
+	claims.IssuedAt = time.Now().Unix()
+	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.Ip = "1.1.1.1"
+	token, err := EnJwt(ctx, secret, claims)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	w, c := newGinCtx(http.MethodGet, "/")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
+	got := &model.Claims{}
+	ValidateGin(c, secret, got)
+	if c.IsAborted() {
+		t.Fatalf("合法token被拒绝")
+	}
+	//请求ctx：claims 与 logId 都在
+	if by := GetClaims[*model.Claims](c.Request.Context()); by != got {
+		t.Errorf("请求ctx 侧 claims = %v, 期望同一实例", by)
+	}
+	logId := GetLogId(c.Request.Context())
+	if logId <= 0 {
+		t.Fatalf("请求ctx 侧 logId = %d", logId)
+	}
+	//gin.Context.Keys：一个键都不许有
+	if len(c.Keys) != 0 {
+		t.Errorf("gin.Context.Keys 被写入了 %v", c.Keys)
+	}
+	if _, exist := c.Get(ClaimsKey); exist {
+		t.Errorf("claims 被写进了 gin.Context.Keys")
+	}
+	if _, exist := c.Get(LogIdKey); exist {
+		t.Errorf("logId 被写进了 gin.Context.Keys")
+	}
+	//响应头照旧带 logId：那是给调用方/人看的，不是进程内通路
+	if by := w.Header().Get(LogIdKey); by != Int2Str(logId) {
+		t.Errorf("响应头 logId = %q, 期望 %q", by, Int2Str(logId))
+	}
+}
+
+// 真实 engine 上把三段串起来跑：GinLog(访问日志) → ValidateGin(鉴权) → NewGinPost(业务)。
+// 三段现在一律只认 c.Request.Context()，同一个请求打出来的日志必须共用同一个 logId。
+// 这条也钉住 GinLog 里 ctx 的取值时机：ValidateGin 是用 c.Request = c.Request.WithContext(...) 写值的，
+// 若把 ctx := c.Request.Context() 挪到 c.Next() 之前，访问日志会掉回 logid:0。
+func TestGinChainOnlyRequestCtx(t *testing.T) {
+	const callerLogId = 2609150011079999
+	secret := "s"
+	var claims model.Claims
+	claims.IssuedAt = time.Now().Unix()
+	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.LogId = callerLogId
+	claims.Ip = "1.1.1.1"
+	token, err := EnJwt(GenCtx(), secret, claims)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	type req struct {
+		Name string `json:"name"`
+	}
+	var serviceClaims *model.Claims
+	var serviceLogId int64
+	var ginKeys map[any]any
+	out := captureLog(t, func() {
+		engine := gin.New()
+		engine.Use(GinLog)
+		engine.POST("/p", func(c *gin.Context) {
+			ValidateGin(c, secret, &model.Claims{})
+			ginKeys = c.Keys //ValidateGin 内部 c.Next() 已把整条链跑完
+		}, NewGinPost("测试接口", func(ctx context.Context, request req) (any, error) {
+			serviceClaims, serviceLogId = GetClaims[*model.Claims](ctx), GetLogId(ctx)
+			return "done", nil
+		}))
+
+		w := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/p", strings.NewReader(`{"name":"tom"}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set(AuthorizationKey, "Bearer "+token)
+		engine.ServeHTTP(w, request)
+		if w.Code != http.StatusOK {
+			t.Errorf("HTTP状态码 = %d", w.Code)
+		}
+		if got := w.Header().Get(LogIdKey); got != Int2Str(callerLogId) {
+			t.Errorf("响应头 logId = %q, 期望 %q", got, Int2Str(callerLogId))
+		}
+	})
+
+	if serviceClaims == nil || serviceClaims.Ip != "1.1.1.1" {
+		t.Fatalf("service 侧 claims = %v", serviceClaims)
+	}
+	if serviceLogId != callerLogId {
+		t.Errorf("service 侧 logId = %d, 期望 %d", serviceLogId, callerLogId)
+	}
+	//全程不得往 gin.Context.Keys 里写东西
+	if len(ginKeys) != 0 {
+		t.Errorf("gin.Context.Keys 被写入了 %v", ginKeys)
+	}
+	//业务日志与访问日志都得带上同一个 logId
+	wantLogId := Int2Str(callerLogId)
+	var bizLine, accessLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "测试接口") {
+			bizLine = line
+		}
+		if strings.Contains(line, "cip") {
+			accessLine = line
+		}
+	}
+	if bizLine == "" || !strings.Contains(bizLine, wantLogId) {
+		t.Errorf("业务日志未带 logId %s: %q", wantLogId, bizLine)
+	}
+	if accessLine == "" || !strings.Contains(accessLine, wantLogId) {
+		t.Errorf("访问日志未带 logId %s: %q", wantLogId, accessLine)
 	}
 }

@@ -44,7 +44,8 @@ func NewHttpResp(code int, msg string, data interface{}) model.HttpResp {
 }
 
 func Ping(c *gin.Context) {
-	logrus.WithContext(c).WithFields(logrus.Fields{"claims": GetClaims[any](c)}).Info("Ping")
+	ctx := c.Request.Context()
+	logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": GetClaims[any](ctx)}).Info("Ping")
 	c.JSON(http.StatusOK, NewHttpRespByErr(model.PingData{Ip: GetIP(), ServerName: GetServerName(), Timestamp: time.Now().Unix()}, nil))
 }
 
@@ -62,7 +63,7 @@ func setGinLogId(c *gin.Context, logId int64) {
 	if logId <= 0 {
 		logId = GenId()
 	}
-	c.Set(LogIdKey, logId)
+	c.Request = c.Request.WithContext(SetCtxValue(c.Request.Context(), LogIdKey, logId))
 	c.Header(LogIdKey, Int2Str(logId))
 }
 
@@ -75,7 +76,7 @@ type Claims interface {
 }
 
 func ValidateGin(c *gin.Context, secret string, claims Claims) {
-	setGinLogId(c, GetLogId(c))
+	setGinLogId(c, GetLogId(c.Request.Context()))
 
 	var token string
 	authorization := c.Request.Header.Get(AuthorizationKey)
@@ -91,7 +92,7 @@ func ValidateGin(c *gin.Context, secret string, claims Claims) {
 		c.JSON(http.StatusOK, NewHttpResp(http.StatusUnauthorized, "Authorization非法", nil))
 		return
 	}
-	jwtToken, err := DeJwt(c, token, secret, claims)
+	jwtToken, err := DeJwt(c.Request.Context(), token, secret, claims)
 	if err != nil {
 		c.Abort()
 		c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
@@ -120,7 +121,7 @@ func ValidateGin(c *gin.Context, secret string, claims Claims) {
 		return
 	}
 	if claims.GetReqId() > 0 {
-		if !TryLockReqId(c, claims.GetReqId(), duration) {
+		if !TryLockReqId(c.Request.Context(), claims.GetReqId(), duration) {
 			c.Abort()
 			c.JSON(http.StatusOK, NewHttpResp(http.StatusConflict, "请求非法重放", nil))
 			return
@@ -136,7 +137,7 @@ func ValidateGin(c *gin.Context, secret string, claims Claims) {
 			return
 		}
 	}
-	c.Set(ClaimsKey, claims)
+	c.Request = c.Request.WithContext(SetClaims(c.Request.Context(), claims))
 	c.Next()
 }
 
