@@ -10,6 +10,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// fakeConfig 充当业务配置对象，Text 用于断言解析结果确实落到了 ConfigService 上
+type fakeConfig struct {
+	Text string
+}
+
 // fakeConfigHandler 用于在不依赖真实业务配置的前提下驱动 ConfigService
 type fakeConfigHandler struct {
 	filePath   string
@@ -38,13 +43,13 @@ func (this *fakeConfigHandler) setParseErr(err error) {
 
 func (this *fakeConfigHandler) GetPath(ctx context.Context) string    { return this.filePath }
 func (this *fakeConfigHandler) GetDefault(ctx context.Context) string { return this.defaultCfg }
-func (this *fakeConfigHandler) Parse(ctx context.Context, text string) error {
+func (this *fakeConfigHandler) Parse(ctx context.Context, text string) (fakeConfig, error) {
 	this.parseCount.Add(1)
 	this.parsed.Store(text)
 	if box, ok := this.parseErr.Load().(*errBox); ok && box.err != nil {
-		return box.err
+		return fakeConfig{}, box.err
 	}
-	return nil
+	return fakeConfig{Text: text}, nil
 }
 func (this *fakeConfigHandler) lastParsed() string {
 	value, _ := this.parsed.Load().(string)
@@ -52,6 +57,7 @@ func (this *fakeConfigHandler) lastParsed() string {
 }
 
 func TestNewConfigService(t *testing.T) {
+	ctx := GenCtx()
 	h := newFakeConfigHandler(t, "默认配置")
 	service := NewConfigService(h)
 	if service == nil {
@@ -60,6 +66,9 @@ func TestNewConfigService(t *testing.T) {
 	//未加载前配置为空
 	if got := service.text; got != "" {
 		t.Errorf("未加载时缓存配置 = %q, 期望空", got)
+	}
+	if got := service.GetConfig(ctx); got != (fakeConfig{}) {
+		t.Errorf("未加载时配置对象 = %+v, 期望零值", got)
 	}
 }
 
@@ -234,6 +243,43 @@ func TestConfigServiceStop(t *testing.T) {
 	}
 }
 
+// 关键回归：解析结果须由 ConfigService 持有，否则 GetConfig 恒为零值
+func TestConfigServiceGetConfig(t *testing.T) {
+	ctx := GenCtx()
+	h := newFakeConfigHandler(t, "cfg-v1")
+	service := NewConfigService(h)
+
+	if err := service.LoadConfig(ctx); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if got := service.GetConfig(ctx); got.Text != "cfg-v1" {
+		t.Errorf("首次加载后配置对象 = %+v, 期望 Text=cfg-v1（零值说明解析结果没落到服务上）", got)
+	}
+
+	//文件变更后重载，配置对象须整体换新
+	if err := WriteStr2File(ctx, "cfg-v2", h.filePath); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if err := service.LoadConfig(ctx); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if got := service.GetConfig(ctx); got.Text != "cfg-v2" {
+		t.Errorf("重载后配置对象 = %+v, 期望 Text=cfg-v2", got)
+	}
+
+	//解析失败须保留上一份可用配置，不得把零值发布出去
+	h.setParseErr(errors.Errorf("解析失败"))
+	if err := WriteStr2File(ctx, "cfg-v3", h.filePath); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if err := service.LoadConfig(ctx); err == nil {
+		t.Errorf("Parse 报错时 LoadConfig 应返回error")
+	}
+	if got := service.GetConfig(ctx); got.Text != "cfg-v2" {
+		t.Errorf("解析失败后配置对象 = %+v, 期望仍是 cfg-v2", got)
+	}
+}
+
 // 并发读写配置不得触发 race
 func TestConfigServiceConcurrent(t *testing.T) {
 	ctx := GenCtx()
@@ -244,6 +290,7 @@ func TestConfigServiceConcurrent(t *testing.T) {
 	}
 
 	done := make(chan bool)
+	//加载方：反复重载
 	for i := 0; i < 5; i++ {
 		go func() {
 			for j := 0; j < 20; j++ {
@@ -252,11 +299,27 @@ func TestConfigServiceConcurrent(t *testing.T) {
 			done <- true
 		}()
 	}
+	//读方：与加载方并发读配置
 	for i := 0; i < 5; i++ {
+		go func() {
+			for j := 0; j < 200; j++ {
+				service.GetConfig(ctx)
+			}
+			done <- true
+		}()
+	}
+	//配置文件持续变化，逼出真正的「解析+发布」与读方并发
+	go func() {
+		for j := 0; j < 20; j++ {
+			WriteStr2File(ctx, "cfg-"+Int2Str(int64(j)), h.filePath)
+		}
+		done <- true
+	}()
+	for i := 0; i < 11; i++ {
 		select {
 		case <-done:
 		case <-timeAfterMs(20000):
-			t.Fatalf("并发加载超时，疑似死锁")
+			t.Fatalf("并发读写超时，疑似死锁")
 		}
 	}
 }

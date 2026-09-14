@@ -9,13 +9,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type ConfigHandler interface {
+type ConfigHandler[Config any] interface {
 	GetPath(ctx context.Context) string
 	GetDefault(ctx context.Context) string
-	Parse(ctx context.Context, text string) error
+	Parse(ctx context.Context, text string) (Config, error)
 }
 
-func NewConfigService[Config any](handler ConfigHandler) *ConfigService[Config] {
+func NewConfigService[Config any](handler ConfigHandler[Config]) *ConfigService[Config] {
 	var service ConfigService[Config]
 	service.handler = handler
 	service.lock = &sync.RWMutex{}
@@ -23,7 +23,7 @@ func NewConfigService[Config any](handler ConfigHandler) *ConfigService[Config] 
 }
 
 type ConfigService[Config any] struct {
-	handler ConfigHandler
+	handler ConfigHandler[Config]
 	lock    *sync.RWMutex
 	pool    *SingleGoPool
 
@@ -104,11 +104,12 @@ func (this *ConfigService[Config]) loadConfig(ctx context.Context) error {
 		return nil
 	}
 	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，解析")
-	err = this.handler.Parse(ctx, text)
+	config, err := this.handler.Parse(ctx, text)
 	if err != nil {
 		return err
 	}
 	this.text = text
+	this.config = config
 	return nil
 }
 
