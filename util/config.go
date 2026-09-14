@@ -15,22 +15,23 @@ type ConfigHandler interface {
 	Parse(ctx context.Context, text string) error
 }
 
-func NewConfigService(handler ConfigHandler) *ConfigService {
-	var service ConfigService
+func NewConfigService[Config any](handler ConfigHandler) *ConfigService[Config] {
+	var service ConfigService[Config]
 	service.handler = handler
-	service.lock = &sync.Mutex{}
+	service.lock = &sync.RWMutex{}
 	return &service
 }
 
-type ConfigService struct {
+type ConfigService[Config any] struct {
 	handler ConfigHandler
-	lock    *sync.Mutex
+	lock    *sync.RWMutex
 	pool    *SingleGoPool
 
-	text string
+	text   string
+	config Config
 }
 
-func (this *ConfigService) Start(ctx context.Context) error {
+func (this *ConfigService[Config]) Start(ctx context.Context) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
@@ -48,7 +49,7 @@ func (this *ConfigService) Start(ctx context.Context) error {
 	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，启动")
 	return this.loadConfig(ctx)
 }
-func (this *ConfigService) Stop(ctx context.Context) {
+func (this *ConfigService[Config]) Stop(ctx context.Context) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
@@ -59,7 +60,8 @@ func (this *ConfigService) Stop(ctx context.Context) {
 	this.pool = nil
 	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，停止")
 }
-func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) {
+
+func (this *ConfigService[Config]) flushConfig(ctx context.Context, pool *SingleGoPool) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("ConfigService，异常")
@@ -78,13 +80,13 @@ func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) 
 		}
 	}
 }
-func (this *ConfigService) LoadConfig(ctx context.Context) error {
+func (this *ConfigService[Config]) LoadConfig(ctx context.Context) error {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
 	return this.loadConfig(ctx)
 }
-func (this *ConfigService) loadConfig(ctx context.Context) error {
+func (this *ConfigService[Config]) loadConfig(ctx context.Context) error {
 	configPath := this.handler.GetPath(ctx)
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"path": configPath}).Info("ConfigService，加载")
 	text, err := ReadFile2Str(ctx, configPath, "")
@@ -108,4 +110,11 @@ func (this *ConfigService) loadConfig(ctx context.Context) error {
 	}
 	this.text = text
 	return nil
+}
+
+func (this *ConfigService[Config]) GetConfig(ctx context.Context) Config {
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
+	return this.config
 }
