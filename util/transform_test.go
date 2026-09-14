@@ -26,9 +26,9 @@ func TestInt2Str(t *testing.T) {
 	if got := Int2Str(uint32(math.MaxUint32)); got != "4294967295" {
 		t.Errorf(`Int2Str(MaxUint32) = %q`, got)
 	}
-	//本库18位ID必须精确
+	//大整数必须逐位精确，不得走float64路径（本库ID即依赖此保证）
 	if got := Int2Str(int64(260904172648391503)); got != "260904172648391503" {
-		t.Errorf(`Int2Str(18位ID) = %q`, got)
+		t.Errorf(`Int2Str(大整数) = %q`, got)
 	}
 	if got := Int2Strs(1, -2, 3); len(got) != 3 || got[0] != "1" || got[1] != "-2" || got[2] != "3" {
 		t.Errorf("Int2Strs = %v", got)

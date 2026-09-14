@@ -31,9 +31,9 @@ func TestGenLogId(t *testing.T) {
 	if id1 <= 0 {
 		t.Errorf("GenLogId = %d, 应为正", id1)
 	}
-	//18位且递增
-	if len(Int2Str(id1)) != 18 {
-		t.Errorf("GenLogId 位数 = %d", len(Int2Str(id1)))
+	//15位且递增
+	if len(Int2Str(id1)) != IdLen {
+		t.Errorf("GenLogId 位数 = %d, 期望 %d", len(Int2Str(id1)), IdLen)
 	}
 	if id2 := GenId(); id2 <= id1 {
 		t.Errorf("GenLogId 未递增: %d -> %d", id1, id2)
@@ -84,9 +84,9 @@ func TestGenReqId(t *testing.T) {
 	if id1 <= 0 {
 		t.Errorf("GenReqId = %d, 应为正整数", id1)
 	}
-	//与 GenLogId/GenId 同源，均为18位时间序ID
-	if got := len(Int2Str(id1)); got != 18 {
-		t.Errorf("GenReqId 位数 = %d (%s), 期望 18", got, Int2Str(id1))
+	//与 GenLogId/GenId 同源，均为15位时间序ID
+	if got := len(Int2Str(id1)); got != IdLen {
+		t.Errorf("GenReqId 位数 = %d (%s), 期望 %d", got, Int2Str(id1), IdLen)
 	}
 	//随时间单调不减；同一时刻可能相等，但绝不能倒退
 	for i := 0; i < 50; i++ {

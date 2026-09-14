@@ -269,40 +269,48 @@ type fakeGormObject struct {
 
 func (this fakeGormObject) TableName() string { return "fake_object" }
 
+// fakeGormInquiry 自身实现 Inquiry 接口（37b361c 起查询条件不再拆成"条件对象+外部handler"），
+// 并记录每个钩子被调用的次数，用于断言 Where/Order/Limit 的编排顺序；
+// whereErr/orderErr/limitErr 用于驱动 2d06a61 引入的错误分支。
 type fakeGormInquiry struct {
 	Id       int64
 	PageNum  int
 	PageSize int
-}
 
-// fakeInquiryHandler 记录每个钩子被调用的次数与最终SQL，用于断言 Where/Order/Limit 的编排顺序
-type fakeInquiryHandler struct {
-	whereNil  bool
+	whereErr  error
+	orderErr  error
+	limitErr  error
 	whereCall int
 	orderCall int
 	limitCall int
 }
 
-func (this *fakeInquiryHandler) Where(ctx context.Context, tx *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
+func (this *fakeGormInquiry) Where(ctx context.Context, tx *gorm.DB) (*gorm.DB, error) {
 	this.whereCall++
-	if this.whereNil {
-		return nil
+	if this.whereErr != nil {
+		return nil, this.whereErr
 	}
-	if inquiry.Id != 0 {
-		tx = tx.Where("id = ?", inquiry.Id)
+	if this.Id != 0 {
+		tx = tx.Where("id = ?", this.Id)
 	}
-	return tx
+	return tx, nil
 }
-func (this *fakeInquiryHandler) Order(ctx context.Context, tx *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
+func (this *fakeGormInquiry) Order(ctx context.Context, tx *gorm.DB) (*gorm.DB, error) {
 	this.orderCall++
-	return tx.Order("id DESC")
-}
-func (this *fakeInquiryHandler) Limit(ctx context.Context, tx *gorm.DB, inquiry fakeGormInquiry) *gorm.DB {
-	this.limitCall++
-	if inquiry.PageSize <= 0 {
-		return tx
+	if this.orderErr != nil {
+		return nil, this.orderErr
 	}
-	return tx.Limit(inquiry.PageSize).Offset((inquiry.PageNum - 1) * inquiry.PageSize)
+	return tx.Order("id DESC"), nil
+}
+func (this *fakeGormInquiry) Limit(ctx context.Context, tx *gorm.DB) (*gorm.DB, error) {
+	this.limitCall++
+	if this.limitErr != nil {
+		return nil, this.limitErr
+	}
+	if this.PageSize <= 0 {
+		return tx, nil
+	}
+	return tx.Limit(this.PageSize).Offset((this.PageNum - 1) * this.PageSize), nil
 }
 
 // sqlRecorder 记录 DryRun 下构造出的SQL
@@ -422,8 +430,8 @@ func TestUpdateHandlerSql(t *testing.T) {
 func TestDeleteHandlerSql(t *testing.T) {
 	ctx := GenCtx()
 	db, recorder := newDryRunDb(t)
-	inquiryHandler := &fakeInquiryHandler{}
-	handler := NewDeleteHandler[fakeGormObject]("假对象", fakeGormInquiry{Id: 7}, inquiryHandler)
+	inquiry := &fakeGormInquiry{Id: 7}
+	handler := NewDeleteHandler[fakeGormObject]("假对象", inquiry)
 
 	if err := handler.Transaction(ctx, db.Model(&fakeGormObject{})); err != nil {
 		t.Fatalf("删除异常: %+v", err)
@@ -432,9 +440,50 @@ func TestDeleteHandlerSql(t *testing.T) {
 		t.Errorf("未生成落到 fake_object 的DELETE: %v", recorder.sqls)
 	}
 	//Where/Order/Limit 三个钩子都必须被调用，缺一会让条件或分页静默失效
-	if inquiryHandler.whereCall != 1 || inquiryHandler.orderCall != 1 || inquiryHandler.limitCall != 1 {
+	if inquiry.whereCall != 1 || inquiry.orderCall != 1 || inquiry.limitCall != 1 {
 		t.Errorf("钩子调用次数 where=%d order=%d limit=%d, 期望各1次",
-			inquiryHandler.whereCall, inquiryHandler.orderCall, inquiryHandler.limitCall)
+			inquiry.whereCall, inquiry.orderCall, inquiry.limitCall)
+	}
+}
+
+// 2d06a61 给 Inquiry 三个钩子加了error返回值，此前无任何用例覆盖这些分支。
+// 任一钩子报错都必须：立即中断、不发SQL、错误原样上抛、后续钩子不再执行。
+func TestDeleteHandlerInquiryErr(t *testing.T) {
+	ctx := GenCtx()
+	for _, item := range []struct {
+		scene   string
+		inquiry *fakeGormInquiry
+		want    string
+	}{
+		{"Where报错", &fakeGormInquiry{whereErr: errors.Errorf("条件异常")}, "条件异常"},
+		{"Order报错", &fakeGormInquiry{orderErr: errors.Errorf("排序异常")}, "排序异常"},
+		{"Limit报错", &fakeGormInquiry{limitErr: errors.Errorf("分页异常")}, "分页异常"},
+	} {
+		db, recorder := newDryRunDb(t)
+		handler := NewDeleteHandler[fakeGormObject]("假对象", item.inquiry)
+
+		err := handler.Transaction(ctx, db.Model(&fakeGormObject{}))
+		if err == nil {
+			t.Errorf("[%s] 钩子报错时必须返回错误", item.scene)
+			continue
+		}
+		if !strings.Contains(err.Error(), item.want) {
+			t.Errorf("[%s] 错误未透传: %v", item.scene, err)
+		}
+		if recorder.contains("DELETE") {
+			t.Errorf("[%s] 钩子报错后仍发出了DELETE: %v", item.scene, recorder.sqls)
+		}
+		if handler.Count != 0 {
+			t.Errorf("[%s] 钩子报错后影响行数 = %d, 期望 0", item.scene, handler.Count)
+		}
+	}
+
+	//Where 报错后，Order/Limit 不得再被调用
+	inquiry := &fakeGormInquiry{whereErr: errors.Errorf("条件异常")}
+	db, _ := newDryRunDb(t)
+	NewDeleteHandler[fakeGormObject]("假对象", inquiry).Transaction(ctx, db.Model(&fakeGormObject{}))
+	if inquiry.orderCall != 0 || inquiry.limitCall != 0 {
+		t.Errorf("Where报错后仍执行了后续钩子: order=%d limit=%d", inquiry.orderCall, inquiry.limitCall)
 	}
 }
 
@@ -445,8 +494,8 @@ func TestDeleteHandlerSql(t *testing.T) {
 func TestSelectHandlerPaging(t *testing.T) {
 	ctx := GenCtx()
 	db, recorder := newDryRunDb(t)
-	inquiryHandler := &fakeInquiryHandler{}
-	handler := NewSelectHandler[fakeGormObject]("假对象", fakeGormInquiry{Id: 7, PageNum: 2, PageSize: 20}, inquiryHandler)
+	inquiry := &fakeGormInquiry{Id: 7, PageNum: 2, PageSize: 20}
+	handler := NewSelectHandler[fakeGormObject]("假对象", inquiry)
 
 	if err := handler.Transaction(ctx, db); err != nil {
 		t.Fatalf("查询异常: %+v", err)
@@ -468,9 +517,59 @@ func TestSelectHandlerPaging(t *testing.T) {
 		t.Errorf("SQL条数 = %d, 期望计数与查询各一条: %v", len(recorder.sqls), recorder.sqls)
 	}
 	//Count 先于 Order/Limit 执行，故 Where 会被调用一次，Order/Limit 各一次
-	if inquiryHandler.whereCall != 1 || inquiryHandler.orderCall != 1 || inquiryHandler.limitCall != 1 {
+	if inquiry.whereCall != 1 || inquiry.orderCall != 1 || inquiry.limitCall != 1 {
 		t.Errorf("钩子调用次数 where=%d order=%d limit=%d, 期望各1次",
-			inquiryHandler.whereCall, inquiryHandler.orderCall, inquiryHandler.limitCall)
+			inquiry.whereCall, inquiry.orderCall, inquiry.limitCall)
+	}
+}
+
+// SelectHandler 的错误分支与 DeleteHandler 不同：Where 在 Count 之前，Order/Limit 在 Count 之后，
+// 故 Where 报错时连 count 语句都不该发出，而 Order/Limit 报错时 count 已经发了但不得再发查询语句。
+func TestSelectHandlerInquiryErr(t *testing.T) {
+	ctx := GenCtx()
+
+	//Where 报错：一条SQL都不该有
+	inquiry := &fakeGormInquiry{whereErr: errors.Errorf("条件异常")}
+	db, recorder := newDryRunDb(t)
+	err := NewSelectHandler[fakeGormObject]("假对象", inquiry).Transaction(ctx, db)
+	if err == nil || !strings.Contains(err.Error(), "条件异常") {
+		t.Errorf("Where报错未上抛: %v", err)
+	}
+	if len(recorder.sqls) != 0 {
+		t.Errorf("Where报错后仍发出SQL: %v", recorder.sqls)
+	}
+	if inquiry.orderCall != 0 || inquiry.limitCall != 0 {
+		t.Errorf("Where报错后仍执行了后续钩子: order=%d limit=%d", inquiry.orderCall, inquiry.limitCall)
+	}
+
+	//Order/Limit 报错：count已执行，但不得再发查询语句，且结果集须保持为空切片
+	for _, item := range []struct {
+		scene   string
+		inquiry *fakeGormInquiry
+		want    string
+	}{
+		{"Order报错", &fakeGormInquiry{orderErr: errors.Errorf("排序异常")}, "排序异常"},
+		{"Limit报错", &fakeGormInquiry{limitErr: errors.Errorf("分页异常")}, "分页异常"},
+	} {
+		db, recorder = newDryRunDb(t)
+		handler := NewSelectHandler[fakeGormObject]("假对象", item.inquiry)
+
+		err = handler.Transaction(ctx, db)
+		if err == nil || !strings.Contains(err.Error(), item.want) {
+			t.Errorf("[%s] 错误未上抛: %v", item.scene, err)
+			continue
+		}
+		if handler.Object == nil || len(handler.Object) != 0 {
+			t.Errorf("[%s] 结果集 = %v, 期望空切片", item.scene, handler.Object)
+		}
+		if handler.GetOne() != nil {
+			t.Errorf("[%s] GetOne 应为nil", item.scene)
+		}
+		for i := range recorder.sqls {
+			if strings.Contains(recorder.sqls[i], "SELECT") && !strings.Contains(recorder.sqls[i], "count(*)") {
+				t.Errorf("[%s] 钩子报错后仍发出查询语句: %s", item.scene, recorder.sqls[i])
+			}
+		}
 	}
 }
 
@@ -478,7 +577,7 @@ func TestSelectHandlerPaging(t *testing.T) {
 func TestSelectHandlerGetOne(t *testing.T) {
 	ctx := GenCtx()
 	db, _ := newDryRunDb(t)
-	handler := NewSelectHandler[fakeGormObject]("假对象", fakeGormInquiry{}, &fakeInquiryHandler{})
+	handler := NewSelectHandler[fakeGormObject]("假对象", &fakeGormInquiry{})
 
 	if got := handler.GetOne(); got != nil {
 		t.Errorf("空结果 GetOne = %v, 期望 nil", got)

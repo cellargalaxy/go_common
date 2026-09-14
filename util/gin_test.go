@@ -10,8 +10,22 @@ import (
 
 	"github.com/cellargalaxy/go_common/model"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 	"github.com/pkg/errors"
 )
+
+// fakeClaims 自定义claims类型。7b1b8e3 起 ValidateGin 接受任意 Claims 实现，
+// 但 GetClaims 仍固定断言 *model.Claims，本类型用于锁定这条新链路的实际行为。
+type fakeClaims struct {
+	jwt.StandardClaims
+	Uri    string `json:"uri,omitempty"`
+	ReqId  int64  `json:"reqid,omitempty"`
+	Tenant string `json:"tenant,omitempty"`
+}
+
+func (this fakeClaims) GetExpiresAt() int64 { return this.ExpiresAt }
+func (this fakeClaims) GetReqId() int64     { return this.ReqId }
+func (this fakeClaims) GetUri() string      { return this.Uri }
 
 func TestGinKeyConstants(t *testing.T) {
 	//这些常量参与HTTP协议交互，改动会破坏兼容性
@@ -155,84 +169,10 @@ func TestSetGinLogId(t *testing.T) {
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c.Set(LogIdKey, int64(123456789012345678))
+	c.Set(LogIdKey, int64(2609041730451234))
 	setGinLogId(c, GetLogId(c))
-	if got := GetLogId(c); got != 123456789012345678 {
+	if got := GetLogId(c); got != 2609041730451234 {
 		t.Errorf("已有 logId 被覆盖: %d", got)
-	}
-}
-
-// ClaimsGin 是"尽力解析"中间件：无token或token非法都不阻断请求
-func TestClaimsGin(t *testing.T) {
-	ctx := GenCtx()
-	secret := "s"
-	var claims model.Claims
-	claims.IssuedAt = time.Now().Unix()
-	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
-	claims.Ip = "9.9.9.9"
-	claims.LogId = 260904173045123456
-	token, err := EnJwt(ctx, secret, claims)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	//Bearer 头
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
-	ClaimsGin(c, secret)
-	got := GetClaims(c)
-	if got == nil {
-		t.Fatalf("Bearer 头未解析出 claims")
-	}
-	if got.Ip != "9.9.9.9" {
-		t.Errorf("claims.Ip = %q", got.Ip)
-	}
-	//claims 中的 logId 须覆盖到ctx，实现跨服务链路追踪
-	if id := GetLogId(c); id != 260904173045123456 {
-		t.Errorf("logId 未取自 claims: %d", id)
-	}
-
-	//query 参数方式
-	w = httptest.NewRecorder()
-	c, _ = gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/?"+AuthorizationKey+"="+token, nil)
-	ClaimsGin(c, secret)
-	if got = GetClaims(c); got == nil || got.Ip != "9.9.9.9" {
-		t.Errorf("query 方式未解析出 claims: %v", got)
-	}
-
-	//无token：不得阻断，也不应有claims
-	w = httptest.NewRecorder()
-	c, _ = gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	ClaimsGin(c, secret)
-	if c.IsAborted() {
-		t.Errorf("无token时 ClaimsGin 不应中断请求")
-	}
-	if got = GetClaims(c); got != nil {
-		t.Errorf("无token时不应有 claims: %v", got)
-	}
-
-	//非法token：不得阻断（这是与 ValidateGin 的关键区别）
-	w = httptest.NewRecorder()
-	c, _ = gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c.Request.Header.Set(AuthorizationKey, "Bearer 非法token")
-	ClaimsGin(c, secret)
-	if c.IsAborted() {
-		t.Errorf("非法token时 ClaimsGin 不应中断请求")
-	}
-
-	//非 Bearer 前缀须被忽略
-	w = httptest.NewRecorder()
-	c, _ = gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-	c.Request.Header.Set(AuthorizationKey, "Basic "+token)
-	ClaimsGin(c, secret)
-	if got = GetClaims(c); got != nil {
-		t.Errorf("非 Bearer 前缀不应被解析: %v", got)
 	}
 }
 
@@ -243,7 +183,7 @@ func TestValidateGinReject(t *testing.T) {
 
 	//无token
 	w, c := newGinCtx(http.MethodGet, "/")
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	assertGinAbort(t, w, c, "无token", http.StatusUnauthorized, "Authorization非法")
 
 	//错误密钥签发的token
@@ -256,7 +196,7 @@ func TestValidateGinReject(t *testing.T) {
 	}
 	w, c = newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+badToken)
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	assertGinAbort(t, w, c, "错误密钥", http.StatusInternalServerError, "")
 
 	//已过期token
@@ -269,7 +209,7 @@ func TestValidateGinReject(t *testing.T) {
 	}
 	w, c = newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+expiredToken)
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	assertGinAbort(t, w, c, "过期token", http.StatusInternalServerError, "")
 }
 
@@ -288,7 +228,7 @@ func TestValidateGinPass(t *testing.T) {
 
 	_, c := newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	if c.IsAborted() {
 		t.Errorf("合法token被拒绝")
 	}
@@ -303,7 +243,7 @@ func TestValidateGinPass(t *testing.T) {
 
 	//query 参数方式同样须能取到token
 	_, c = newGinCtx(http.MethodGet, "/?"+AuthorizationKey+"="+token)
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	if c.IsAborted() {
 		t.Errorf("query方式的合法token被拒绝")
 	}
@@ -328,7 +268,7 @@ func TestValidateGinUri(t *testing.T) {
 	//uri 匹配：放行
 	_, c := newGinCtx(http.MethodGet, "/api/v1/do")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+newToken("/api/v1/do"))
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	if c.IsAborted() {
 		t.Errorf("uri 匹配时被拒绝")
 	}
@@ -336,7 +276,7 @@ func TestValidateGinUri(t *testing.T) {
 	//带query时仍应匹配（实现会剥掉query）
 	_, c = newGinCtx(http.MethodGet, "/api/v1/do?a=1")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+newToken("/api/v1/do"))
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	if c.IsAborted() {
 		t.Errorf("带query时 uri 比较失败")
 	}
@@ -344,7 +284,7 @@ func TestValidateGinUri(t *testing.T) {
 	//uri 不匹配：须拒绝并返回专用错误码
 	w, c := newGinCtx(http.MethodGet, "/api/v1/other")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+newToken("/api/v1/do"))
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	assertGinAbort(t, w, c, "uri不匹配", http.StatusBadRequest, "请求非法uri")
 }
 
@@ -364,14 +304,14 @@ func TestValidateGinReplay(t *testing.T) {
 	//首次放行
 	_, c := newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	if c.IsAborted() {
 		t.Fatalf("首次请求被拒绝")
 	}
 	//同一token重放：须被拒绝
 	w, c := newGinCtx(http.MethodGet, "/")
 	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
-	ValidateGin(c, secret)
+	ValidateGin(c, secret, &model.Claims{})
 	assertGinAbort(t, w, c, "重放请求", http.StatusConflict, "请求非法重放")
 }
 
@@ -493,4 +433,68 @@ func assertGinAbort(t *testing.T, w *httptest.ResponseRecorder, c *gin.Context, 
 	if wantMsg != "" && !strings.Contains(resp.Msg, wantMsg) {
 		t.Errorf("[%s] Msg = %q, 应包含 %q", scene, resp.Msg, wantMsg)
 	}
+}
+
+// 自定义 Claims 实现必须能走通鉴权，且只能用 GetClaimsBy 取回。
+// 这是 7b1b8e3 把 ValidateGin 泛化后唯一没有跟上的地方：GetClaims 固定断言
+// *model.Claims，GetCtxValue 又吞掉断言失败(util/ctx.go:9 忽略ok)，
+// 自定义claims类型的服务会静默拿到nil。
+func TestValidateGinCustomClaims(t *testing.T) {
+	ctx := GenCtx()
+	secret := "s"
+	var claims fakeClaims
+	claims.IssuedAt = time.Now().Unix()
+	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.Tenant = "租户A"
+	token, err := EnJwt(ctx, secret, claims)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	_, c := newGinCtx(http.MethodGet, "/")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
+	got := &fakeClaims{}
+	ValidateGin(c, secret, got)
+	if c.IsAborted() {
+		t.Fatalf("自定义claims的合法token被拒绝")
+	}
+	//载荷须被解进调用方传入的对象
+	if got.Tenant != "租户A" {
+		t.Errorf("自定义claims字段 = %q, 期望 租户A", got.Tenant)
+	}
+	//GetClaimsBy 按自定义类型取回的必须是同一个实例
+	if by := GetClaimsBy[*fakeClaims](c); by != got {
+		t.Errorf("GetClaimsBy 取回 %v, 期望与传入实例相同", by)
+	}
+	//GetClaims 固定断言 *model.Claims，自定义类型下取不到；沿用它的下游会静默拿到nil
+	if by := GetClaims(c); by != nil {
+		t.Errorf("GetClaims 在自定义claims下应取不到, got %v", by)
+	}
+	//类型不符时 GetClaimsBy 同样返回零值而非panic
+	if by := GetClaimsBy[*model.Claims](c); by != nil {
+		t.Errorf("GetClaimsBy 类型不符时应为nil, got %v", by)
+	}
+}
+
+// claims 必须传指针：三个getter与 jwt.StandardClaims.Valid 都是值接收者，
+// 传值(model.Claims{})照样满足 Claims 接口、编译期毫无提示，
+// 但 jwt.ParseWithClaims 解不进非指针目标，直接报
+// "json: cannot unmarshal object into Go value of type jwt.Claims"，
+// 合法请求被全量拒绝。本用例锁定这一行为，防止有人照着值语义写中间件。
+func TestValidateGinValueClaims(t *testing.T) {
+	ctx := GenCtx()
+	secret := "s"
+	var claims model.Claims
+	claims.IssuedAt = time.Now().Unix()
+	claims.ExpiresAt = time.Now().Add(time.Hour).Unix()
+	claims.Ip = "1.1.1.1"
+	token, err := EnJwt(ctx, secret, claims)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	w, c := newGinCtx(http.MethodGet, "/")
+	c.Request.Header.Set(AuthorizationKey, "Bearer "+token)
+	ValidateGin(c, secret, model.Claims{}) //故意传值
+	assertGinAbort(t, w, c, "claims传值", http.StatusInternalServerError, "JWT解密异常")
 }
