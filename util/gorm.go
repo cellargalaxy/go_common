@@ -97,23 +97,35 @@ func NewTransaction(db *gorm.DB) *Transaction {
 }
 
 type Transaction struct {
-	db       *gorm.DB
-	commit   []TransactionHandler
-	rollback []TransactionHandler
+	db           *gorm.DB
+	commitHook   []TransactionHandler
+	rollbackHook []TransactionHandler
 }
 
 func (this *Transaction) AddCommit(handler ...TransactionHandler) *Transaction {
-	this.commit = append(this.commit, handler...)
+	this.commitHook = append(this.commitHook, handler...)
 	return this
 }
 func (this *Transaction) AddRollback(handler ...TransactionHandler) *Transaction {
-	this.rollback = append(this.rollback, handler...)
+	this.rollbackHook = append(this.rollbackHook, handler...)
 	return this
 }
 func (this *Transaction) Exec(ctx context.Context) error {
+	err := this.commit(ctx, this.commitHook...)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("事务执行，异常")
+		this.rollback(ctx, this.rollbackHook...)
+		return err
+	}
+	return nil
+}
+func (this *Transaction) commit(ctx context.Context, handler ...TransactionHandler) error {
+	if len(handler) == 0 {
+		return nil
+	}
 	err := this.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for i := range this.commit {
-			err := this.commit[i].Exec(ctx, tx)
+		for i := range handler {
+			err := handler[i].Exec(ctx, tx)
 			if err != nil {
 				return err
 			}
@@ -121,10 +133,21 @@ func (this *Transaction) Exec(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		//todo,执行回滚
 		return err
 	}
 	return nil
+}
+func (this *Transaction) rollback(ctx context.Context, handler ...TransactionHandler) {
+	if len(handler) == 0 {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	err := this.commit(ctx, handler...)
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("事务回滚，异常")
+		return
+	}
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("事务回滚，完成")
 }
 
 func NewInsertHandler[Object any](name string, object ...*Object) *InsertHandler[Object] {
