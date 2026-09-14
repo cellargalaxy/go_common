@@ -3,6 +3,7 @@ package util
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -325,6 +326,18 @@ func ReverseStr(s string) string {
 		runes[from], runes[to] = runes[to], runes[from]
 	}
 	return string(runes)
+}
+
+func IsNil(object any) bool {
+	if object == nil {
+		return true
+	}
+	value := reflect.ValueOf(object)
+	switch value.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return value.IsNil()
+	}
+	return false
 }
 
 func S2P[T any](value T) *T {

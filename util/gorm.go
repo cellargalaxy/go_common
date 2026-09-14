@@ -267,7 +267,7 @@ func (this *SelectHandler[Object]) Exec(ctx context.Context, tx *gorm.DB) error 
 	if err != nil {
 		return err
 	}
-	err = tx.Find(&this.Object).Error
+	err = tx.Clauses(this.conds...).Find(&this.Object).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warnf("查询%s，不存在", this.name)
 		return nil

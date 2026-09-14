@@ -51,8 +51,8 @@ func Ping(c *gin.Context) {
 func GetClaims[Claim any](ctx context.Context) Claim {
 	return GetCtxValue[Claim](ctx, ClaimsKey)
 }
-func SetClaims[Claim any](ctx context.Context, claims Claim) context.Context {
-	if claims == nil {
+func SetClaims(ctx context.Context, claims any) context.Context {
+	if IsNil(claims) {
 		return ctx
 	}
 	return SetCtxValue(ctx, ClaimsKey, claims)
