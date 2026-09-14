@@ -330,7 +330,10 @@ func (this *sqlRecorder) Error(context.Context, string, ...interface{}) {}
 
 // dryRunConnPool 只提供事务的开启与提交语义，DryRun下不会真的执行SQL，
 // 用于覆盖 Transaction；gorm自带的 DummyDialector 不带连接池，Begin 会直接报 invalid transaction
-type dryRunConnPool struct{}
+type dryRunConnPool struct {
+	//记录开启事务的次数，用于断言"没有回滚handler时不额外开一个空事务"
+	beginCall int
+}
 
 func (this *dryRunConnPool) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	return nil, nil
@@ -345,6 +348,7 @@ func (this *dryRunConnPool) QueryRowContext(ctx context.Context, query string, a
 	return nil
 }
 func (this *dryRunConnPool) BeginTx(ctx context.Context, opts *sql.TxOptions) (gorm.ConnPool, error) {
+	this.beginCall++
 	return &dryRunTx{}, nil
 }
 
@@ -359,12 +363,18 @@ func (this *dryRunTx) Rollback() error { return nil }
 
 func newDryRunDb(t *testing.T) (*gorm.DB, *sqlRecorder) {
 	t.Helper()
+	db, recorder, _ := newDryRunDbPool(t)
+	return db, recorder
+}
+func newDryRunDbPool(t *testing.T) (*gorm.DB, *sqlRecorder, *dryRunConnPool) {
+	t.Helper()
 	recorder := &sqlRecorder{}
-	db, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{DryRun: true, Logger: recorder, ConnPool: &dryRunConnPool{}})
+	pool := &dryRunConnPool{}
+	db, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{DryRun: true, Logger: recorder, ConnPool: pool})
 	if err != nil {
 		t.Fatalf("打开DryRun数据库异常: %+v", err)
 	}
-	return db, recorder
+	return db, recorder, pool
 }
 
 func (this *sqlRecorder) contains(keyword string) bool {
@@ -666,14 +676,17 @@ func TestSelectHandlerClauses(t *testing.T) {
 	}
 }
 
-// Transaction 须按顺序执行全部handler，任一报错则中断并向上抛出
+// Transaction 须按顺序执行全部commit handler，任一报错则中断并向上抛出
 type errHandler struct {
 	called int
 	err    error
+	//记录执行时ctx是否已被取消，用于断言回滚走的是摘掉取消信号的ctx
+	ctxDone bool
 }
 
 func (this *errHandler) Exec(ctx context.Context, tx *gorm.DB) error {
 	this.called++
+	this.ctxDone = CtxDone(ctx)
 	return this.err
 }
 
@@ -683,7 +696,7 @@ func TestTransaction(t *testing.T) {
 
 	first := &errHandler{}
 	second := &errHandler{}
-	if err := Transaction(ctx, db, first, second); err != nil {
+	if err := NewTransaction(db).AddCommit(first, second).Exec(ctx); err != nil {
 		t.Fatalf("事务异常: %+v", err)
 	}
 	if first.called != 1 || second.called != 1 {
@@ -693,7 +706,7 @@ func TestTransaction(t *testing.T) {
 	//前一个handler报错时，后续handler不得再执行
 	failed := &errHandler{err: errors.Errorf("处理失败")}
 	skipped := &errHandler{}
-	err := Transaction(ctx, db, failed, skipped)
+	err := NewTransaction(db).AddCommit(failed, skipped).Exec(ctx)
 	if err == nil {
 		t.Fatalf("handler报错时事务必须返回错误")
 	}
@@ -705,7 +718,98 @@ func TestTransaction(t *testing.T) {
 	}
 
 	//无handler时须正常返回
-	if err = Transaction(ctx, db); err != nil {
+	if err = NewTransaction(db).Exec(ctx); err != nil {
 		t.Errorf("空handler事务异常: %+v", err)
+	}
+}
+
+// 回滚handler只在主事务失败时执行，且不得改写主事务抛出的根因
+func TestTransactionRollback(t *testing.T) {
+	ctx := GenCtx()
+	db, _ := newDryRunDb(t)
+
+	//主事务成功，回滚handler一次都不能跑
+	committed := &errHandler{}
+	rollbacked := &errHandler{}
+	if err := NewTransaction(db).AddCommit(committed).AddRollback(rollbacked).Exec(ctx); err != nil {
+		t.Fatalf("事务异常: %+v", err)
+	}
+	if rollbacked.called != 0 {
+		t.Errorf("主事务成功却执行了回滚handler")
+	}
+
+	//主事务失败，回滚handler须按序全部执行，返回的仍是主事务的根因
+	failed := &errHandler{err: errors.Errorf("处理失败")}
+	firstBack := &errHandler{}
+	secondBack := &errHandler{}
+	err := NewTransaction(db).AddCommit(failed).AddRollback(firstBack, secondBack).Exec(ctx)
+	if err == nil {
+		t.Fatalf("主事务失败必须返回错误")
+	}
+	if !strings.Contains(err.Error(), "处理失败") {
+		t.Errorf("回滚顶掉了主事务的根因: %v", err)
+	}
+	if firstBack.called != 1 || secondBack.called != 1 {
+		t.Errorf("回滚handler 调用次数 = %d/%d, 期望各1次", firstBack.called, secondBack.called)
+	}
+
+	//回滚自身报错只记日志，抛给调用方的仍须是主事务的根因
+	backFailed := &errHandler{err: errors.Errorf("回滚失败")}
+	backSkipped := &errHandler{}
+	err = NewTransaction(db).AddCommit(&errHandler{err: errors.Errorf("处理失败")}).AddRollback(backFailed, backSkipped).Exec(ctx)
+	if err == nil || !strings.Contains(err.Error(), "处理失败") {
+		t.Errorf("回滚异常时返回的错误 = %v, 期望仍是主事务根因", err)
+	}
+	if strings.Contains(err.Error(), "回滚失败") {
+		t.Errorf("回滚的错误不应外抛: %v", err)
+	}
+	if backSkipped.called != 0 {
+		t.Errorf("前置回滚handler报错后仍执行了后续回滚handler")
+	}
+}
+
+// 主事务因ctx取消而失败时，回滚仍须跑得起来（回滚走的ctx已摘掉取消信号）
+func TestTransactionRollbackCtx(t *testing.T) {
+	ctx, cancel := context.WithCancel(GenCtx())
+	defer CancelCtx(cancel)
+	db, _ := newDryRunDb(t)
+
+	cancel()
+	rollbacked := &errHandler{}
+	err := NewTransaction(db).AddCommit(&errHandler{err: errors.Errorf("处理失败")}).AddRollback(rollbacked).Exec(ctx)
+	if err == nil {
+		t.Fatalf("主事务失败必须返回错误")
+	}
+	if rollbacked.called != 1 {
+		t.Errorf("ctx已取消导致回滚未执行")
+	}
+	if rollbacked.ctxDone {
+		t.Errorf("回滚仍跑在已取消的ctx上，真实数据库下必然立刻再失败")
+	}
+	//ctx上的值不能跟着取消信号一起被摘掉，否则日志串不起来
+	if GetLogId(ctx) == 0 || rollbacked.called != 1 {
+		t.Errorf("ctx缺少logId，用例前提不成立")
+	}
+}
+
+// 没有回滚handler时不得为回滚白开一个空事务
+func TestTransactionRollbackEmpty(t *testing.T) {
+	ctx := GenCtx()
+	db, _, pool := newDryRunDbPool(t)
+
+	if err := NewTransaction(db).AddCommit(&errHandler{err: errors.Errorf("处理失败")}).Exec(ctx); err == nil {
+		t.Fatalf("主事务失败必须返回错误")
+	}
+	if pool.beginCall != 1 {
+		t.Errorf("开启事务次数 = %d, 期望 1（无回滚handler不该再开一个空事务）", pool.beginCall)
+	}
+
+	//有回滚handler时才是两个事务：主事务一个，回滚一个
+	db, _, pool = newDryRunDbPool(t)
+	if err := NewTransaction(db).AddCommit(&errHandler{err: errors.Errorf("处理失败")}).AddRollback(&errHandler{}).Exec(ctx); err == nil {
+		t.Fatalf("主事务失败必须返回错误")
+	}
+	if pool.beginCall != 2 {
+		t.Errorf("开启事务次数 = %d, 期望 2（主事务与回滚各一个）", pool.beginCall)
 	}
 }
