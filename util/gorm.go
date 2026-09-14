@@ -149,6 +149,23 @@ func (this *Transaction) rollback(ctx context.Context, handler ...TransactionHan
 	}
 	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("事务回滚，完成")
 }
+func (this *Transaction) Close(ctx context.Context) error {
+	if this.db == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("关闭数据库，连接为空")
+		return nil
+	}
+	sqlDb, err := this.db.DB()
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("关闭数据库，获取连接异常")
+		return errors.Errorf("关闭数据库，获取连接异常: %+v", err)
+	}
+	err = sqlDb.Close()
+	if err != nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("关闭数据库，异常")
+		return errors.Errorf("关闭数据库，异常: %+v", err)
+	}
+	return nil
+}
 
 func NewInsertHandler[Object any](name string, object ...*Object) *InsertHandler[Object] {
 	handler := new(InsertHandler[Object])
