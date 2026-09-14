@@ -142,27 +142,29 @@ func ValidateGin(c *gin.Context, secret string, claims Claims) {
 
 func NewGinGet[Req any](name string, service func(ctx context.Context, req Req) (any, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
 		var req Req
 		err := c.ShouldBindQuery(&req)
 		if err != nil {
-			logrus.WithContext(c).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
 			c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
 			return
 		}
-		logrus.WithContext(c).WithFields(logrus.Fields{"req": req}).Info(name)
-		c.JSON(http.StatusOK, NewHttpRespByErr(service(c, req)))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"req": req}).Info(name)
+		c.JSON(http.StatusOK, NewHttpRespByErr(service(ctx, req)))
 	}
 }
 func NewGinPost[Req any](name string, service func(ctx context.Context, req Req) (any, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
 		var req Req
 		err := c.ShouldBindJSON(&req)
 		if err != nil {
-			logrus.WithContext(c).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(fmt.Sprintf("%s，请求参数解析异常", name))
 			c.JSON(http.StatusOK, NewHttpRespByErr(nil, err))
 			return
 		}
-		logrus.WithContext(c).WithFields(logrus.Fields{"req": req}).Info(name)
-		c.JSON(http.StatusOK, NewHttpRespByErr(service(c, req)))
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"req": req}).Info(name)
+		c.JSON(http.StatusOK, NewHttpRespByErr(service(ctx, req)))
 	}
 }
