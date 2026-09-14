@@ -17,6 +17,9 @@ type Claims struct {
 func (this Claims) GetExpiresAt() int64 {
 	return this.ExpiresAt
 }
+func (this Claims) GetLogId() int64 {
+	return this.LogId
+}
 func (this Claims) GetReqId() int64 {
 	return this.ReqId
 }

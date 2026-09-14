@@ -69,6 +69,7 @@ func setGinLogId(c *gin.Context, logId int64) {
 type Claims interface {
 	jwt.Claims
 	GetExpiresAt() int64
+	GetLogId() int64
 	GetReqId() int64
 	GetUri() string
 }
@@ -105,6 +106,10 @@ func ValidateGin(c *gin.Context, secret string, claims Claims) {
 		c.Abort()
 		c.JSON(http.StatusOK, NewHttpResp(http.StatusUnauthorized, "jwtToken非法", nil))
 		return
+	}
+
+	if claims.GetLogId() > 0 {
+		setGinLogId(c, claims.GetLogId())
 	}
 
 	expiresAt := time.Unix(claims.GetExpiresAt(), 0)
