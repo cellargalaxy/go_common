@@ -48,6 +48,17 @@ func (this *ConfigService) Start(ctx context.Context) error {
 	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，启动")
 	return this.loadConfig(ctx)
 }
+func (this *ConfigService) Stop(ctx context.Context) {
+	this.lock.Lock()
+	defer this.lock.Unlock()
+
+	if this.pool == nil {
+		return
+	}
+	ClosePool(ctx, this.pool)
+	this.pool = nil
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("ConfigService，停止")
+}
 func (this *ConfigService) flushConfig(ctx context.Context, pool *SingleGoPool) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
