@@ -90,17 +90,41 @@ type TransactionHandler interface {
 	Exec(ctx context.Context, tx *gorm.DB) error
 }
 
-func Transaction(ctx context.Context, db *gorm.DB, handlers ...TransactionHandler) error {
-	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for i := range handlers {
-			err := handlers[i].Exec(ctx, tx)
+func NewTransaction(db *gorm.DB) *Transaction {
+	transaction := new(Transaction)
+	transaction.db = db
+	return transaction
+}
+
+type Transaction struct {
+	db       *gorm.DB
+	commit   []TransactionHandler
+	rollback []TransactionHandler
+}
+
+func (this *Transaction) AddCommit(handler ...TransactionHandler) *Transaction {
+	this.commit = append(this.commit, handler...)
+	return this
+}
+func (this *Transaction) AddRollback(handler ...TransactionHandler) *Transaction {
+	this.rollback = append(this.rollback, handler...)
+	return this
+}
+func (this *Transaction) Exec(ctx context.Context) error {
+	err := this.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i := range this.commit {
+			err := this.commit[i].Exec(ctx, tx)
 			if err != nil {
 				return err
 			}
 		}
 		return nil
 	})
-	return err
+	if err != nil {
+		//todo,执行回滚
+		return err
+	}
+	return nil
 }
 
 func NewInsertHandler[Object any](name string, object ...*Object) *InsertHandler[Object] {
