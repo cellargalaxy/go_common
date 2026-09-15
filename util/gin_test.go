@@ -129,12 +129,12 @@ func TestGetSetClaims(t *testing.T) {
 	}
 }
 
-func TestPing(t *testing.T) {
+func TestGinPing(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/ping", nil)
 
-	Ping(c)
+	GinPing(c)
 	if w.Code != http.StatusOK {
 		t.Errorf("HTTP状态码 = %d", w.Code)
 	}

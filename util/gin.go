@@ -46,7 +46,7 @@ func NewHttpResp(code int, msg string, data interface{}) model.HttpResp {
 func NewPingData() model.PingData {
 	return model.PingData{Ip: GetIP(), ServerName: GetServerName(), Timestamp: time.Now().Unix()}
 }
-func Ping(c *gin.Context) {
+func GinPing(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": GetClaims[any](ctx)}).Info("Ping")
