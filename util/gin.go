@@ -43,10 +43,14 @@ func NewHttpResp(code int, msg string, data interface{}) model.HttpResp {
 	return model.HttpResp{Code: code, Msg: msg, Data: data}
 }
 
+func NewPingData() model.PingData {
+	return model.PingData{Ip: GetIP(), ServerName: GetServerName(), Timestamp: time.Now().Unix()}
+}
 func Ping(c *gin.Context) {
 	ctx := c.Request.Context()
+
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"claims": GetClaims[any](ctx)}).Info("Ping")
-	c.JSON(http.StatusOK, NewHttpRespByErr(model.PingData{Ip: GetIP(), ServerName: GetServerName(), Timestamp: time.Now().Unix()}, nil))
+	c.JSON(http.StatusOK, NewHttpRespByErr(NewPingData(), nil))
 }
 
 func GetClaims[Claim any](ctx context.Context) Claim {
