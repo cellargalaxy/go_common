@@ -106,11 +106,11 @@ func DeJwt(ctx context.Context, token, secret string, claims jwt.Claims) (*jwt.T
 
 	var jwtToken *jwt.Token
 	if claims != nil {
-		jwtToken, err = jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		jwtToken, err = jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (any, error) {
 			return secretHash, nil
 		})
 	} else {
-		jwtToken, err = jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		jwtToken, err = jwt.Parse(token, func(token *jwt.Token) (any, error) {
 			return secretHash, nil
 		})
 	}

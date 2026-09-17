@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func QueryStruct2Data(ctx context.Context, x interface{}) (data []byte) {
+func QueryStruct2Data(ctx context.Context, x any) (data []byte) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化query异常")
@@ -22,12 +22,12 @@ func QueryStruct2Data(ctx context.Context, x interface{}) (data []byte) {
 	}
 	return data
 }
-func QueryStruct2Str(ctx context.Context, x interface{}) string {
+func QueryStruct2Str(ctx context.Context, x any) string {
 	data := QueryStruct2Data(ctx, x)
 	return string(data)
 }
 
-func QueryData2Struct(ctx context.Context, data []byte, v interface{}) (err error) {
+func QueryData2Struct(ctx context.Context, data []byte, v any) (err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("反序列化query异常")
@@ -42,6 +42,6 @@ func QueryData2Struct(ctx context.Context, data []byte, v interface{}) (err erro
 	}
 	return nil
 }
-func QueryStr2Struct(ctx context.Context, data string, v interface{}) error {
+func QueryStr2Struct(ctx context.Context, data string, v any) error {
 	return QueryData2Struct(ctx, []byte(data), v)
 }

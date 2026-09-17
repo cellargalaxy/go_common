@@ -317,7 +317,7 @@ func CheckBookmark(ctx context.Context, csvPath string, excludeSorts ...string) 
 	}
 
 	var wg sync.WaitGroup
-	pool, err := ants.NewPoolWithFunc(32, func(param interface{}) {
+	pool, err := ants.NewPoolWithFunc(32, func(param any) {
 		defer wg.Done()
 		if param == nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"param": param}).Error("检测书签，协程池参数为空")

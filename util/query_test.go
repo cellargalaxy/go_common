@@ -145,7 +145,7 @@ func TestQueryStruct2DataIllegalInput(t *testing.T) {
 	}
 
 	//不可序列化类型：同样只能返回空，不得panic
-	for _, bad := range []interface{}{func() {}, make(chan int)} {
+	for _, bad := range []any{func() {}, make(chan int)} {
 		if got := QueryStruct2Data(ctx, bad); len(got) != 0 {
 			t.Errorf("QueryStruct2Data(%T) = %q, 期望空", bad, got)
 		}

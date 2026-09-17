@@ -243,10 +243,10 @@ func TestGetExecFileAndFolder(t *testing.T) {
 // Defer 是全局的panic兜底工具，必须真正捕获panic并给出堆栈
 func TestDefer(t *testing.T) {
 	//有panic时：err非nil且带堆栈
-	var gotErr interface{}
+	var gotErr any
 	var gotStack string
 	func() {
-		defer Defer(func(err interface{}, stack string) {
+		defer Defer(func(err any, stack string) {
 			gotErr = err
 			gotStack = stack
 		})
@@ -269,7 +269,7 @@ func TestDefer(t *testing.T) {
 	called := false
 	gotStack = "未重置"
 	func() {
-		defer Defer(func(err interface{}, stack string) {
+		defer Defer(func(err any, stack string) {
 			called = true
 			gotErr = err
 			gotStack = stack
@@ -287,7 +287,7 @@ func TestDefer(t *testing.T) {
 
 	//panic 传入 error 类型时也应被捕获
 	func() {
-		defer Defer(func(err interface{}, stack string) { gotErr = err })
+		defer Defer(func(err any, stack string) { gotErr = err })
 		panic(os.ErrNotExist)
 	}()
 	if gotErr != os.ErrNotExist {

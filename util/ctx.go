@@ -9,7 +9,7 @@ func GetCtxValue[T any](ctx context.Context, key string) T {
 	object, _ := value.(T)
 	return object
 }
-func SetCtxValue(ctx context.Context, key string, value interface{}) context.Context {
+func SetCtxValue(ctx context.Context, key string, value any) context.Context {
 	return context.WithValue(ctx, key, value)
 }
 

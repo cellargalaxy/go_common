@@ -345,7 +345,7 @@ func TestCsvStruct2XxxIllegalInput(t *testing.T) {
 	}
 
 	//非切片/非数组入参：gocsv 自身返回error，同样不得panic
-	for _, bad := range []interface{}{123, "abc", 1.5, true, struct{ A int }{1}} {
+	for _, bad := range []any{123, "abc", 1.5, true, struct{ A int }{1}} {
 		if _, err := CsvStruct2Data(ctx, bad); err == nil {
 			t.Errorf("CsvStruct2Data(%#v) 应返回error", bad)
 		}

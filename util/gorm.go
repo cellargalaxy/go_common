@@ -37,13 +37,13 @@ type GormLog struct {
 func (this GormLog) LogMode(logger.LogLevel) logger.Interface {
 	return this
 }
-func (this GormLog) Info(ctx context.Context, s string, args ...interface{}) {
+func (this GormLog) Info(ctx context.Context, s string, args ...any) {
 	logrus.WithContext(ctx).Infof(s, args...)
 }
-func (this GormLog) Warn(ctx context.Context, s string, args ...interface{}) {
+func (this GormLog) Warn(ctx context.Context, s string, args ...any) {
 	logrus.WithContext(ctx).Warnf(s, args...)
 }
-func (this GormLog) Error(ctx context.Context, s string, args ...interface{}) {
+func (this GormLog) Error(ctx context.Context, s string, args ...any) {
 	logrus.WithContext(ctx).Errorf(s, args...)
 }
 func (this GormLog) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {

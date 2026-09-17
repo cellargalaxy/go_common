@@ -163,7 +163,7 @@ func NewHttpClientReq(ctx context.Context) *resty.Request {
 	return httpClient.R().SetContext(ctx)
 }
 func DealHttpClientResp(ctx context.Context, name string, response *resty.Response, err error) (string, error) {
-	var GenMsg = func(name string, value interface{}, texts ...string) string {
+	var GenMsg = func(name string, value any, texts ...string) string {
 		var str string
 		if len(texts) == 0 {
 			str = name

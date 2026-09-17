@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func YamlStruct2Data(ctx context.Context, x interface{}) (data []byte) {
+func YamlStruct2Data(ctx context.Context, x any) (data []byte) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化yaml异常")
@@ -23,12 +23,12 @@ func YamlStruct2Data(ctx context.Context, x interface{}) (data []byte) {
 	return data
 }
 
-func YamlStruct2Str(ctx context.Context, x interface{}) string {
+func YamlStruct2Str(ctx context.Context, x any) string {
 	bytes := YamlStruct2Data(ctx, x)
 	return string(bytes)
 }
 
-func YamlData2Struct(ctx context.Context, data []byte, v interface{}) (err error) {
+func YamlData2Struct(ctx context.Context, data []byte, v any) (err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("反序列化yaml异常")
@@ -44,6 +44,6 @@ func YamlData2Struct(ctx context.Context, data []byte, v interface{}) (err error
 	return nil
 }
 
-func YamlStr2Struct(ctx context.Context, data string, v interface{}) error {
+func YamlStr2Struct(ctx context.Context, data string, v any) error {
 	return YamlData2Struct(ctx, []byte(data), v)
 }

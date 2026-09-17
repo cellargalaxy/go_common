@@ -6,14 +6,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func JsonStruct2Data(x interface{}) []byte {
+func JsonStruct2Data(x any) []byte {
 	bytes, err := json.Marshal(x)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"x": x, "err": errors.WithStack(err)}).Error("序列化json异常")
 	}
 	return bytes
 }
-func JsonStruct2DataIndent(x interface{}) []byte {
+func JsonStruct2DataIndent(x any) []byte {
 	bytes, err := json.MarshalIndent(x, "", "  ")
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"x": x, "err": errors.WithStack(err)}).Error("序列化json异常")
@@ -21,16 +21,16 @@ func JsonStruct2DataIndent(x interface{}) []byte {
 	return bytes
 }
 
-func JsonStruct2Str(x interface{}) string {
+func JsonStruct2Str(x any) string {
 	bytes := JsonStruct2Data(x)
 	return string(bytes)
 }
-func JsonStruct2StrIndent(x interface{}) string {
+func JsonStruct2StrIndent(x any) string {
 	bytes := JsonStruct2DataIndent(x)
 	return string(bytes)
 }
 
-func JsonData2Struct(data []byte, v interface{}) error {
+func JsonData2Struct(data []byte, v any) error {
 	err := json.Unmarshal(data, v)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"data": string(data), "err": errors.WithStack(err)}).Error("反序列化json异常")
@@ -38,6 +38,6 @@ func JsonData2Struct(data []byte, v interface{}) error {
 	}
 	return nil
 }
-func JsonStr2Struct(data string, v interface{}) error {
+func JsonStr2Struct(data string, v any) error {
 	return JsonData2Struct([]byte(data), v)
 }

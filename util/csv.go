@@ -22,7 +22,7 @@ func CsvReader2Strs(ctx context.Context, reader io.Reader) ([][]string, error) {
 	}
 	return list, nil
 }
-func CsvReader2Struct(ctx context.Context, reader io.Reader, list interface{}) (err error) {
+func CsvReader2Struct(ctx context.Context, reader io.Reader, list any) (err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("解析CSV异常")
@@ -45,7 +45,7 @@ func CsvData2Strs(ctx context.Context, data []byte) ([][]string, error) {
 	}
 	return CsvReader2Strs(ctx, bytes.NewReader(data))
 }
-func CsvData2Struct(ctx context.Context, data []byte, list interface{}) (err error) {
+func CsvData2Struct(ctx context.Context, data []byte, list any) (err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("解析CSV异常")
@@ -73,7 +73,7 @@ func CsvStr2Strs(ctx context.Context, text string) ([][]string, error) {
 	}
 	return CsvData2Strs(ctx, []byte(text))
 }
-func CsvStr2Struct(ctx context.Context, text string, list interface{}) error {
+func CsvStr2Struct(ctx context.Context, text string, list any) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Warn("序列化CSV，为空")
@@ -89,7 +89,7 @@ func CsvFile2Strs(ctx context.Context, filePath string) ([][]string, error) {
 	}
 	return CsvData2Strs(ctx, data)
 }
-func CsvFile2Struct(ctx context.Context, filePath string, list interface{}) error {
+func CsvFile2Struct(ctx context.Context, filePath string, list any) error {
 	data, err := ReadFile2Data(ctx, filePath, nil)
 	if err != nil {
 		return err
@@ -145,7 +145,7 @@ func CsvStrs2Writer(ctx context.Context, lines [][]string, writer io.Writer) err
 	}
 	return nil
 }
-func CsvStrs2Struct(ctx context.Context, lines [][]string, list interface{}) error {
+func CsvStrs2Struct(ctx context.Context, lines [][]string, list any) error {
 	data, err := CsvStrs2Data(ctx, lines)
 	if err != nil {
 		return err
@@ -157,7 +157,7 @@ func CsvStrs2Struct(ctx context.Context, lines [][]string, list interface{}) err
 	return nil
 }
 
-func CsvStruct2Data(ctx context.Context, list interface{}) (data []byte, err error) {
+func CsvStruct2Data(ctx context.Context, list any) (data []byte, err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化CSV异常")
@@ -172,7 +172,7 @@ func CsvStruct2Data(ctx context.Context, list interface{}) (data []byte, err err
 	}
 	return data, nil
 }
-func CsvStruct2Str(ctx context.Context, list interface{}) (text string, err error) {
+func CsvStruct2Str(ctx context.Context, list any) (text string, err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化CSV异常")
@@ -187,14 +187,14 @@ func CsvStruct2Str(ctx context.Context, list interface{}) (text string, err erro
 	}
 	return text, nil
 }
-func CsvStruct2File(ctx context.Context, list interface{}, filePath string) error {
+func CsvStruct2File(ctx context.Context, list any, filePath string) error {
 	data, err := CsvStruct2Data(ctx, list)
 	if err != nil {
 		return err
 	}
 	return WriteData2File(ctx, data, filePath)
 }
-func CsvStruct2Writer(ctx context.Context, list interface{}, writer io.Writer) (err error) {
+func CsvStruct2Writer(ctx context.Context, list any, writer io.Writer) (err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("序列化CSV异常")
@@ -209,7 +209,7 @@ func CsvStruct2Writer(ctx context.Context, list interface{}, writer io.Writer) (
 	}
 	return nil
 }
-func CsvStruct2Strs(ctx context.Context, list interface{}) ([][]string, error) {
+func CsvStruct2Strs(ctx context.Context, list any) ([][]string, error) {
 	data, err := CsvStruct2Data(ctx, list)
 	if err != nil {
 		return nil, err

@@ -323,10 +323,10 @@ func (this *sqlRecorder) Trace(ctx context.Context, begin time.Time, fc func() (
 	sql, _ := fc()
 	this.sqls = append(this.sqls, sql)
 }
-func (this *sqlRecorder) LogMode(logger.LogLevel) logger.Interface      { return this }
-func (this *sqlRecorder) Info(context.Context, string, ...interface{})  {}
-func (this *sqlRecorder) Warn(context.Context, string, ...interface{})  {}
-func (this *sqlRecorder) Error(context.Context, string, ...interface{}) {}
+func (this *sqlRecorder) LogMode(logger.LogLevel) logger.Interface { return this }
+func (this *sqlRecorder) Info(context.Context, string, ...any)     {}
+func (this *sqlRecorder) Warn(context.Context, string, ...any)     {}
+func (this *sqlRecorder) Error(context.Context, string, ...any)    {}
 
 // dryRunConnPool 只提供事务的开启与提交语义，DryRun下不会真的执行SQL，
 // 用于覆盖 Transaction；gorm自带的 DummyDialector 不带连接池，Begin 会直接报 invalid transaction
@@ -338,13 +338,13 @@ type dryRunConnPool struct {
 func (this *dryRunConnPool) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	return nil, nil
 }
-func (this *dryRunConnPool) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (this *dryRunConnPool) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return nil, nil
 }
-func (this *dryRunConnPool) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (this *dryRunConnPool) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	return nil, nil
 }
-func (this *dryRunConnPool) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (this *dryRunConnPool) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	return nil
 }
 func (this *dryRunConnPool) BeginTx(ctx context.Context, opts *sql.TxOptions) (gorm.ConnPool, error) {
@@ -628,7 +628,7 @@ func TestHandlerClauses(t *testing.T) {
 	//更新
 	db, recorder = newDryRunDb(t)
 	if err := NewUpdateHandler("假对象", &fakeGormObject{Id: 1, Name: "a"}).
-		Clauses(clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "name = ?", Vars: []interface{}{"a"}}}}).
+		Clauses(clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "name = ?", Vars: []any{"a"}}}}).
 		Exec(ctx, db); err != nil {
 		t.Fatalf("更新异常: %+v", err)
 	}
@@ -639,7 +639,7 @@ func TestHandlerClauses(t *testing.T) {
 	//删除
 	db, recorder = newDryRunDb(t)
 	if err := NewDeleteHandler[fakeGormObject]("假对象", &fakeGormInquiry{Id: 7}).
-		Clauses(clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "name = ?", Vars: []interface{}{"a"}}}}).
+		Clauses(clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "name = ?", Vars: []any{"a"}}}}).
 		Exec(ctx, db.Model(&fakeGormObject{})); err != nil {
 		t.Fatalf("删除异常: %+v", err)
 	}

@@ -434,7 +434,7 @@ func TestLocalCacheConcurrentAccess(t *testing.T) {
 	c := NewLocalCache[int]()
 
 	//并发过程中若发生panic，须显式失败而不是被goroutine吞掉
-	panicCh := make(chan interface{}, 64)
+	panicCh := make(chan any, 64)
 	safe := func(fn func()) {
 		defer func() {
 			if r := recover(); r != nil {

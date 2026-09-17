@@ -33,13 +33,13 @@ func NewHttpRespByErr(data any, err error) model.HttpResp {
 	}
 	return NewHttpRespByMsg(data, msg)
 }
-func NewHttpRespByMsg(data interface{}, msg string) model.HttpResp {
+func NewHttpRespByMsg(data any, msg string) model.HttpResp {
 	if msg == "" {
 		return NewHttpResp(http.StatusOK, "", data)
 	}
 	return NewHttpResp(http.StatusInternalServerError, msg, data)
 }
-func NewHttpResp(code int, msg string, data interface{}) model.HttpResp {
+func NewHttpResp(code int, msg string, data any) model.HttpResp {
 	return model.HttpResp{Code: code, Msg: msg, Data: data}
 }
 
@@ -63,12 +63,10 @@ func SetClaims(ctx context.Context, claims any) context.Context {
 	return SetCtxValue(ctx, ClaimsKey, claims)
 }
 
-func setGinLogId(c *gin.Context, logId int64) {
-	if logId <= 0 {
-		logId = GenId()
+func StaticCache(c *gin.Context) {
+	if strings.HasPrefix(c.Request.RequestURI, PathStatic) {
+		c.Header("Cache-Control", "max-age=86400")
 	}
-	c.Request = c.Request.WithContext(SetCtxValue(c.Request.Context(), LogIdKey, logId))
-	c.Header(LogIdKey, Int2Str(logId))
 }
 
 type Claims interface {
@@ -143,6 +141,13 @@ func ValidateGin(c *gin.Context, secret string, claims Claims) {
 	}
 	c.Request = c.Request.WithContext(SetClaims(c.Request.Context(), claims))
 	c.Next()
+}
+func setGinLogId(c *gin.Context, logId int64) {
+	if logId <= 0 {
+		logId = GenId()
+	}
+	c.Request = c.Request.WithContext(SetCtxValue(c.Request.Context(), LogIdKey, logId))
+	c.Header(LogIdKey, Int2Str(logId))
 }
 
 func NewGinGet[Req any](name string, service func(ctx context.Context, req Req) (any, error)) gin.HandlerFunc {

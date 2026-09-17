@@ -41,7 +41,7 @@ func TestJsonStruct2Str(t *testing.T) {
 		t.Errorf("omitempty 空值仍被输出: %s", got)
 	}
 	//基础类型
-	cases := map[interface{}]string{
+	cases := map[any]string{
 		nil: "null", 1: "1", "s": `"s"`, true: "true", 1.5: "1.5",
 	}
 	for in, want := range cases {
