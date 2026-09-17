@@ -14,7 +14,7 @@ import (
 
 const (
 	LogSqlLen   = 512
-	DbBatchSize = 1000
+	DbBatchSize = 100
 )
 
 func NewDefaultGormLog() GormLog {
