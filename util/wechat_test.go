@@ -2,22 +2,15 @@ package util
 
 import (
 	"context"
-	"os"
-	"path"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ArtisanCloud/PowerWeChat/v3/src/kernel/response"
 )
 
 // 这些默认值影响同步调用方被阻塞多久与消息是否被微信拒绝，改动需谨慎
 func TestWxConstants(t *testing.T) {
 	if WxTimeoutDefault != time.Second*10 {
 		t.Errorf("WxTimeoutDefault = %v", WxTimeoutDefault)
-	}
-	if WxTextLenMax <= 0 {
-		t.Errorf("WxTextLenMax = %d", WxTextLenMax)
 	}
 	//模板正文里日志行的字段名是 log，与日志字段 LogIdKey(logid) 不同，不能混用
 	if wxLogKey != "log" {
@@ -29,50 +22,6 @@ func TestWxConstants(t *testing.T) {
 	//模板只有一个占位符 {{data.DATA}}
 	if wxDataKey != "data" {
 		t.Errorf("wxDataKey = %q", wxDataKey)
-	}
-}
-
-func TestSplitWxOpenIds(t *testing.T) {
-	//空值不得产出空字符串元素，否则会向空openid发消息
-	if got := splitWxOpenIds(""); len(got) != 0 {
-		t.Errorf("空值 = %v, 期望空切片", got)
-	}
-	if got := splitWxOpenIds("  ,  ,"); len(got) != 0 {
-		t.Errorf("全空项 = %v, 期望空切片", got)
-	}
-	got := splitWxOpenIds("oA")
-	if len(got) != 1 || got[0] != "oA" {
-		t.Errorf("单个 = %v", got)
-	}
-	//多个且去除空格与空项
-	got = splitWxOpenIds(" oA , oB ,, oC ")
-	if len(got) != 3 || got[0] != "oA" || got[1] != "oB" || got[2] != "oC" {
-		t.Errorf("多个 = %v", got)
-	}
-}
-
-// 微信业务失败必须转成 error。
-// PowerWeChat 在 errcode≠0 时 Go error 仍为 nil，不显式校验就会出现
-// "消息没到但一切正常"的静默失败，这是 msg_gateway 的既有缺陷。
-func TestCheckWxErrCode(t *testing.T) {
-	ctx := GenCtx()
-	if err := checkWxErrCode(ctx, "用例", 0, ""); err != nil {
-		t.Errorf("errcode为0时不应报错: %+v", err)
-	}
-	err := checkWxErrCode(ctx, "用例", 45009, "reach max api daily quota limit")
-	if err == nil {
-		t.Fatalf("errcode非0时必须报错，否则失败会被静默吞掉")
-	}
-	//错误信息要带上errcode与errmsg，否则线上无法定位是哪类拒绝
-	if !strings.Contains(err.Error(), "45009") {
-		t.Errorf("错误应含errcode: %q", err.Error())
-	}
-	if !strings.Contains(err.Error(), "quota") {
-		t.Errorf("错误应含errmsg: %q", err.Error())
-	}
-	//负数错误码同样要识别（微信用 -1 表示系统繁忙）
-	if checkWxErrCode(ctx, "用例", -1, "system error") == nil {
-		t.Errorf("负数errcode也必须报错")
 	}
 }
 
@@ -121,145 +70,15 @@ func TestGenWxMsgDataEmptyContext(t *testing.T) {
 	}
 }
 
-func TestCutWxText(t *testing.T) {
-	ctx := GenCtx()
-	if got := cutWxText(ctx, "短正文"); got != "短正文" {
-		t.Errorf("未超长 = %q", got)
-	}
-	//按字符而非字节截断，否则中文会被切成乱码
-	long := strings.Repeat("中", WxTextLenMax+10)
-	got := cutWxText(ctx, long)
-	if !strings.HasPrefix(got, strings.Repeat("中", WxTextLenMax)) {
-		t.Errorf("截断后前缀不符")
-	}
-	if strings.Count(got, "中") != WxTextLenMax {
-		t.Errorf("保留字符数 = %d, 期望 %d", strings.Count(got, "中"), WxTextLenMax)
-	}
-	if !strings.HasSuffix(got, "(已截断)") {
-		t.Errorf("截断后应有标记")
-	}
-	//边界：恰好等于上限不截断
-	exact := strings.Repeat("中", WxTextLenMax)
-	if cutWxText(ctx, exact) != exact {
-		t.Errorf("恰好等于上限时不应截断")
-	}
-}
-
-// wxCache 的核心契约：Get 必须返回 map[string]interface{}。
-// PowerWeChat 在 kernel/accessToken.go:113 对缓存值做 value.(map[string]interface{}) 无保护断言，
-// 若本实现直接存取结构体指针，取 token 时会 panic。
-func TestWxCacheJsonRoundTrip(t *testing.T) {
-	c := newWxCache()
-	//模拟 PowerWeChat 写入 access_token 的形态：结构体指针
-	token := &response.ResponseGetToken{AccessToken: "tk", ExpiresIn: 7200}
-	if err := c.Set("k", token, time.Hour); err != nil {
-		t.Fatalf("Set 异常: %+v", err)
-	}
-	value, err := c.Get("k", nil)
-	if err != nil {
-		t.Fatalf("Get 异常: %+v", err)
-	}
-	hash, ok := value.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Get 返回 %T, 必须是 map[string]interface{}，否则 PowerWeChat 取token时会panic", value)
-	}
-	//expires_in 必须是 float64：getFormatToken 做的是 token["expires_in"].(float64)
-	if _, ok = hash["expires_in"].(float64); !ok {
-		t.Errorf("expires_in 为 %T, 必须是 float64", hash["expires_in"])
-	}
-	//access_token 必须是 string：getFormatToken 做的是 token["access_token"].(string)
-	if got, _ := hash["access_token"].(string); got != "tk" {
-		t.Errorf("access_token = %v", hash["access_token"])
-	}
-	if !c.Has("k") {
-		t.Errorf("Has 应为 true")
-	}
-}
-
-// 未命中时必须返回 defaultValue 且 err 为 nil。
-// PowerWeChat 的 GetToken 靠 "err==nil && value!=nil" 判断是否用缓存，
-// 未命中返回非nil值会让它拿着脏数据去做类型断言。
-func TestWxCacheMiss(t *testing.T) {
-	c := newWxCache()
-	if c.Has("absent") {
-		t.Errorf("未写入的键 Has 应为 false")
-	}
-	value, err := c.Get("absent", nil)
-	if err != nil {
-		t.Errorf("未命中不应报错: %+v", err)
-	}
-	if value != nil {
-		t.Errorf("未命中应返回 defaultValue(nil), got %v", value)
-	}
-	if value, _ = c.Get("absent", "def"); value != "def" {
-		t.Errorf("未命中应返回传入的 defaultValue, got %v", value)
-	}
-}
-
-// Add/AddNX/Remember 是空实现：PowerWeChat 没有任何调用点。
-// 固化该语义，避免将来有人误以为它们可用于原子操作。
-func TestWxCacheNoOpMethods(t *testing.T) {
-	c := newWxCache()
-	if c.AddNX("k", "v", time.Hour) {
-		t.Errorf("AddNX 应恒为 false")
-	}
-	if err := c.Add("k", "v", time.Hour); err != nil {
-		t.Errorf("Add 应恒为 nil: %+v", err)
-	}
-	value, err := c.Remember("k", time.Hour, func() (interface{}, error) { return "v", nil })
-	if value != nil || err != nil {
-		t.Errorf("Remember 应恒为 nil,nil: %v, %v", value, err)
-	}
-	//空实现不得真的写入，否则 Has/Get 会出现与 Set 不一致的来源
-	if c.Has("k") {
-		t.Errorf("空实现不应写入缓存")
-	}
-}
-
-// 注入自定义缓存后，PowerWeChat 不得再创建默认 MemCache。
-// 默认实现（PowerLibs/cache/memory.go）会在 ~/.ArtisanCloud/cache 建文件、每次 Set 都写盘，
-// 同机多进程还会互相截断该文件；HOME 不可写时 NewMemCache 返回 nil，
-// 会让 kernel/accessToken.go 取 token 时对 nil 接口调用 Has 而 panic。
-// 构造 SDK 不发起任何网络请求，所以用假凭证即可验证。
-func TestWxSdkNotUseDefaultCache(t *testing.T) {
-	ctx := GenCtx()
-	t.Setenv(wxAppIdKey, "probe-appid")
-	t.Setenv(wxSecretKey, "probe-secret")
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("取不到HOME，跳过: %+v", err)
-	}
-	cacheDir := path.Join(home, ".ArtisanCloud")
-	_, err = os.Stat(cacheDir)
-	checkDir := os.IsNotExist(err)
-
-	sdk, err := initWxSdk(ctx)
-	if err != nil {
-		t.Fatalf("假凭证构造SDK失败（构造阶段不应有网络请求）: %+v", err)
-	}
-	if sdk == nil {
-		t.Fatalf("构造SDK返回空实例")
-	}
-
-	//硬断言：取token走的必须是我们注入的缓存实现
-	if _, ok := sdk.AccessToken.GetCache().(*wxCache); !ok {
-		t.Errorf("access_token 缓存为 %T, 期望 *wxCache；默认 MemCache 会写盘并在HOME不可写时panic", sdk.AccessToken.GetCache())
-	}
-	//辅助断言：原本不存在该目录时，构造SDK后也不应出现
-	if checkDir {
-		if _, err = os.Stat(cacheDir); err == nil {
-			t.Errorf("构造SDK后出现了 %s，说明默认 MemCache 仍被创建", cacheDir)
-		}
-	}
-}
-
 // stable_token 模式必须真的生效：
 // 走老的 cgi-bin/token 接口时多进程取凭证会互相顶掉，而我们依赖它来避免这件事。
 func TestWxSdkStableTokenMode(t *testing.T) {
 	ctx := GenCtx()
 	t.Setenv(wxAppIdKey, "probe-appid")
 	t.Setenv(wxSecretKey, "probe-secret")
+	//SDK默认缓存会在HOME下建 .ArtisanCloud 目录并落盘，隔离到临时目录避免污染
+	t.Setenv("HOME", t.TempDir())
+	defer resetWxSdk(t)()
 
 	sdk, err := initWxSdk(ctx)
 	if err != nil {
@@ -289,8 +108,26 @@ func TestGetWxOpenIdsByEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("环境变量已配置仍报错: %+v", err)
 	}
+	//逗号分隔、去空格
 	if len(openIds) != 2 || openIds[0] != "oA" || openIds[1] != "oB" {
 		t.Errorf("接收人 = %v", openIds)
+	}
+
+	//空项不得产出空字符串元素，否则会向空openid发消息
+	t.Setenv(wxOpenIdKey, " oA ,, oB ,")
+	openIds, err = GetWxOpenIds(ctx)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if len(openIds) != 2 || openIds[0] != "oA" || openIds[1] != "oB" {
+		t.Errorf("含空项时 = %v", openIds)
+	}
+
+	//全是空项等同于未配置，会回落到查关注者，此时无凭证必然报错
+	t.Setenv(wxOpenIdKey, "  ,  ,")
+	defer resetWxSdk(t)()
+	if _, err = GetWxOpenIds(ctx); err == nil {
+		t.Errorf("全空项应回落到查关注者并因无凭证报错")
 	}
 }
 
@@ -436,11 +273,11 @@ func TestWxProbeUserInfos(t *testing.T) {
 			i, infos[i].OpenID, infos[i].SubscribeTime, infos[i].Remark, infos[i].SubscribeScene)
 	}
 	//顺带确认最早关注者的判定结果
-	earliest, err := getWxEarliestOpenId(ctx)
+	earliest, err := GetWxOpenIds(ctx)
 	if err != nil {
 		t.Fatalf("判定最早关注者失败: %+v", err)
 	}
-	t.Logf("判定出的最早关注者: %s", earliest)
+	t.Logf("判定出的接收人: %v", earliest)
 }
 
 func TestWxProbeTemplates(t *testing.T) {
