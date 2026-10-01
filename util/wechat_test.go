@@ -333,11 +333,23 @@ func TestWxProbeSendMsg(t *testing.T) {
 	if !GetEnvBool("wx_probe_send", false) {
 		t.Skip("未开启 wx_probe_send，跳过真实发送")
 	}
-	ctx := GenCtx()
-	url := GetEnv("wx_probe_url")
-	text := "我是正文A\n我是正文B\n我是正文C\n" + GenStrId()
-	if err := SendWxMsg(ctx, url, text); err != nil {
-		t.Fatalf("发送失败（errcode 40241 说明 60 秒内已发过，等一分钟再试）: %+v", err)
+
+	{
+		ctx := GenCtx()
+		url := GetEnv("wx_probe_url")
+		text := "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十"
+		if err := SendWxMsg(ctx, url, text); err != nil {
+			t.Fatalf("发送失败（errcode 40241 说明 60 秒内已发过，等一分钟再试）: %+v", err)
+		}
+		t.Logf("已发送，请在微信确认消息格式；url=%q logid=%d", url, GetLogId(ctx))
 	}
-	t.Logf("已发送，请在微信确认消息格式；url=%q logid=%d", url, GetLogId(ctx))
+	{
+		ctx := GenCtx()
+		url := "https://baidu.com/"
+		text := "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十"
+		if err := SendWxMsg(ctx, url, text); err != nil {
+			t.Fatalf("发送失败（errcode 40241 说明 60 秒内已发过，等一分钟再试）: %+v", err)
+		}
+		t.Logf("已发送，请在微信确认消息格式；url=%q logid=%d", url, GetLogId(ctx))
+	}
 }

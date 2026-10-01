@@ -288,13 +288,11 @@ func SendWxMsg(ctx context.Context, url, text string) (err error) {
 	if value := GetLogId(ctx); value > 0 {
 		logId = Int2Str(value)
 	}
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("sn: %s\n", GetServerName()))
-	builder.WriteString(fmt.Sprintf("ip: %s\n", GetIP()))
-	builder.WriteString(fmt.Sprintf("log: %s\n", logId))
-	builder.WriteString(text)
-	data := builder.String()
-	hashMap := power.HashMap{"data": map[string]string{"value": data}}
+	hashMap := power.HashMap{}
+	hashMap["sn"] = map[string]string{"value": GetServerName()}
+	hashMap["ip"] = map[string]string{"value": GetIP()}
+	hashMap["lg"] = map[string]string{"value": logId}
+	hashMap["te"] = map[string]string{"value": text}
 
 	for _, openId := range openIds {
 		var req templateRequest.RequestTemlateMessage
