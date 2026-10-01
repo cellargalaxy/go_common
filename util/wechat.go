@@ -139,9 +139,6 @@ func (this *wxCache) Remember(key string, ttl time.Duration, callback func() (in
 var wxSdk *officialAccount.OfficialAccount
 var wxSdkLock = &sync.Mutex{}
 
-// GetWxSdk 懒初始化并复用进程内唯一的公众号SDK实例。
-// 不在 Init 中预先初始化：go_common 的多数使用方不配置微信，微信能力只在被调用时才应生效。
-// 环境变量在运行期变更不会生效，需重启进程。
 func GetWxSdk(ctx context.Context) (*officialAccount.OfficialAccount, error) {
 	wxSdkLock.Lock()
 	defer wxSdkLock.Unlock()
@@ -158,41 +155,39 @@ func GetWxSdk(ctx context.Context) (*officialAccount.OfficialAccount, error) {
 }
 
 func initWxSdk(ctx context.Context) (sdk *officialAccount.OfficialAccount, err error) {
-	//PowerWeChat 构造过程中存在多处无保护类型断言，panic 不应击穿到调用方的主业务
-	defer Defer(func(panicValue any, stack string) {
-		if panicValue != nil {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panicValue, "stack": stack}).Error("初始化微信SDK，异常")
+	defer Defer(func(panic any, stack string) {
+		if panic != nil {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"panic": panic, "stack": stack}).Error("初始化微信SDK，异常")
 			sdk = nil
-			err = errors.Errorf("初始化微信SDK，异常: %v", panicValue)
+			err = errors.Errorf("初始化微信SDK，异常: %v", panic)
 		}
 	})
 
 	appId := GetEnv(wxAppIdKey)
+	if appId == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("初始化微信SDK，appId为空")
+		return nil, errors.Errorf("初始化微信SDK，appId为空")
+	}
 	secret := GetEnv(wxSecretKey)
-	if appId == "" || secret == "" {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("初始化微信SDK，凭证为空")
-		return nil, errors.Errorf("初始化微信SDK，凭证为空: %s/%s", wxAppIdKey, wxSecretKey)
+	if secret == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("初始化微信SDK，secret为空")
+		return nil, errors.Errorf("初始化微信SDK，secret为空")
 	}
 
-	serverName := GetServerName()
+	sn := GetServerName()
 	var cfg officialAccount.UserConfig
 	cfg.AppID = appId
 	cfg.Secret = secret
-	//stable_token 模式：公众号 access_token 是 AppID 级全局凭证，
-	//go_common 被多项目引用后每个进程都会独立取 token，普通 token 接口会互相顶掉。
-	//ForceRefresh 置假时走 cgi-bin/stable_token 且不下发 force_refresh，各进程拿到同一个仍有效的凭证。
 	cfg.StableTokenMode = true
 	cfg.ForceRefresh = false
 	cfg.Cache = newWxCache()
 	cfg.Http.Timeout = WxTimeoutDefault.Seconds()
-	//SDK 自身日志只保留错误级，落到项目既有的日志目录布局下。
-	//输出与错误必须用不同文件：PowerWeChat 会为两者各建一个 lumberjack 实例，同文件会互相干扰。
 	cfg.Log.Stdout = false
 	cfg.Log.Level = "error"
-	cfg.Log.File = fmt.Sprintf("log/%s/wechat_info.log", serverName)
-	cfg.Log.Error = fmt.Sprintf("log/%s/wechat_error.log", serverName)
+	cfg.Log.File = fmt.Sprintf("log/%s/wechat_info.log", sn)
+	cfg.Log.Error = fmt.Sprintf("log/%s/wechat_error.log", sn)
 
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"appId": appId}).Info("初始化微信SDK")
+	logrus.WithContext(ctx).WithFields(logrus.Fields{}).Info("初始化微信SDK")
 	sdk, err = officialAccount.NewOfficialAccount(&cfg)
 	if err != nil {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("初始化微信SDK，异常")
