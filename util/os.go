@@ -12,9 +12,13 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/constraints"
 )
@@ -205,4 +209,68 @@ func ExecCommand(ctx context.Context, command string) ([]string, []string, error
 	}
 
 	return stdoutLines, stderrLines, nil
+}
+
+// GetCpuNum 获取CPU逻辑核数
+func GetCpuNum(ctx context.Context) (int, error) {
+	num, err := cpu.CountsWithContext(ctx, true)
+	if err != nil || num <= 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"num": num, "err": err}).Error("获取CPU核数，异常")
+		return 0, errors.Errorf("获取CPU核数，异常: %+v", err)
+	}
+	return num, nil
+}
+
+// GetCpuUsage 获取interval内的CPU使用率，各核累加，例如两核CPU使用了1.5核则返回150；interval<=0时不阻塞，取与上次调用之间的值
+func GetCpuUsage(ctx context.Context, interval time.Duration) (float64, error) {
+	percents, err := cpu.PercentWithContext(ctx, interval, true)
+	if err != nil || len(percents) == 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("获取CPU使用率，异常")
+		return 0, errors.Errorf("获取CPU使用率，异常: %+v", err)
+	}
+	var usage float64
+	for i := range percents {
+		usage += percents[i]
+	}
+	return usage, nil
+}
+
+// GetMemTotal 获取内存总大小，单位字节
+func GetMemTotal(ctx context.Context) (uint64, error) {
+	stat, err := mem.VirtualMemoryWithContext(ctx)
+	if err != nil || stat == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("获取内存总大小，异常")
+		return 0, errors.Errorf("获取内存总大小，异常: %+v", err)
+	}
+	return stat.Total, nil
+}
+
+// GetMemUsed 获取已使用的内存大小，单位字节，为总内存减可用内存，不含可回收的缓存
+func GetMemUsed(ctx context.Context) (uint64, error) {
+	stat, err := mem.VirtualMemoryWithContext(ctx)
+	if err != nil || stat == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("获取已使用内存大小，异常")
+		return 0, errors.Errorf("获取已使用内存大小，异常: %+v", err)
+	}
+	return stat.Used, nil
+}
+
+// GetDiskTotal 获取path所在磁盘分区的总大小，单位字节
+func GetDiskTotal(ctx context.Context, path string) (uint64, error) {
+	stat, err := disk.UsageWithContext(ctx, path)
+	if err != nil || stat == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"path": path, "err": err}).Error("获取磁盘总大小，异常")
+		return 0, errors.Errorf("获取磁盘总大小，异常: %+v", err)
+	}
+	return stat.Total, nil
+}
+
+// GetDiskUsed 获取path所在磁盘分区的已使用大小，单位字节，与df的Used一致
+func GetDiskUsed(ctx context.Context, path string) (uint64, error) {
+	stat, err := disk.UsageWithContext(ctx, path)
+	if err != nil || stat == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"path": path, "err": err}).Error("获取磁盘已使用大小，异常")
+		return 0, errors.Errorf("获取磁盘已使用大小，异常: %+v", err)
+	}
+	return stat.Used, nil
 }
