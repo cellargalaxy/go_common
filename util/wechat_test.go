@@ -325,21 +325,19 @@ func TestWxProbeTemplates(t *testing.T) {
 }
 
 // 真实发送一条消息。除凭证外还需显式开启 wx_probe_send=true，避免误跑时真的推送。
-// 跑法：wx_app_id=xx wx_secret=xx wx_probe_send=true go test ./util/ -run TestWxProbeSendMsg -v
+// 只发一条：微信对同一接收人同一模板有 60 秒重复过滤（errcode 40241），一次跑两条第二条必被拒。
+// 跳转地址取 wx_probe_url，留空即覆盖「url 允许为空」那条路径，两条路径需间隔 60 秒分两次跑。
+// 跑法：wx_app_id=xx wx_secret=xx wx_probe_send=true go test ./util/ -run TestWxProbeSendMsg -v -count=1
 func TestWxProbeSendMsg(t *testing.T) {
 	skipWxProbe(t)
 	if !GetEnvBool("wx_probe_send", false) {
 		t.Skip("未开启 wx_probe_send，跳过真实发送")
 	}
 	ctx := GenCtx()
+	url := GetEnv("wx_probe_url")
 	text := "我是正文A\n我是正文B\n我是正文C\n" + GenStrId()
-	if err := SendWxMsg(ctx, "https://baidu.com", text); err != nil {
-		t.Fatalf("发送失败: %+v", err)
+	if err := SendWxMsg(ctx, url, text); err != nil {
+		t.Fatalf("发送失败（errcode 40241 说明 60 秒内已发过，等一分钟再试）: %+v", err)
 	}
-	t.Logf("已发送，请在微信确认消息格式；logid=%d", GetLogId(ctx))
-	//url 允许为空的路径也要走一遍
-	if err := SendWxMsg(ctx, "", "我是无跳转正文\n"+GenStrId()); err != nil {
-		t.Fatalf("空url发送失败: %+v", err)
-	}
-	t.Logf("空url发送完成")
+	t.Logf("已发送，请在微信确认消息格式；url=%q logid=%d", url, GetLogId(ctx))
 }
