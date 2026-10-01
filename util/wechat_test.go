@@ -91,6 +91,86 @@ func TestGetWxTemplateIdByEnv(t *testing.T) {
 	}
 }
 
+// 缓存只包住查接口那一段：命中时不得穿透到微信接口，env 已配置时不得走缓存，查询失败不得写缓存
+func TestGetWxOpenIdCache(t *testing.T) {
+	ctx := GenCtx()
+	//无凭证，一旦穿透到接口必然报错，以此反证是否命中缓存
+	t.Setenv(wxAppIdKey, "")
+	t.Setenv(wxSecretKey, "")
+	t.Setenv(wxOpenIdKey, "")
+	defer resetWxSdk(t)()
+	defer cacheWxOpenId.Del(ctx, wxOpenIdKey)
+
+	//查询失败不得写缓存，否则一次网络抖动会让后续一小时的告警全部失败
+	if _, err := GetWxOpenId(ctx); err == nil {
+		t.Fatalf("无凭证时应报错")
+	}
+	if _, ok := cacheWxOpenId.Get(ctx, wxOpenIdKey); ok {
+		t.Fatalf("查询失败后写入了缓存")
+	}
+	//第二次仍须报错，而不是命中脏缓存
+	if _, err := GetWxOpenId(ctx); err == nil {
+		t.Errorf("第二次仍应报错")
+	}
+
+	//预置缓存模拟此前已查询成功：此时无凭证也应能拿到结果
+	cacheWxOpenId.Set(ctx, wxOpenIdKey, wxCacheTimeout, []string{"oCached"})
+	openIds, err := GetWxOpenId(ctx)
+	if err != nil {
+		t.Fatalf("命中缓存时不应穿透到接口: %+v", err)
+	}
+	if len(openIds) != 1 || openIds[0] != "oCached" {
+		t.Errorf("命中缓存 = %v", openIds)
+	}
+
+	//env 已配置时必须用 env 的值，不能被缓存覆盖
+	t.Setenv(wxOpenIdKey, "oEnv")
+	openIds, err = GetWxOpenId(ctx)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if len(openIds) != 1 || openIds[0] != "oEnv" {
+		t.Errorf("env 应优先于缓存, got %v", openIds)
+	}
+}
+
+func TestGetWxTemplateIdCache(t *testing.T) {
+	ctx := GenCtx()
+	t.Setenv(wxAppIdKey, "")
+	t.Setenv(wxSecretKey, "")
+	t.Setenv(wxTemplateIdKey, "")
+	defer resetWxSdk(t)()
+	defer cacheWxTemplateId.Del(ctx, wxTemplateIdKey)
+
+	if _, err := GetWxTemplateId(ctx); err == nil {
+		t.Fatalf("无凭证时应报错")
+	}
+	if _, ok := cacheWxTemplateId.Get(ctx, wxTemplateIdKey); ok {
+		t.Fatalf("查询失败后写入了缓存")
+	}
+	if _, err := GetWxTemplateId(ctx); err == nil {
+		t.Errorf("第二次仍应报错")
+	}
+
+	cacheWxTemplateId.Set(ctx, wxTemplateIdKey, wxCacheTimeout, "tplCached")
+	templateId, err := GetWxTemplateId(ctx)
+	if err != nil {
+		t.Fatalf("命中缓存时不应穿透到接口: %+v", err)
+	}
+	if templateId != "tplCached" {
+		t.Errorf("命中缓存 = %q", templateId)
+	}
+
+	t.Setenv(wxTemplateIdKey, "tplEnv")
+	templateId, err = GetWxTemplateId(ctx)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if templateId != "tplEnv" {
+		t.Errorf("env 应优先于缓存, got %q", templateId)
+	}
+}
+
 // 凭证缺失必须报错而不是 panic，也不得把残缺实例缓存下来
 func TestGetWxSdkWithoutEnv(t *testing.T) {
 	ctx := GenCtx()

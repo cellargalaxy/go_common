@@ -23,11 +23,14 @@ const (
 	wxOpenIdKey     = "wx_open_id"
 	wxTemplateIdKey = "wx_template_id"
 
-	wxTimeout = time.Second * 10
+	wxTimeout      = time.Second * 10
+	wxCacheTimeout = time.Hour
 )
 
 var wxSdk *officialAccount.OfficialAccount
 var wxSdkLock = &sync.Mutex{}
+var cacheWxOpenId = NewLocalCache[[]string]()
+var cacheWxTemplateId = NewLocalCache[string]()
 
 func GetWxSdk(ctx context.Context) (*officialAccount.OfficialAccount, error) {
 	wxSdkLock.Lock()
@@ -106,38 +109,40 @@ func GetWxOpenId(ctx context.Context) ([]string, error) {
 		return openIds, nil
 	}
 
-	openIds, err := GetWxOpenIdList(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(openIds) == 0 {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信用户，无用户")
-		return nil, errors.Errorf("查询微信用户，无用户")
-	}
-	if len(openIds) == 1 {
-		return openIds, nil
-	}
-	infos, err := GetWxUserInfos(ctx, openIds)
-	if err != nil {
-		return nil, err
-	}
-	openId := ""
-	subscribeTime := 0
-	for i := range infos {
-		info := infos[i]
-		if info == nil || info.OpenID == "" {
-			continue
+	return cacheWxOpenId.Fetch(ctx, wxOpenIdKey, wxCacheTimeout, func() ([]string, error) {
+		openIds, err := GetWxOpenIdList(ctx)
+		if err != nil {
+			return nil, err
 		}
-		if subscribeTime == 0 || info.SubscribeTime < subscribeTime {
-			openId = info.OpenID
-			subscribeTime = info.SubscribeTime
+		if len(openIds) == 0 {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信用户，无用户")
+			return nil, errors.Errorf("查询微信用户，无用户")
 		}
-	}
-	if openId == "" {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信用户，用户信息为空")
-		return nil, errors.Errorf("查询微信用户，用户信息为空")
-	}
-	return []string{openId}, nil
+		if len(openIds) == 1 {
+			return openIds, nil
+		}
+		infos, err := GetWxUserInfos(ctx, openIds)
+		if err != nil {
+			return nil, err
+		}
+		openId := ""
+		subscribeTime := 0
+		for i := range infos {
+			info := infos[i]
+			if info == nil || info.OpenID == "" {
+				continue
+			}
+			if subscribeTime == 0 || info.SubscribeTime < subscribeTime {
+				openId = info.OpenID
+				subscribeTime = info.SubscribeTime
+			}
+		}
+		if openId == "" {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信用户，用户信息为空")
+			return nil, errors.Errorf("查询微信用户，用户信息为空")
+		}
+		return []string{openId}, nil
+	})
 }
 
 func GetWxOpenIdList(ctx context.Context) ([]string, error) {
@@ -186,22 +191,24 @@ func GetWxTemplateId(ctx context.Context) (string, error) {
 		return templateId, nil
 	}
 
-	templates, err := GetWxTemplates(ctx)
-	if err != nil {
-		return "", err
-	}
-	if len(templates) == 0 {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信模板，模板列表为空")
-		return "", errors.Errorf("查询微信模板，模板列表为空")
-	}
-	if len(templates) > 1 {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"count": len(templates)}).Warn("查询微信模板，模板不止一个")
-	}
-	if templates[0] == nil || templates[0].TemplateID == "" {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信模板，模板ID为空")
-		return "", errors.Errorf("查询微信模板，模板ID为空")
-	}
-	return templates[0].TemplateID, nil
+	return cacheWxTemplateId.Fetch(ctx, wxTemplateIdKey, wxCacheTimeout, func() (string, error) {
+		templates, err := GetWxTemplates(ctx)
+		if err != nil {
+			return "", err
+		}
+		if len(templates) == 0 {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信模板，模板列表为空")
+			return "", errors.Errorf("查询微信模板，模板列表为空")
+		}
+		if len(templates) > 1 {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{"count": len(templates)}).Warn("查询微信模板，模板不止一个")
+		}
+		if templates[0] == nil || templates[0].TemplateID == "" {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信模板，模板ID为空")
+			return "", errors.Errorf("查询微信模板，模板ID为空")
+		}
+		return templates[0].TemplateID, nil
+	})
 }
 
 func GetWxTemplates(ctx context.Context) ([]*templateResponse.Template, error) {
