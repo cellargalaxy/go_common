@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ArtisanCloud/PowerWeChat/v3/src/kernel"
 	"github.com/ArtisanCloud/PowerWeChat/v3/src/kernel/power"
 	"github.com/ArtisanCloud/PowerWeChat/v3/src/officialAccount"
 	templateRequest "github.com/ArtisanCloud/PowerWeChat/v3/src/officialAccount/templateMessage/request"
@@ -44,97 +43,9 @@ const (
 	wxUserPageMax  = 100 //拉取关注者列表的最大翻页轮次，仅用于防御接口异常导致的死循环
 )
 
-// 重试间隔，节奏对齐 httpClient 的 {1s,2s,2s}；条数按"总尝试次数-1"给够
-var wxSleeps = []time.Duration{time.Second, time.Second * 2}
-
-// 元数据各自独立缓存实例：Fetch 持写锁，分开后接收人与模板的解析互不阻塞
 var wxOpenIdCache = NewLocalCache[[]string]()
 var wxTemplateIdCache = NewLocalCache[string]()
 var wxRepeatCache = NewLocalCache[int]()
-
-// wxRespErr 微信业务返回码错误。
-// PowerWeChat 只把 errcode 用于判断 token 是否失效（kernel/baseClient.go 的 CheckTokenNeedRefresh），
-// errcode≠0 时 Go error 仍为 nil，所以必须显式校验并转成 error，否则失败会被静默吞掉。
-type wxRespErr struct {
-	ErrCode int
-	ErrMsg  string
-}
-
-func (this wxRespErr) Error() string {
-	return fmt.Sprintf("errcode: %d, errmsg: %s", this.ErrCode, this.ErrMsg)
-}
-
-// wxCache 替换 PowerWeChat 的默认缓存。
-// 默认实现（PowerLibs/cache/memory.go）有四处不可接受的行为：
-// 1. 每次 Set 都把整个缓存 SaveFile 写盘；
-// 2. 缓存文件固定落在 ~/.ArtisanCloud/cache，同机多进程写同一文件且启动时互相截断；
-// 3. HOME 不可写时 NewMemCache 返回 nil，GetCache() 拿到 nil 接口后调用 Has 会 panic；
-// 4. Add/AddNX/Remember 均为空实现。
-// 注入本实现后 NewInteractsWithCache 不再走 createDefaultCache，上述问题一次性全部规避。
-//
-// 注意：Get 必须返回 map[string]interface{}。
-// PowerWeChat 在 kernel/accessToken.go 中对缓存值做了无保护类型断言 value.(map[string]interface{})，
-// 默认实现之所以不 panic，正是因为它 Set 时 json.Marshal、Get 时 json.Unmarshal。
-// 本实现必须保持同样的 JSON 往返语义，不能直接存取结构体指针。
-type wxCache struct {
-	cache LocalCache[[]byte]
-}
-
-var _ kernel.CacheInterface = (*wxCache)(nil)
-
-func newWxCache() *wxCache {
-	var value wxCache
-	value.cache = NewLocalCache[[]byte]()
-	return &value
-}
-
-func (this *wxCache) Get(key string, defaultValue interface{}) (interface{}, error) {
-	data, ok := this.cache.Get(context.Background(), key)
-	if !ok || len(data) == 0 {
-		return defaultValue, nil
-	}
-	var value interface{}
-	err := JsonData2Struct(data, &value)
-	if err != nil {
-		return defaultValue, err
-	}
-	return value, nil
-}
-
-func (this *wxCache) Set(key string, value interface{}, expires time.Duration) error {
-	data := JsonStruct2Data(value)
-	if len(data) == 0 {
-		return errors.Errorf("微信SDK缓存，序列化为空")
-	}
-	//PowerWeChat 写入 access_token 时 TTL 等于微信返回的 expires_in，没有留余量，
-	//临界点会用到刚失效的凭证。这里提前失效一点，用一次多余的取token换掉一次必然失败的请求。
-	if expires > time.Minute*5 {
-		expires -= time.Minute * 5
-	}
-	//go-cache 把 0 当作"使用默认过期时间"，这里兜底成固定时长，避免被默认值意外缩短
-	if expires <= 0 {
-		expires = WxMetaTimeout
-	}
-	this.cache.Set(context.Background(), key, expires, data)
-	return nil
-}
-
-func (this *wxCache) Has(key string) bool {
-	data, ok := this.cache.Get(context.Background(), key)
-	return ok && len(data) > 0
-}
-
-// AddNX/Add/Remember 在 PowerWeChat 中没有任何调用点（access_token 与 jssdk 只用 Has/Get/Set），
-// 实现它们等于写死代码，故与默认实现一致留空。
-func (this *wxCache) AddNX(key string, value interface{}, ttl time.Duration) bool {
-	return false
-}
-func (this *wxCache) Add(key string, value interface{}, ttl time.Duration) error {
-	return nil
-}
-func (this *wxCache) Remember(key string, ttl time.Duration, callback func() (interface{}, error)) (interface{}, error) {
-	return nil, nil
-}
 
 var wxSdk *officialAccount.OfficialAccount
 var wxSdkLock = &sync.Mutex{}
@@ -198,50 +109,6 @@ func initWxSdk(ctx context.Context) (sdk *officialAccount.OfficialAccount, err e
 		return nil, errors.Errorf("初始化微信SDK，实例为空")
 	}
 	return sdk, nil
-}
-
-// isWxErrRetry 判断错误是否值得重试，分层依据见 kernel/baseClient.go：
-// 传输层：Go error 非空（网络异常、ctx超时、HTTP非200），重试可能成功；
-// 凭证层：errcode 40001/40014/42001 由 PowerWeChat 中间件自动刷token并重放一次，这里不再叠加重试；
-// 业务层：errcode≠0 时只有系统繁忙值得重试。参数错误重试必然同样失败，配额超限重试会加速配额耗尽；
-// 未知码默认不重试，因为配置类与配额类占多数，后果比少试一次更重。
-func isWxErrRetry(err error) bool {
-	if err == nil {
-		return false
-	}
-	var respErr wxRespErr
-	if errors.As(err, &respErr) {
-		return respErr.ErrCode == wxErrCodeBusy
-	}
-	return true
-}
-
-func reTryWx[Resp any](ctx context.Context, name string, funz func(ctx context.Context) (Resp, error)) (resp Resp, err error) {
-	for i := 0; i < WxTryDefault; i++ {
-		if CtxDone(ctx) {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"try": i}).Error(name + "，上下文已结束")
-			return resp, errors.Errorf("%s，上下文已结束", name)
-		}
-		resp, err = funz(ctx)
-		if err == nil {
-			return resp, nil
-		}
-		if !isWxErrRetry(err) {
-			logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(name + "，不可重试")
-			return resp, err
-		}
-		if i >= WxTryDefault-1 {
-			break
-		}
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err, "try": i}).Warn(name + "，重试")
-		sleep := time.Duration(0)
-		if len(wxSleeps) > 0 {
-			sleep = wxSleeps[min(i, len(wxSleeps)-1)]
-		}
-		SleepWare(ctx, sleep)
-	}
-	logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(name + "，重试耗尽")
-	return resp, err
 }
 
 // GetWxOpenIds 解析接收人。环境变量优先，未配置时回退为最早关注者。
