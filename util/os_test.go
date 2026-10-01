@@ -6,7 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -440,5 +443,163 @@ func TestExitSignal(t *testing.T) {
 		if strings.Contains(output, bad) {
 			t.Errorf("子进程命中异常分支 %s，输出:\n%s", bad, output)
 		}
+	}
+}
+
+// CPU核数为系统在线逻辑核数，进程可调度的核(亲和性)只能是其子集
+func TestGetCpuNum(t *testing.T) {
+	num, err := GetCpuNum(GenCtx())
+	if err != nil {
+		t.Fatalf("GetCpuNum 异常: %+v", err)
+	}
+	if num < runtime.NumCPU() {
+		t.Errorf("GetCpuNum = %d, 不应小于进程可用核数 %d", num, runtime.NumCPU())
+	}
+}
+
+// 使用率按核累加，取值范围为 [0, 核数*100]
+func TestGetCpuUsage(t *testing.T) {
+	ctx := GenCtx()
+	num, err := GetCpuNum(ctx)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	usage, err := GetCpuUsage(ctx, 500*time.Millisecond)
+	if err != nil {
+		t.Fatalf("GetCpuUsage 异常: %+v", err)
+	}
+	if usage < 0 || usage > float64(num)*100 {
+		t.Errorf("GetCpuUsage = %v, 超出范围 [0, %d]", usage, num*100)
+	}
+
+	//interval<=0 时不阻塞
+	start := time.Now()
+	usage, err = GetCpuUsage(ctx, 0)
+	if err != nil {
+		t.Fatalf("GetCpuUsage(0) 异常: %+v", err)
+	}
+	if cost := time.Since(start); cost > 200*time.Millisecond {
+		t.Errorf("GetCpuUsage(0) 不应阻塞, 耗时 %v", cost)
+	}
+	if usage < 0 || usage > float64(num)*100 {
+		t.Errorf("GetCpuUsage(0) = %v, 超出范围 [0, %d]", usage, num*100)
+	}
+
+	//ctx 取消须能中断采样
+	ccc, cancel := ctxWithTimeoutMs(ctx, 100)
+	defer cancel()
+	start = time.Now()
+	if _, err = GetCpuUsage(ccc, 10*time.Second); err == nil {
+		t.Errorf("ctx 超时后应返回error")
+	}
+	if cost := time.Since(start); cost > 2*time.Second {
+		t.Errorf("ctx 超时后未及时返回, 耗时 %v", cost)
+	}
+}
+
+// 关键语义：两核同时满载时使用率须明显超过100%，而不是归一化到 0~100
+func TestGetCpuUsageMultiCore(t *testing.T) {
+	if runtime.GOMAXPROCS(0) < 2 {
+		t.Skipf("GOMAXPROCS=%d，无法让两核同时满载", runtime.GOMAXPROCS(0))
+	}
+	var stop atomic.Bool
+	defer stop.Store(true)
+	for i := 0; i < 2; i++ {
+		go func() {
+			for !stop.Load() {
+			}
+		}()
+	}
+	usage, err := GetCpuUsage(GenCtx(), time.Second)
+	if err != nil {
+		t.Fatalf("GetCpuUsage 异常: %+v", err)
+	}
+	if usage <= 120 {
+		t.Errorf("两核满载时 GetCpuUsage = %v, 期望明显大于100", usage)
+	}
+}
+
+func TestGetMem(t *testing.T) {
+	ctx := GenCtx()
+	total, err := GetMemTotal(ctx)
+	if err != nil {
+		t.Fatalf("GetMemTotal 异常: %+v", err)
+	}
+	used, err := GetMemUsed(ctx)
+	if err != nil {
+		t.Fatalf("GetMemUsed 异常: %+v", err)
+	}
+	if total == 0 || used == 0 || used > total {
+		t.Fatalf("内存数据异常: total=%d used=%d", total, used)
+	}
+
+	//Linux下与/proc/meminfo交叉校验：总内存须完全一致；已使用=MemTotal-MemAvailable，允许两次采样间2%的波动
+	if runtime.GOOS != "linux" {
+		return
+	}
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		t.Fatalf("读取 /proc/meminfo 异常: %+v", err)
+	}
+	meminfo := make(map[string]uint64)
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		value, _ := strconv.ParseUint(fields[1], 10, 64)
+		meminfo[strings.TrimSuffix(fields[0], ":")] = value * 1024
+	}
+	if meminfo["MemTotal"] != total {
+		t.Errorf("GetMemTotal = %d, /proc/meminfo MemTotal = %d", total, meminfo["MemTotal"])
+	}
+	want := meminfo["MemTotal"] - meminfo["MemAvailable"]
+	if diff := max(used, want) - min(used, want); diff > total/50 {
+		t.Errorf("GetMemUsed = %d, MemTotal-MemAvailable = %d, 相差 %d", used, want, diff)
+	}
+}
+
+func TestGetDisk(t *testing.T) {
+	ctx := GenCtx()
+	path := GetHome()
+	total, err := GetDiskTotal(ctx, path)
+	if err != nil {
+		t.Fatalf("GetDiskTotal 异常: %+v", err)
+	}
+	used, err := GetDiskUsed(ctx, path)
+	if err != nil {
+		t.Fatalf("GetDiskUsed 异常: %+v", err)
+	}
+	if total == 0 || used > total {
+		t.Fatalf("磁盘数据异常: total=%d used=%d", total, used)
+	}
+
+	//不存在的路径须报错
+	if _, err = GetDiskTotal(ctx, "/go_common_not_exist_path_12345"); err == nil {
+		t.Errorf("GetDiskTotal 不存在的路径应返回error")
+	}
+	if _, err = GetDiskUsed(ctx, "/go_common_not_exist_path_12345"); err == nil {
+		t.Errorf("GetDiskUsed 不存在的路径应返回error")
+	}
+
+	//Linux下与df交叉校验：总大小须完全一致；已使用允许两次采样间1%的波动
+	if runtime.GOOS != "linux" {
+		return
+	}
+	stdout, _, err := ExecCommand(ctx, fmt.Sprintf("df -B1 --output=size,used %q", path))
+	if err != nil || len(stdout) < 2 {
+		t.Skipf("df 不可用，跳过交叉校验: %v %+v", stdout, err)
+	}
+	fields := strings.Fields(stdout[len(stdout)-1])
+	if len(fields) != 2 {
+		t.Fatalf("df 输出格式异常: %v", stdout)
+	}
+	dfTotal, _ := strconv.ParseUint(fields[0], 10, 64)
+	dfUsed, _ := strconv.ParseUint(fields[1], 10, 64)
+	if dfTotal != total {
+		t.Errorf("GetDiskTotal = %d, df size = %d", total, dfTotal)
+	}
+	if diff := max(used, dfUsed) - min(used, dfUsed); diff > total/100 {
+		t.Errorf("GetDiskUsed = %d, df used = %d, 相差 %d", used, dfUsed, diff)
 	}
 }
