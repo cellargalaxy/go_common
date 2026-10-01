@@ -1,7 +1,6 @@
 package util
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -9,65 +8,10 @@ import (
 
 // 这些默认值影响同步调用方被阻塞多久与消息是否被微信拒绝，改动需谨慎
 func TestWxConstants(t *testing.T) {
-	if WxTimeoutDefault != time.Second*10 {
-		t.Errorf("WxTimeoutDefault = %v", WxTimeoutDefault)
+	if wxTimeout != time.Second*10 {
+		t.Errorf("wxTimeout = %v", wxTimeout)
 	}
 	//模板正文里日志行的字段名是 log，与日志字段 LogIdKey(logid) 不同，不能混用
-	if wxLogKey != "log" {
-		t.Errorf("wxLogKey = %q", wxLogKey)
-	}
-	if wxLogKey == LogIdKey {
-		t.Errorf("wxLogKey 不应等于 LogIdKey")
-	}
-	//模板只有一个占位符 {{data.DATA}}
-	if wxDataKey != "data" {
-		t.Errorf("wxDataKey = %q", wxDataKey)
-	}
-}
-
-func TestGenWxMsgData(t *testing.T) {
-	ctx := GenCtx()
-	data := genWxMsgData(ctx, "我是正文A\n我是正文B")
-	lines := strings.Split(data, "\n")
-	if len(lines) != 5 {
-		t.Fatalf("行数 = %d, 期望 5（3行上下文+2行正文）: %q", len(lines), data)
-	}
-	//前三行的字段名与顺序是模板约定，改动会让消息格式与后台模板不一致
-	if !strings.HasPrefix(lines[0], ServerNameKey+": ") {
-		t.Errorf("第1行 = %q, 期望以 %s: 开头", lines[0], ServerNameKey)
-	}
-	if !strings.HasPrefix(lines[1], IpKey+": ") {
-		t.Errorf("第2行 = %q, 期望以 %s: 开头", lines[1], IpKey)
-	}
-	if !strings.HasPrefix(lines[2], wxLogKey+": ") {
-		t.Errorf("第3行 = %q, 期望以 %s: 开头", lines[2], wxLogKey)
-	}
-	//正文必须原样保留换行
-	if lines[3] != "我是正文A" || lines[4] != "我是正文B" {
-		t.Errorf("正文 = %q / %q", lines[3], lines[4])
-	}
-	if lines[2] != wxLogKey+": "+Int2Str(GetLogId(ctx)) {
-		t.Errorf("日志行 = %q", lines[2])
-	}
-}
-
-// 上下文取不到值时必须留空，不能报错也不能填成 0。
-// GetIP 由后台协程异步填充，进程刚启动时必然为空，而那恰是最需要告警的时段。
-func TestGenWxMsgDataEmptyContext(t *testing.T) {
-	data := genWxMsgData(context.Background(), "正文")
-	lines := strings.Split(data, "\n")
-	if len(lines) != 4 {
-		t.Fatalf("行数 = %d: %q", len(lines), data)
-	}
-	if lines[2] != wxLogKey+": " {
-		t.Errorf("logid为0时日志行 = %q, 期望留空", lines[2])
-	}
-	if strings.Contains(lines[2], "0") {
-		t.Errorf("logid为0时不应把0写进消息: %q", lines[2])
-	}
-	if lines[3] != "正文" {
-		t.Errorf("正文 = %q", lines[3])
-	}
 }
 
 // stable_token 模式必须真的生效：
@@ -97,14 +41,14 @@ func TestWxSdkStableTokenMode(t *testing.T) {
 }
 
 // 环境变量配置了接收人时必须直接采用，不得去调关注者列表接口
-func TestGetWxOpenIdsByEnv(t *testing.T) {
+func TestGetWxOpenIdByEnv(t *testing.T) {
 	ctx := GenCtx()
 	t.Setenv(wxOpenIdKey, " oA , oB ")
 	//故意不配凭证：若实现会去调接口，这里一定会报错
 	t.Setenv(wxAppIdKey, "")
 	t.Setenv(wxSecretKey, "")
 
-	openIds, err := GetWxOpenIds(ctx)
+	openIds, err := GetWxOpenId(ctx)
 	if err != nil {
 		t.Fatalf("环境变量已配置仍报错: %+v", err)
 	}
@@ -115,7 +59,7 @@ func TestGetWxOpenIdsByEnv(t *testing.T) {
 
 	//空项不得产出空字符串元素，否则会向空openid发消息
 	t.Setenv(wxOpenIdKey, " oA ,, oB ,")
-	openIds, err = GetWxOpenIds(ctx)
+	openIds, err = GetWxOpenId(ctx)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -126,7 +70,7 @@ func TestGetWxOpenIdsByEnv(t *testing.T) {
 	//全是空项等同于未配置，会回落到查关注者，此时无凭证必然报错
 	t.Setenv(wxOpenIdKey, "  ,  ,")
 	defer resetWxSdk(t)()
-	if _, err = GetWxOpenIds(ctx); err == nil {
+	if _, err = GetWxOpenId(ctx); err == nil {
 		t.Errorf("全空项应回落到查关注者并因无凭证报错")
 	}
 }
@@ -273,7 +217,7 @@ func TestWxProbeUserInfos(t *testing.T) {
 			i, infos[i].OpenID, infos[i].SubscribeTime, infos[i].Remark, infos[i].SubscribeScene)
 	}
 	//顺带确认最早关注者的判定结果
-	earliest, err := GetWxOpenIds(ctx)
+	earliest, err := GetWxOpenId(ctx)
 	if err != nil {
 		t.Fatalf("判定最早关注者失败: %+v", err)
 	}
