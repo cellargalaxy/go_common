@@ -3,7 +3,7 @@ module github.com/cellargalaxy/go_common
 go 1.27
 
 require (
-	github.com/ArtisanCloud/PowerWeChat/v3 v3.4.9
+	github.com/ArtisanCloud/PowerWeChat/v3 v3.4.45
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/gin-gonic/gin v1.12.0
@@ -28,7 +28,7 @@ require (
 
 require (
 	github.com/ArtisanCloud/PowerLibs/v3 v3.3.2 // indirect
-	github.com/ArtisanCloud/PowerSocialite/v3 v3.0.7 // indirect
+	github.com/ArtisanCloud/PowerSocialite/v3 v3.0.11 // indirect
 	github.com/BurntSushi/toml v1.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
