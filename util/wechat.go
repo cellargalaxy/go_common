@@ -24,14 +24,7 @@ const (
 	wxTemplateIdKey = "wx_template_id"
 )
 
-const (
-	wxDataKey = "data"
-	wxLogKey  = "log"
-)
-
-const (
-	WxTimeoutDefault = time.Second * 10
-)
+const WxTimeoutDefault = time.Second * 10
 
 var wxSdk *officialAccount.OfficialAccount
 var wxSdkLock = &sync.Mutex{}
@@ -78,7 +71,6 @@ func initWxSdk(ctx context.Context) (sdk *officialAccount.OfficialAccount, err e
 	//走 stable_token 取凭证且只问不换新，避免多进程共用同一公众号时互相顶掉凭证
 	cfg.StableTokenMode = true
 	cfg.ForceRefresh = false
-	cfg.Cache = newWxCache()
 	cfg.Http.Timeout = WxTimeoutDefault.Seconds()
 	//输出与错误须用不同文件，SDK会为两者各建一个lumberjack实例
 	cfg.Log.Stdout = false
@@ -119,8 +111,8 @@ func GetWxOpenIds(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	if len(openIds) == 0 {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询关注者，无关注者")
-		return nil, errors.Errorf("查询关注者，无关注者")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信用户，无用户")
+		return nil, errors.Errorf("查询微信用户，无用户")
 	}
 	if len(openIds) == 1 {
 		return openIds, nil
@@ -142,8 +134,8 @@ func GetWxOpenIds(ctx context.Context) ([]string, error) {
 		}
 	}
 	if openId == "" {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询关注者，用户信息为空")
-		return nil, errors.Errorf("查询关注者，用户信息为空")
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信用户，用户信息为空")
+		return nil, errors.Errorf("查询微信用户，用户信息为空")
 	}
 	return []string{openId}, nil
 }
@@ -154,24 +146,16 @@ func GetWxOpenIdList(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
-	var openIds []string
-	nextOpenId := ""
-
-	resp, err := sdk.User.List(ctx, nextOpenId)
+	resp, err := sdk.User.List(ctx, "")
 	if err != nil || resp == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(name + "，异常")
-		return nil, errors.Errorf("%s，异常: %+v", name, err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("查询微信用户列表，异常")
+		return nil, errors.Errorf("查询微信用户列表，异常: %+v", err)
 	}
-	if err = checkWxErrCode(ctx, name, resp.ErrCode, resp.ErrMsg); err != nil {
-		return nil, err
+	if resp.ErrCode != 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"errCode": resp.ErrCode, "errMsg": resp.ErrMsg}).Error("查询微信用户列表，返回码异常")
+		return nil, errors.Errorf("查询微信用户列表，返回码异常: errcode=%d, errmsg=%s", resp.ErrCode, resp.ErrMsg)
 	}
-	openIds = append(openIds, resp.Data.OpenID...)
-	//游标为空或未推进都说明已取完，后者同时防御死循环
-	if resp.NextOpenID == "" || resp.NextOpenID == nextOpenId || len(resp.Data.OpenID) == 0 {
-		break
-	}
-	nextOpenId = resp.NextOpenID
-	return Distinct(ctx, openIds...), nil
+	return Distinct(ctx, resp.Data.OpenID...), nil
 }
 
 func GetWxUserInfos(ctx context.Context, openIds []string) ([]*userResponse.ResponseGetUserInfo, error) {
@@ -180,21 +164,20 @@ func GetWxUserInfos(ctx context.Context, openIds []string) ([]*userResponse.Resp
 		return nil, err
 	}
 
-	var infos []*userResponse.ResponseGetUserInfo
 	var req userRequest.RequestBatchGetUserInfo
-	for _, openId := range openIds[i:min(i+wxUserBatchMax, len(openIds))] {
+	for _, openId := range openIds {
 		req.UserList = append(req.UserList, &userRequest.UserList{Openid: openId})
 	}
 	resp, err := sdk.User.BatchGet(ctx, &req)
 	if err != nil || resp == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(name + "，异常")
-		return nil, errors.Errorf("%s，异常: %+v", name, err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("查询微信用户信息，异常")
+		return nil, errors.Errorf("查询微信用户信息，异常: %+v", err)
 	}
-	if err = checkWxErrCode(ctx, name, resp.ErrCode, resp.ErrMsg); err != nil {
-		return nil, err
+	if resp.ErrCode != 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"errCode": resp.ErrCode, "errMsg": resp.ErrMsg}).Error("查询微信用户信息，返回码异常")
+		return nil, errors.Errorf("查询微信用户信息，返回码异常: errcode=%d, errmsg=%s", resp.ErrCode, resp.ErrMsg)
 	}
-	infos = append(infos, resp.ResponseGetUserInfo...)
-	return infos, nil
+	return resp.ResponseGetUserInfo, nil
 }
 
 func GetWxTemplateId(ctx context.Context) (string, error) {
@@ -213,7 +196,7 @@ func GetWxTemplateId(ctx context.Context) (string, error) {
 	}
 	//取第一个而非随机，随机会产生时而成功时而被微信拒绝的非确定性故障
 	if len(templates) > 1 {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"count": len(templates)}).Warn("查询微信模板，模板不止一个，将取第一个；如需指定模板请配置" + wxTemplateIdKey)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"count": len(templates)}).Warn("查询微信模板，模板不止一个")
 	}
 	if templates[0] == nil || templates[0].TemplateID == "" {
 		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("查询微信模板，模板ID为空")
@@ -223,7 +206,6 @@ func GetWxTemplateId(ctx context.Context) (string, error) {
 }
 
 func GetWxTemplates(ctx context.Context) ([]*templateResponse.Template, error) {
-	name := "查询微信模板列表"
 	sdk, err := GetWxSdk(ctx)
 	if err != nil {
 		return nil, err
@@ -231,32 +213,34 @@ func GetWxTemplates(ctx context.Context) ([]*templateResponse.Template, error) {
 
 	resp, err := sdk.TemplateMessage.GetPrivateTemplates(ctx)
 	if err != nil || resp == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(name + "，异常")
-		return nil, errors.Errorf("%s，异常: %+v", name, err)
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("查询微信模板列表，异常")
+		return nil, errors.Errorf("查询微信模板列表，异常: %+v", err)
 	}
-	if err = checkWxErrCode(ctx, name, resp.ErrCode, resp.ErrMsg); err != nil {
-		return nil, err
+	if resp.ErrCode != 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"errCode": resp.ErrCode, "errMsg": resp.ErrMsg}).Error("查询微信模板列表，返回码异常")
+		return nil, errors.Errorf("查询微信模板列表，返回码异常: errcode=%d, errmsg=%s", resp.ErrCode, resp.ErrMsg)
 	}
 	return resp.TemplateList, nil
 }
 
-func genWxMsgData(ctx context.Context, text string) string {
-	//上下文取不到就留空：GetIP由后台协程异步填充，进程刚启动时必然为空，
-	//而启动期恰是最需要告警的时段，不能因上下文缺失阻断发送
-	logId := ""
-	if value := GetLogId(ctx); value > 0 {
-		logId = Int2Str(value)
+func SendWxTemplateMsg(ctx context.Context, req templateRequest.RequestTemlateMessage) (*templateResponse.ResponseTemplateSend, error) {
+	sdk, err := GetWxSdk(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("%s: %s\n", ServerNameKey, GetServerName()))
-	builder.WriteString(fmt.Sprintf("%s: %s\n", IpKey, GetIP()))
-	builder.WriteString(fmt.Sprintf("%s: %s\n", wxLogKey, logId))
-	builder.WriteString(text)
-	return builder.String()
+
+	resp, err := sdk.TemplateMessage.Send(ctx, &req)
+	if err != nil || resp == nil {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error("发送微信模板消息，异常")
+		return nil, errors.Errorf("发送微信模板消息，异常: %+v", err)
+	}
+	if resp.ErrCode != 0 {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{"errCode": resp.ErrCode, "errMsg": resp.ErrMsg}).Error("发送微信模板消息，返回码异常")
+		return nil, errors.Errorf("发送微信模板消息，返回码异常: errcode=%d, errmsg=%s", resp.ErrCode, resp.ErrMsg)
+	}
+	return resp, nil
 }
 
-// SendWxMsg 同步发送一条模板消息。url 允许为空，text 不允许为空。
-// sn/ip/log 由函数自动拼接。不重试不去重，失败即返回error，要不要重发由调用方决定。
 func SendWxMsg(ctx context.Context, url, text string) (err error) {
 	defer Defer(func(panic any, stack string) {
 		if panic != nil {
@@ -271,8 +255,6 @@ func SendWxMsg(ctx context.Context, url, text string) (err error) {
 		return errors.Errorf("发送微信消息，正文为空")
 	}
 
-	//SDK取token的请求没有客户端级超时，ctx的deadline是同步调用方唯一的兜底，
-	//而GenCtx基于Background不带deadline，所以这里补上总预算
 	if _, ok := ctx.Deadline(); !ok {
 		cancelCtx, cancel := context.WithTimeout(ctx, WxTimeoutDefault)
 		defer CancelCtx(cancel)
@@ -291,9 +273,23 @@ func SendWxMsg(ctx context.Context, url, text string) (err error) {
 	if err != nil {
 		return err
 	}
+	if templateId == "" {
+		logrus.WithContext(ctx).WithFields(logrus.Fields{}).Error("发送微信消息，模板为空")
+		return errors.Errorf("发送微信消息，模板为空")
+	}
 
-	hashMap := power.HashMap{wxDataKey: map[string]string{"value": genWxMsgData(ctx, cutWxText(ctx, text))}}
-	//全部成功才算成功，但都尝试完再聚合错误，不因某个接收人失败而漏发其他人
+	logId := ""
+	if value := GetLogId(ctx); value > 0 {
+		logId = Int2Str(value)
+	}
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("sn: %s\n", GetServerName()))
+	builder.WriteString(fmt.Sprintf("ip: %s\n", GetIP()))
+	builder.WriteString(fmt.Sprintf("log: %s\n", logId))
+	builder.WriteString(text)
+	data := builder.String()
+	hashMap := power.HashMap{"data": map[string]string{"value": data}}
+
 	errMsgs := make([]string, 0, len(openIds))
 	for _, openId := range openIds {
 		var req templateRequest.RequestTemlateMessage
@@ -312,22 +308,4 @@ func SendWxMsg(ctx context.Context, url, text string) (err error) {
 	}
 	logrus.WithContext(ctx).WithFields(logrus.Fields{"total": len(openIds)}).Info("发送微信消息，完成")
 	return nil
-}
-
-func SendWxTemplateMsg(ctx context.Context, req templateRequest.RequestTemlateMessage) (*templateResponse.ResponseTemplateSend, error) {
-	name := "发送微信模板消息"
-	sdk, err := GetWxSdk(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := sdk.TemplateMessage.Send(ctx, &req)
-	if err != nil || resp == nil {
-		logrus.WithContext(ctx).WithFields(logrus.Fields{"err": err}).Error(name + "，异常")
-		return nil, errors.Errorf("%s，异常: %+v", name, err)
-	}
-	if err = checkWxErrCode(ctx, name, resp.ErrCode, resp.ErrMsg); err != nil {
-		return nil, err
-	}
-	return resp, nil
 }
