@@ -6,6 +6,7 @@ require (
 	github.com/ArtisanCloud/PowerWeChat/v3 v3.4.45
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
+	github.com/dustin/go-humanize v1.1.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/gocarina/gocsv v0.0.0-20260824135904-1713ebc4797a

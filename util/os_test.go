@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 func TestInitOsAndGetServerName(t *testing.T) {
@@ -455,6 +457,7 @@ func TestGetCpuNum(t *testing.T) {
 	if num < runtime.NumCPU() {
 		t.Errorf("GetCpuNum = %d, 不应小于进程可用核数 %d", num, runtime.NumCPU())
 	}
+	t.Logf("GetCpuNum = %d", num)
 }
 
 // 使用率按核累加，取值范围为 [0, 核数*100]
@@ -484,6 +487,7 @@ func TestGetCpuUsage(t *testing.T) {
 	if usage < 0 || usage > float64(num)*100 {
 		t.Errorf("GetCpuUsage(0) = %v, 超出范围 [0, %d]", usage, num*100)
 	}
+	t.Logf("GetCpuUsage = %v", usage)
 
 	//ctx 取消须能中断采样
 	ccc, cancel := ctxWithTimeoutMs(ctx, 100)
@@ -525,10 +529,12 @@ func TestGetMem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMemTotal 异常: %+v", err)
 	}
+	t.Logf("GetMemTotal = %s", humanize.Bytes(total))
 	used, err := GetMemUsed(ctx)
 	if err != nil {
 		t.Fatalf("GetMemUsed 异常: %+v", err)
 	}
+	t.Logf("GetMemUsed = %s", humanize.Bytes(used))
 	if total == 0 || used == 0 || used > total {
 		t.Fatalf("内存数据异常: total=%d used=%d", total, used)
 	}
@@ -566,10 +572,12 @@ func TestGetDisk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDiskTotal 异常: %+v", err)
 	}
+	t.Logf("GetDiskTotal = %s", humanize.Bytes(total))
 	used, err := GetDiskUsed(ctx, path)
 	if err != nil {
 		t.Fatalf("GetDiskUsed 异常: %+v", err)
 	}
+	t.Logf("GetDiskUsed = %s", humanize.Bytes(used))
 	if total == 0 || used > total {
 		t.Fatalf("磁盘数据异常: total=%d used=%d", total, used)
 	}
