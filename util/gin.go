@@ -65,7 +65,7 @@ func SetClaims(ctx context.Context, claims any) context.Context {
 
 func StaticCache(c *gin.Context) {
 	if strings.HasPrefix(c.Request.RequestURI, PathStatic) {
-		c.Header("Cache-Control", "max-age=86400")
+		c.Header("Cache-Control", "max-age=600")
 	}
 }
 
